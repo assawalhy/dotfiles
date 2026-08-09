@@ -1,0 +1,11 @@
+# Paths that are committed but NOT symlinked into $HOME.
+#
+# Everything under common/ and under the active OS overlay (linux/ or macos/)
+# is linked by default -- this file is the exception list.
+#
+# Each entry is a path relative to common/, linux/ or macos/.
+# A directory entry excludes its whole subtree. No globs.
+# Comments and blank lines must be on their own line.
+
+# repo tooling for the bin/ scripts, not a dotfile
+bin/.github

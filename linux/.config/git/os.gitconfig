@@ -1,0 +1,4 @@
+# Included by ~/.gitconfig. Linux-specific settings only.
+
+[credential]
+    helper = cache --timeout=3600

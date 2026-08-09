@@ -1,0 +1,86 @@
+# Packages that setup-os can install.
+#
+# FORMAT
+#   <id>  [mgr:name ...] [!macos] [!linux]
+#
+#   <id>        logical name, and the default package name
+#   mgr:name    override the package name for one manager
+#   mgr:-       not available for that manager -- skip it
+#   !macos      not available (or not wanted) on macOS
+#   !linux      not available (or not wanted) on Linux
+#
+#   mgr is one of: brew cask pacman aur apt dnf zypper
+#
+#   RESOLUTION: use the entry for the active manager if present, else fall
+#   back to <id> verbatim. So packages named the same everywhere need one word.
+#
+#   [section] headers group entries in the picker. [cargo] and [pip] are
+#   special: they install via `cargo install` / `pipx install` instead.
+#
+#   Comments must be on their own line.
+
+[terminal]
+git
+zsh
+tmux
+neovim
+ranger
+fzf
+bat                 apt:batcat
+pipx
+fd                  apt:fd-find  dnf:fd-find
+mousepad            !macos                       # GTK editor; macOS has TextEdit
+xsel                !macos                       # X11 clipboard
+xclip               !macos                       # X11 clipboard
+wl-clipboard        !macos                       # Wayland clipboard
+
+[extra]
+gh                  pacman:github-cli
+git-delta           apt:-  dnf:-                 # not packaged on Debian; see [cargo]
+yt-dlp
+ffmpeg
+pandoc
+glow                apt:-                        # was an install-script step; it's a real package now
+gitui               apt:-  dnf:-                 # not in Debian/Ubuntu repos
+lazygit             apt:-                        # not in Debian/Ubuntu repos
+texlive             cask:basictex  pacman:texlive-core  apt:texlive  dnf:texlive
+
+[gui]
+mpv
+syncthing
+obsidian            cask:obsidian  aur:obsidian
+typora              cask:typora  aur:typora
+copyq               cask:copyq
+megasync            cask:megasync  aur:megasync-bin  pacman:-  apt:-  dnf:-
+zathura             !macos
+zathura-pdf-mupdf   !macos
+okular              !macos                       # KDE document viewer
+feh                 !macos                       # X11 image viewer
+simplescreenrecorder !macos                      # macOS: Cmd-Shift-5
+skim                !linux  cask:skim            # macOS PDF viewer, the zathura stand-in
+pngpaste            !linux                       # required by the `pasteimage` alias on macOS
+
+[dev]
+docker              cask:docker                  # cask = Docker Desktop
+meld                cask:meld
+lldb                brew:llvm                    # macOS: lldb ships with the Xcode CLT; llvm is newer
+
+[fonts]
+noto-fonts-emoji    cask:font-noto-color-emoji
+noto-fonts-cjk      cask:font-noto-sans-cjk
+libxft-bgra         !macos  aur:libxft-bgra  pacman:-  apt:-  dnf:-   # st emoji crash fix
+
+[cargo]
+fastmod
+ripgrep
+eza                                              # exa is unmaintained since 2023
+broot                                            # the `br` shell function comes from this crate
+rmem
+sd
+
+[pip]
+git-fame                                         # lines per contributor
+autopep8
+black
+mdtoc
+ueberzug            !macos                       # links against Xlib; impossible on macOS

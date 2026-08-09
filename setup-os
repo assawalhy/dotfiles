@@ -1,0 +1,434 @@
+#!/usr/bin/env bash
+#
+# setup-os -- interactively install the programs this dotfiles repo expects.
+#
+# Uses Homebrew on macOS and pacman/apt/dnf/zypper on Linux. Package names are
+# declared in setup/packages.list; the multi-line install snippets that used to
+# live in `setup-linux` are now one executable file each under setup/steps/.
+#
+# NOTE: must stay bash 3.2 compatible -- stock macOS /bin/bash is 3.2.57.
+#       No readarray/mapfile, no `declare -A`, no ${v,,}. Data-structure work
+#       is pushed into awk, which has associative arrays everywhere.
+
+set -e
+
+# ------------------------------------------------------------- paths ---
+
+self="$0"
+while [ -L "$self" ]; do
+  self_dir="$(cd -P "$(dirname "$self")" >/dev/null && pwd)"
+  self="$(readlink "$self")"
+  case "$self" in /*) ;; *) self="$self_dir/$self" ;; esac
+done
+REPO="$(cd -P "$(dirname "$self")" >/dev/null && pwd)"
+LIST="$REPO/setup/packages.list"
+STEPS="$REPO/setup/steps"
+
+die() { printf '%s: %s\n' "$(basename "$0")" "$*" >&2; exit 1; }
+
+# --------------------------------------------------------------- cli ---
+
+is_dry=; want_all=; is_yes=; only_list=; show_installed=
+steps_only=; packages_only=; groups=
+
+print_help() {
+cat <<EOF
+USAGE:
+  $(basename "$0") [options]
+
+Interactively pick programs to install. Package names come from
+  $LIST
+and the setup steps from
+  $STEPS/
+
+OPTIONS:
+  -h, --help          show this message and exit
+  -n, --dry-run       print what would be installed, change nothing
+      --all           select everything (skips the picker)
+      --group NAME    restrict to one section; repeatable
+      --list          print the resolved entries and exit
+      --show-installed  keep already-installed entries in the picker
+      --packages-only   skip the setup/steps/*.sh entries
+      --steps-only      only offer the setup/steps/*.sh entries
+  -y, --yes           don't ask for confirmation before installing
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help)         print_help; exit 0 ;;
+    -n|--dry-run)      is_dry=1 ;;
+    --all)             want_all=1 ;;
+    --list)            only_list=1 ;;
+    --show-installed)  show_installed=1 ;;
+    --packages-only)   packages_only=1 ;;
+    --steps-only)      steps_only=1 ;;
+    -y|--yes)          is_yes=1 ;;
+    --group)           shift; [ -n "$1" ] || die "--group needs a name"
+                       groups="$groups $1" ;;
+    -*)                die "unknown option \"$1\"" ;;
+    *)                 die "unexpected argument \"$1\"" ;;
+  esac
+  shift
+done
+
+# ---------------------------------------------------------- platform ---
+
+case "$(uname -s)" in
+  Linux)  OS=linux  ;;
+  Darwin) OS=macos  ;;
+  *) die "unsupported OS: $(uname -s)" ;;
+esac
+
+AUR=''
+detect_pm() {
+  if [ "$OS" = macos ]; then
+    [ "$(id -u)" != 0 ] || die "don't run this as root -- Homebrew refuses root installs"
+    command -v brew >/dev/null 2>&1 \
+      || die "Homebrew is missing -- run $STEPS/00-homebrew.sh first"
+    PM=brew
+    return
+  fi
+
+  PM=''
+  for c in pacman apt-get dnf zypper; do
+    if command -v "$c" >/dev/null 2>&1; then PM="$c"; break; fi
+  done
+  [ -n "$PM" ] || die "no supported package manager found (pacman/apt/dnf/zypper)"
+  [ "$PM" = apt-get ] && PM=apt
+
+  if [ "$PM" = pacman ]; then
+    for h in paru yay; do
+      if command -v "$h" >/dev/null 2>&1; then AUR="$h"; break; fi
+    done
+  fi
+}
+detect_pm
+
+# ------------------------------------------------------------ runner ---
+
+run() {
+  if [ -n "$is_dry" ]; then
+    printf '   [dry-run] %s\n' "$*"
+    return 0
+  fi
+  printf '   + %s\n' "$*"
+  "$@"
+}
+
+pm_install() { # pm_install <mgr> <pkg>...
+  local mgr="$1"; shift
+  case "$mgr" in
+    brew)   run brew install "$@" ;;
+    cask)   run brew install --cask "$@" ;;
+    pacman) run sudo pacman -S --needed --noconfirm "$@" ;;
+    aur)    run "$AUR" -S --needed --noconfirm "$@" ;;   # AUR helpers call sudo themselves
+    apt)    run sudo apt-get install -y "$@" ;;
+    dnf)    run sudo dnf install -y "$@" ;;
+    zypper) run sudo zypper --non-interactive install "$@" ;;
+    cargo)  run cargo install --locked "$@" ;;
+    pip)    if [ -z "$is_dry" ] && ! command -v pipx >/dev/null 2>&1; then
+              # Arch and Homebrew both ship PEP-668 externally-managed Pythons
+              # where `pip install --user` refuses to run; pipx is the tool for
+              # these, since they are all CLIs rather than libraries.
+              printf '   ! pipx is missing; select it in [terminal] and re-run\n' >&2
+              return 1
+            fi
+            # pipx installs one package per invocation
+            local p rc=0
+            for p in "$@"; do run pipx install "$p" || rc=1; done
+            return $rc ;;
+    *) die "internal: unknown manager \"$mgr\"" ;;
+  esac
+}
+
+# Querying a manager once per package is unusably slow (each `brew` is ~1s of
+# Ruby startup), so each manager's installed set is listed once and cached.
+CACHE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/setup-os-cache.XXXXXX")"
+
+pm_list_installed() { # $1 = mgr -> one package name per line
+  case "$1" in
+    brew)       brew list --formula -1 2>/dev/null ;;
+    cask)       brew list --cask    -1 2>/dev/null ;;
+    pacman|aur) pacman -Qq 2>/dev/null ;;
+    apt)        dpkg-query -f '${Package}\n' -W 2>/dev/null ;;
+    dnf|zypper) rpm -qa --qf '%{NAME}\n' 2>/dev/null ;;
+    cargo)      cargo install --list 2>/dev/null | awk '/^[^[:space:]]/ { print $1 }' ;;
+    pip)        pipx list --short 2>/dev/null | awk '{ print $1 }' ;;
+  esac
+}
+
+pm_installed() { # pm_installed <mgr> <pkg> -> 0 when present
+  local cache="$CACHE_DIR/$1"
+  if [ ! -f "$cache" ]; then
+    pm_list_installed "$1" > "$cache" 2>/dev/null || : > "$cache"
+  fi
+  grep -Fxq "$2" "$cache"
+}
+
+# ---------------------------------------------------------- resolver ---
+
+# emits: group \t id \t mgr \t pkg   for entries valid on this machine
+resolve() {
+  [ -f "$LIST" ] || die "missing $LIST"
+  awk -v os="$OS" -v pm="$PM" -v aur="$AUR" '
+    { sub(/[[:space:]]*#.*$/, "") }
+    /^[[:space:]]*$/ { next }
+    /^\[/ { group = substr($0, 2, index($0, "]") - 2); next }
+    {
+      split("", m)            # portable array clear (macOS ships BWK awk)
+      id = $1; skip = 0
+      for (i = 2; i <= NF; i++) {
+        if ($i == "!" os)  { skip = 1; continue }
+        if ($i ~ /^!/)     { continue }
+        p = index($i, ":"); if (!p) continue
+        m[substr($i, 1, p - 1)] = substr($i, p + 1)
+      }
+      if (skip) next
+
+      if (group == "cargo" || group == "pip") {
+        print group "\t" id "\t" group "\t" id
+        next
+      }
+
+      if (os == "macos") {
+        mgr = ("brew" in m) ? "brew" : (("cask" in m) ? "cask" : "brew")
+      } else if (pm == "pacman") {
+        # prefer the official repos, but fall through to the AUR when the
+        # package is marked unavailable there (pacman:-) and a helper exists
+        mgr = "pacman"
+        if ((!("pacman" in m) || m["pacman"] == "-") && ("aur" in m) && aur != "")
+          mgr = "aur"
+      } else {
+        mgr = pm
+      }
+
+      pkg = (mgr in m) ? m[mgr] : id
+      if (pkg == "-") next     # explicitly unavailable for this manager
+
+      print group "\t" id "\t" mgr "\t" pkg
+    }' "$LIST"
+}
+
+# emits: step \t <name> \t step \t <path>   for steps valid on this machine
+resolve_steps() {
+  [ -d "$STEPS" ] || return 0
+  local f os_hdr desc
+  for f in "$STEPS"/*.sh; do
+    [ -f "$f" ] || continue
+    os_hdr="$(sed -n 's/^# os:[[:space:]]*//p' "$f" | head -1)"
+    [ -n "$os_hdr" ] || os_hdr=any
+    case "$os_hdr" in
+      any|"$OS") ;;
+      *) continue ;;
+    esac
+    desc="$(sed -n 's/^# desc:[[:space:]]*//p' "$f" | head -1)"
+    [ -n "$desc" ] || desc="$(basename "$f" .sh)"
+    printf 'step\t%s\tstep\t%s\n' "$desc" "$f"
+  done
+}
+
+step_done() { # $1 = path -> 0 when its `# check:` already passes
+  local chk
+  chk="$(sed -n 's/^# check:[[:space:]]*//p' "$1" | head -1)"
+  [ -n "$chk" ] || return 1
+  ( eval "$chk" ) >/dev/null 2>&1
+}
+
+# ------------------------------------------------------------ picker ---
+
+# stdin: key \t label   ->  stdout: selected keys
+choose() {
+  if command -v fzf >/dev/null 2>&1; then
+    fzf --multi --delimiter=$'\t' --with-nth=2.. \
+        --height=90% --reverse --tiebreak=index \
+        --prompt='install> ' \
+        --header='TAB select · CTRL-A all matches · CTRL-D none · ENTER confirm' \
+        --bind 'ctrl-a:select-all,ctrl-d:deselect-all' \
+      | cut -f1
+  else
+    menu_fallback
+  fi
+}
+
+# Pure-bash multi-select for the fresh-machine case where fzf isn't installed
+# yet. Prompts go to /dev/tty because this function's stdout is the result.
+menu_fallback() {
+  local keys labels k l n=0 i sel tok lo hi last_group group
+  keys=(); labels=()
+  while IFS=$'\t' read -r k l || [ -n "$k" ]; do
+    keys[$n]="$k"; labels[$n]="$l"; n=$((n + 1))
+  done
+
+  {
+    last_group=''
+    i=0
+    while [ $i -lt $n ]; do
+      group="${labels[$i]%%]*}]"
+      if [ "$group" != "$last_group" ]; then
+        printf '\n  ---- %s ----\n' "$(printf '%s' "$group" | tr -d '[]')"
+        last_group="$group"
+      fi
+      printf '%4d) %s\n' "$((i + 1))" "${labels[$i]}"
+      i=$((i + 1))
+    done
+    printf '\n(fzf is not installed -- using the basic picker)\n'
+    printf 'Select: numbers and ranges, e.g. "1 4 7-12"   ·   "a" = all   ·   empty = none\n> '
+  } >/dev/tty
+
+  read -r sel </dev/tty || sel=''
+
+  for i in $(expand_selection "$n" "$sel"); do
+    printf '%s\n' "${keys[$((i - 1))]}"
+  done
+}
+
+# expand_selection <count> <input> -> the selected 1-based indices, one per line
+# Accepts numbers, "lo-hi" ranges, "a"/"all", or empty. Kept separate from
+# menu_fallback so it can be tested without a terminal.
+expand_selection() {
+  local n="$1" sel="$2" tok lo hi i
+
+  case "$sel" in
+    a|A|all)
+      i=1; while [ "$i" -le "$n" ]; do printf '%s\n' "$i"; i=$((i + 1)); done
+      return ;;
+    '') return ;;
+  esac
+
+  for tok in $sel; do
+    case "$tok" in
+      *-*) lo="${tok%%-*}"; hi="${tok##*-}" ;;
+      *)   lo="$tok";       hi="$tok" ;;
+    esac
+    case "$lo$hi" in
+      ''|*[!0-9]*) printf 'ignoring "%s"\n' "$tok" >&2; continue ;;
+    esac
+    i="$lo"
+    while [ "$i" -le "$hi" ]; do
+      if [ "$i" -ge 1 ] && [ "$i" -le "$n" ]; then printf '%s\n' "$i"; fi
+      i=$((i + 1))
+    done
+  done
+}
+
+# -------------------------------------------------------------- main ---
+
+TMP="$(mktemp "${TMPDIR:-/tmp}/setup-os.XXXXXX")"
+MENU="$(mktemp "${TMPDIR:-/tmp}/setup-os.XXXXXX")"
+PICKED="$(mktemp "${TMPDIR:-/tmp}/setup-os.XXXXXX")"
+trap 'rm -f "$TMP" "$MENU" "$PICKED"; rm -rf "$CACHE_DIR"' EXIT INT TERM HUP
+
+{
+  [ -n "$steps_only" ]    || resolve
+  [ -n "$packages_only" ] || resolve_steps
+} > "$TMP"
+
+# --group filter
+if [ -n "$groups" ]; then
+  pat="$(printf '%s' "$groups" | sed 's/^ //; s/ /|/g')"
+  awk -F'\t' -v p="^($pat)$" '$1 ~ p' "$TMP" > "$TMP.f" && mv "$TMP.f" "$TMP"
+fi
+
+if [ -n "$only_list" ]; then
+  printf '%-10s %-22s %-8s %s\n' GROUP ID MANAGER PACKAGE
+  awk -F'\t' '{ printf "%-10s %-22s %-8s %s\n", $1, $2, $3, $4 }' "$TMP"
+  exit 0
+fi
+
+# Build the menu, dropping what is already present unless --show-installed.
+n_skipped=0
+while IFS=$'\t' read -r group id mgr pkg || [ -n "$group" ]; do
+  state=''
+  if [ "$mgr" = step ]; then
+    step_done "$pkg" && state=' (done)'
+  else
+    pm_installed "$mgr" "$pkg" && state=' (installed)'
+  fi
+  if [ -n "$state" ] && [ -z "$show_installed" ] && [ -z "$want_all" ]; then
+    n_skipped=$((n_skipped + 1))
+    continue
+  fi
+  printf '%s\t%s\t%s\t%s\t[%s] %-24s %s%s\n' \
+    "$group" "$id" "$mgr" "$pkg" "$group" "$id" "$mgr" "$state"
+done < "$TMP" > "$MENU"
+
+if [ ! -s "$MENU" ]; then
+  printf 'Nothing to install -- everything in %s is already present.\n' "$(basename "$LIST")"
+  exit 0
+fi
+
+if [ -n "$want_all" ]; then
+  cut -f1-4 "$MENU" > "$PICKED"
+else
+  # key = the first four tab-separated fields, so the selection round-trips
+  awk -F'\t' 'BEGIN { OFS = "\t" } { print $1 "|" $2 "|" $3 "|" $4, $5 }' "$MENU" \
+    | choose | tr '|' '\t' > "$PICKED"
+fi
+
+if [ ! -s "$PICKED" ]; then
+  echo 'Nothing selected.'
+  exit 0
+fi
+
+[ "$n_skipped" -gt 0 ] && \
+  printf '(%d entr%s already present, hidden -- use --show-installed to see them)\n\n' \
+    "$n_skipped" "$([ "$n_skipped" = 1 ] && echo y || echo ies)"
+
+echo 'Will install:'
+awk -F'\t' '{ printf "  [%s] %-24s %s %s\n", $1, $2, $3, $4 }' "$PICKED"
+echo
+
+if [ -z "$is_yes" ] && [ -z "$is_dry" ]; then
+  read -r -p "🔥 Proceed? [y/N] " response
+  case "$response" in
+    [yY][eE][sS]|[yY]) ;;
+    *) exit 1 ;;
+  esac
+fi
+
+# One sudo prompt up front rather than in the middle of a long run
+if [ "$OS" = linux ] && [ -z "$is_dry" ] && grep -qv '^step	' "$PICKED"; then
+  sudo -v || die "sudo is required to install packages"
+fi
+
+FAILED=''
+
+# Batch per manager: one dependency solve, one prompt. If the batch fails,
+# retry one at a time so a single broken package doesn't hide the rest.
+for mgr in brew cask pacman aur apt dnf zypper cargo pip; do
+  pkgs=()
+  while IFS=$'\t' read -r group id m pkg || [ -n "$m" ]; do
+    [ "$m" = "$mgr" ] && pkgs+=("$pkg")
+  done < "$PICKED"
+  [ ${#pkgs[@]} -gt 0 ] || continue
+
+  printf '\n== %s (%d) ==\n' "$mgr" "${#pkgs[@]}"
+  if pm_install "$mgr" "${pkgs[@]}"; then continue; fi
+
+  printf '   batch failed, retrying individually...\n' >&2
+  for p in "${pkgs[@]}"; do
+    pm_install "$mgr" "$p" || FAILED="$FAILED $mgr:$p"
+  done
+done
+
+# Steps last -- they routinely depend on git/curl/zsh being installed already.
+# Each runs in a subshell so its `set -e` can't kill this driver.
+while IFS=$'\t' read -r group id m pkg || [ -n "$m" ]; do
+  [ "$m" = step ] || continue
+  printf '\n== step: %s ==\n' "$id"
+  if [ -n "$is_dry" ]; then
+    printf '   [dry-run] %s\n' "$pkg"
+    continue
+  fi
+  ( set +e; bash "$pkg" ) || FAILED="$FAILED step:$id"
+  # sorted by path so the NN- filename prefixes control the order
+done < <(sort -t"$(printf '\t')" -k4,4 "$PICKED")
+
+echo
+if [ -n "$FAILED" ]; then
+  echo 'FAILED:'
+  for f in $FAILED; do printf '  - %s\n' "$f"; done
+  exit 1
+fi
+echo '✨ Done.'

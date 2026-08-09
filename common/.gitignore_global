@@ -1,0 +1,20 @@
+# Junk that should never be committed from any machine.
+# Wired up via core.excludesFile in ~/.gitconfig.
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# editors / tooling
+*~
+*.swp
+*.swo
+.direnv/

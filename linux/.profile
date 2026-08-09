@@ -27,8 +27,9 @@ if [ -d "$HOME/.local/bin" ]; then
   PATH="$HOME/.local/bin:$PATH"
 fi
 
-screenlayouts
-export VOLTA_HOME="$HOME/.volta"
-export PATH="$VOLTA_HOME/bin:$PATH"
+# xrandr layout for the desktop; harmless to skip on headless boxes and laptops
+if [ -n "$DISPLAY" ] && command -v screenlayouts >/dev/null 2>&1; then
+  screenlayouts
+fi
 
-. "$HOME/.local/bin/env"
+# VOLTA_HOME/PATH and .local/bin/env are set by ~/.bash_profile

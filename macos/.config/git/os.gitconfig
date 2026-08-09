@@ -1,0 +1,12 @@
+# Included by ~/.gitconfig. macOS-specific settings only.
+
+[gpg]
+    program = /opt/homebrew/bin/gpg
+
+[credential]
+    helper = osxkeychain
+
+[core]
+    # APFS updates ctime on metadata changes git doesn't care about, which
+    # makes git think files are dirty; don't trust it for the stat cache.
+    trustctime = false

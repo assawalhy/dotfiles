@@ -1,3 +1,4 @@
 .vscode/
-.window-cache/
-linux/.config/nvim/mini-init.vim
+common/.config/nvim/mini-init.vim
+__pycache__/
+*.pyc

@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# clip -- one clipboard interface across macOS, Wayland and X11.
+#
+#   clip           copy stdin to the clipboard
+#   clip -o        print the clipboard to stdout
+#   clip -p        copy stdin to the PRIMARY selection (X11; CLIPBOARD elsewhere)
+#   clip -op       print the PRIMARY selection
+#
+# Used by .tmux.conf, nvim and the shell aliases so none of them needs to know
+# which platform they are on.
+
+out=0
+sel=clipboard
+
+for a in "$@"; do
+  case "$a" in
+    -o|-op|-po) out=1 ;;
+  esac
+  case "$a" in
+    -p|-op|-po) sel=primary ;;
+  esac
+  case "$a" in
+    -o|-p|-op|-po) ;;
+    *) printf 'clip: unknown option "%s"\n' "$a" >&2; exit 2 ;;
+  esac
+done
+
+if command -v pbcopy >/dev/null 2>&1; then
+  # macOS: no PRIMARY selection, so -p degrades to the normal clipboard
+  if [ "$out" = 1 ]; then exec pbpaste; else exec pbcopy; fi
+elif [ -n "$WAYLAND_DISPLAY" ] && command -v wl-copy >/dev/null 2>&1; then
+  if [ "$sel" = primary ]; then
+    if [ "$out" = 1 ]; then exec wl-paste --primary --no-newline; else exec wl-copy --primary; fi
+  else
+    if [ "$out" = 1 ]; then exec wl-paste --no-newline; else exec wl-copy; fi
+  fi
+elif command -v xclip >/dev/null 2>&1; then
+  if [ "$out" = 1 ]; then exec xclip -selection "$sel" -o; else exec xclip -selection "$sel"; fi
+elif command -v xsel >/dev/null 2>&1; then
+  if [ "$out" = 1 ]; then exec xsel -o --"$sel"; else exec xsel -i --"$sel"; fi
+fi
+
+echo 'clip: no clipboard tool found (pbcopy/wl-copy/xclip/xsel)' >&2
+exit 1

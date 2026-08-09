@@ -1,0 +1,62 @@
+[include]
+    path = ~/.config/delta/themes.gitconfig
+    # platform-specific bits (gpg program, credential helper) -- linked from
+    # the linux/ or macos/ overlay. Git silently ignores a missing include.
+    path = ~/.config/git/os.gitconfig
+
+[alias]
+    s = status
+    co = checkout
+    cb = checkout -b
+    mr = merge
+    ms = merge --squash
+    mnff = merge --no-ff
+    br = branch
+    ll = log --oneline
+    lg = log --pretty=format:"%C(yellow)%h%Creset %C(green)%s%Creset %Cred%d%Creset %Cblue[%an]" --date=short
+    cm = commit -m
+    cam = commit -am
+    csm = commit -S -m
+    csam = commit -S -am
+    ca = commit --amend --no-edit
+    cma = commit --amend -m
+    cama = commit --amend -am
+    csma = commit --amend -S -m
+    casma = commit --amend -S -am
+    conflicted = !vim +Conflicted
+
+[user]
+    email = ms.2052001@gmail.com
+    name = محمد الصوالحي
+    username = ms2052001
+    signingKey = 8A1FDFB97C63E41DA58FAE3593F3C52B7DC6E418
+
+[init]
+    defaultBranch = main
+
+[commit]
+    # Lazygit says: Feature not available for users using GPG
+    # but I prefer to use these features 
+    gpgsign = false
+
+[pull]
+    rebase = true
+
+[push]
+    autoSetupRemote = true
+
+[core]
+    pager = delta
+    excludesFile = ~/.gitignore_global
+
+[interactive]
+    diffFilter = delta --color-only
+
+[delta]
+    side-by-side = true
+
+[merge]
+    conflictstyle = diff3
+
+[diff]
+    colorMoved = default
