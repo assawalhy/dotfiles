@@ -1,5 +1,6 @@
-local lfs = require("lfs")            -- luarocks install luafilesystem
-local socket = require("socket.http") -- luarocks install luasocket && apt install libssl-dev
+-- luarocks install luafilesystem luasocket
+local lfs = require("lfs")
+local socket = require("socket.http")
 
 local base_path = string.format('%s/myp/problem-solving', vim.loop.os_homedir())
 

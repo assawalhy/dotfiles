@@ -33,6 +33,7 @@ mousepad            !macos                       # GTK editor; macOS has TextEdi
 xsel                !macos                       # X11 clipboard
 xclip               !macos                       # X11 clipboard
 wl-clipboard        !macos                       # Wayland clipboard
+luarocks
 
 [extra]
 gh                  pacman:github-cli
@@ -46,7 +47,7 @@ lazygit             apt:-                        # not in Debian/Ubuntu repos
 texlive             cask:basictex  pacman:texlive-core  apt:texlive  dnf:texlive
 
 [gui]
-mpv
+mpv !macos
 syncthing
 obsidian            cask:obsidian  aur:obsidian
 typora              cask:typora  aur:typora
@@ -56,7 +57,6 @@ zathura             !macos
 zathura-pdf-mupdf   !macos
 okular              !macos                       # KDE document viewer
 feh                 !macos                       # X11 image viewer
-simplescreenrecorder !macos                      # macOS: Cmd-Shift-5
 skim                !linux  cask:skim            # macOS PDF viewer, the zathura stand-in
 pngpaste            !linux                       # required by the `pasteimage` alias on macOS
 
@@ -83,4 +83,3 @@ git-fame                                         # lines per contributor
 autopep8
 black
 mdtoc
-ueberzug            !macos                       # links against Xlib; impossible on macOS
