@@ -1,0 +1,6 @@
+# Context-neglect list for --audit. Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc

@@ -38,18 +38,20 @@ REPO="$(cd -P "$(dirname "$self")" >/dev/null && pwd)"
 COMMON="$REPO/common"
 OSDIR="$REPO/$OS"
 IGNORE_FILE="$REPO/link-ignore.txt"
+CTX_FILE="$REPO/link-context.txt"
 STAMP="$(date +%Y%m%d%H%M%S)"
 
 # --------------------------------------------------------------- cli ---
 
-is_help=; is_force=; is_dry=; is_yes=; is_refresh=; filter=; pattern_given=
+is_help=; is_force=; is_dry=; is_yes=; is_refresh=; is_audit=; filter=; pattern_given=
 
 print_help() {
 cat <<EOF
 USAGE:
-  $(basename "$0") [--help] [--force] [--dry-run] [--yes] [--refresh] [filtering_pattern]
+  $(basename "$0") [--help] [--force] [--dry-run] [--yes] [--refresh] [--audit] [filtering_pattern]
   $(basename "$0") --force '.*nvim/lua.*'
   $(basename "$0") --refresh --dry-run
+  $(basename "$0") --audit
 
 Symlinks $COMMON and $OSDIR into \$HOME.
 Detected OS: $OS
@@ -63,10 +65,16 @@ OPTIONS:
       --refresh   capture new files that appeared inside linked dirs into the
                   repo (OS overlay first, else common) and symlink them back;
                   never overwrites repo files; --force has no effect
+      --audit     read-only link-drift report: repo files lacking a correct
+                  home link (missing/relink/conflict/stale) plus real files
+                  in linked dirs absent from the repo. Applies the
+                  link-context.txt neglect list for the current session
+                  (wayland/x11/headless). Exit 0 = clean, 1 = findings;
+                  never writes, no picker, no prompt
   <pattern>       extended regex; only paths matching it are considered
 
 INTERACTIVE SELECTION:
-  Run bare (no --dry-run, --yes, --refresh or pattern) to choose exactly which
+  Run bare (no --dry-run, --yes, --refresh, --audit or pattern) to choose exactly which
   files to link. With fzf on a terminal: TAB toggles one entry, CTRL-A selects
   all matches, CTRL-D clears the selection, ENTER links. Without fzf -- or
   when stdin is not a terminal -- a numbered menu is shown instead: 'a'
@@ -90,6 +98,7 @@ parse_args() {
       -n|--dry-run) is_dry=1;   continue ;;
       -y|--yes)     is_yes=1;   continue ;;
       --refresh)    is_refresh=1; continue ;;
+      --audit)      is_audit=1;   continue ;;
       -r|--reverse)
         printf -- '--reverse was removed: the repo is now the source of truth.\n' >&2
         printf -- 'To adopt a file from $HOME:  mv ~/.foo %s/.foo && %s\n' \
@@ -151,7 +160,7 @@ collect() {
   desired="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   mdirs="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   IGN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
-  trap 'rm -f "$merged" "$desired" "$mdirs" "$IGN_TMP" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
+  trap 'rm -f "$merged" "$desired" "$mdirs" "$IGN_TMP" "$CTX_TMP" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
 
   # Ignore set, built once for all list_root calls: strip any leading ./ and
   # trailing / so entries compare cleanly against the lister's relpaths.
@@ -164,8 +173,11 @@ collect() {
   # --refresh (and --audit) keep the overlay set complete instead of applying
   # the pattern here: the pattern narrows their candidates later, but their
   # linked-dir discovery and in-repo exclusion need every repo relpath.
+  all_flag=0
+  [ -n "$is_refresh" ] && all_flag=1
+  [ -n "$is_audit" ] && all_flag=1
   { list_root "$OSDIR"; list_root "$COMMON"; } \
-    | awk -F'\t' -v pat="$filter" -v all="$is_refresh" \
+    | awk -F'\t' -v pat="$filter" -v all="$all_flag" \
         '!seen[$2]++ && (all == 1 || $2 ~ pat)' > "$merged"
 
   awk -F'\t' -v h="$HOME" '{ print h "/" $2 }' "$merged" | sort -u > "$desired"
@@ -487,6 +499,118 @@ refresh_apply() {
   done
 }
 
+# ------------------------------------------------------------- audit ---
+
+# --audit: read-only link-drift report. Direction (a) = repo files lacking a
+# correct home link (classify/find_stale); direction (b) = real files inside
+# linked dirs absent from the repo (refresh_scan's candidates, not applied).
+# Lines whose rel is neglected for the current session context are dropped;
+# nothing is written, no picker, no prompt. Exit 0 = clean, 1 = findings.
+
+# Session context for the neglect list. Order matters: Xwayland sets DISPLAY
+# too, so WAYLAND_DISPLAY is checked first.
+session_context() {
+  if [ -n "$WAYLAND_DISPLAY" ]; then
+    printf 'wayland\n'
+  elif [ -n "$DISPLAY" ]; then
+    printf 'x11\n'
+  else
+    printf 'headless\n'
+  fi
+}
+
+# Mirror read_ignores (:114-120): whole-line comments and blank lines dropped,
+# lines without a "<context>: " pair are malformed and ignored. A missing
+# link-context.txt is an empty neglect list, not an error.
+read_contexts() {
+  CTX_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  [ -f "$CTX_FILE" ] || return 0
+  sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' -e '/: /!d' "$CTX_FILE" \
+    > "$CTX_TMP" 2>/dev/null || :
+}
+
+# relpath R is neglected iff the context file lists it for a context other
+# than the current session's (>=1 line "<ctx>: R" exists AND session_context()
+# is not among those <ctx> values). Unlisted R is never neglected.
+neglected() {
+  local rel="$1" sctx line ctx r found=0 current=0
+  [ -f "$CTX_TMP" ] || return 1
+  sctx="$(session_context)"
+  while IFS= read -r line || [ -n "$line" ]; do
+    ctx="${line%%: *}"
+    r="${line#*: }"
+    [ "$r" = "$rel" ] || continue
+    found=1
+    [ "$ctx" = "$sctx" ] && current=1
+  done < "$CTX_TMP"
+  [ "$found" = 1 ] && [ "$current" = 0 ]
+}
+
+audit() {
+  local sctx i rel line ctx neglects=() neglect_str='' findings=0 suppressed=0
+  sctx="$(session_context)"
+
+  # header neglect list: context-file lines naming a session other than ours
+  while IFS= read -r line || [ -n "$line" ]; do
+    ctx="${line%%: *}"
+    [ "$ctx" = "$sctx" ] || neglects+=("$line")
+  done < "$CTX_TMP"
+  for line in "${neglects[@]}"; do
+    [ -n "$neglect_str" ] && neglect_str="$neglect_str, "
+    neglect_str="$neglect_str$line"
+  done
+  if [ -n "$neglect_str" ]; then
+    printf 'audit context: %s (neglecting: %s)\n' "$sctx" "$neglect_str"
+  else
+    printf 'audit context: %s\n' "$sctx"
+  fi
+
+  # direction (a): stale links, then repo files missing/relink/conflict
+  for ((i = 0; i < ${#stale[@]}; i++)); do
+    rel="${stale[$i]#$HOME/}"
+    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
+    [[ $rel =~ $filter ]] || continue
+    printf -- '-  %-44s %s\n' "$rel" 'stale link'
+    findings=$((findings + 1))
+  done
+  for ((i = 0; i < ${#new_rel[@]}; i++)); do
+    rel="${new_rel[$i]}"
+    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
+    [[ $rel =~ $filter ]] || continue
+    printf -- '+  %-44s %s\n' "$rel" '[missing]'
+    findings=$((findings + 1))
+  done
+  for ((i = 0; i < ${#soft_rel[@]}; i++)); do
+    rel="${soft_rel[$i]}"
+    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
+    [[ $rel =~ $filter ]] || continue
+    printf -- '*  %-44s %s\n' "$rel" '[relink]'
+    findings=$((findings + 1))
+  done
+  for ((i = 0; i < ${#hard_rel[@]}; i++)); do
+    rel="${hard_rel[$i]}"
+    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
+    [[ $rel =~ $filter ]] || continue
+    printf -- '!  %-44s %s\n' "$rel" '[conflict]'
+    findings=$((findings + 1))
+  done
+  # direction (b): refresh_scan's unlinked candidates (already filtered by
+  # the pattern inside refresh_scan, so no `=~` re-check here)
+  for ((i = 0; i < ${#rfr_rel[@]}; i++)); do
+    rel="${rfr_rel[$i]}"
+    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
+    printf -- '+  %-44s %s\n' "$rel" '[unlinked]'
+    findings=$((findings + 1))
+  done
+
+  if [ "$findings" -eq 0 ]; then
+    printf 'Audit clean (%d links correct, %d neglected).\n' "$n_same" "$suppressed"
+    exit 0
+  fi
+  printf 'Audit findings: %d.\n' "$findings"
+  exit 1
+}
+
 # ----------------------------------------------------------- preview ---
 
 tag_of() { # $1 = absolute src -> [common] / [linux] / [macos]
@@ -612,7 +736,7 @@ parse_args "$@"
 read_ignores
 collect
 # The picker chooses which repo files to link out; capture/report modes
-# (--refresh, and --audit in a later change) never open it.
+# (--refresh, --audit) never open it.
 if [ -z "$is_dry" ] && [ -z "$is_yes" ] && [ -z "$pattern_given" ] \
   && [ -z "$is_refresh" ] && [ -z "$is_audit" ]; then
   picker
@@ -625,5 +749,11 @@ if [ -n "$is_refresh" ]; then
 fi
 classify
 find_stale
+if [ -n "$is_audit" ]; then
+  read_contexts
+  refresh_scan
+  audit
+  exit 0
+fi
 confirm
 apply

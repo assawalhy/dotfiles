@@ -1,0 +1,110 @@
+
+==============================================================
+## T2 --audit: read-only link-drift report with session-context neglect
+==============================================================
+Date: 2026-08-15 | executor: Sisyphus-Junior | HEAD at start: 6b4c3ae (T1)
+
+### 1. Baseline characterization (UNCHANGED script)
+bash -n link-files.bash            -> OK
+./link-files.bash --audit          -> unknown option "--audit"  (exit 1)
+
+### 2. Failing-first proof (fixture on UNCHANGED script)
+fixture: /tmp/opencode/fx-repo (cp of link-files.bash link-ignore.txt link-context.txt
+  .gitignore common linux macos; git init + initial commit 8e36529, status clean)
+fx-home: correct symlink (.config/nvim/init.lua), missing (.tmux.conf etc), stale
+  (.stale-thing, .config/shell/old-thing), foreign symlink (.config/mpv/mpv.conf -> /etc/passwd),
+  real-file conflicts (.zshrc, .Xmodmap), direction-b candidate (.config/nvim/newfile.lua),
+  .Xmodmap as a REAL file; link-context.txt has 'x11: .Xmodmap'
+command:
+  HOME=/tmp/opencode/fx-home ./link-files.bash --audit
+output:
+  unknown option "--audit"
+  exit: 1
+
+### 3. Session-context env matrix (implemented script, fresh fixture)
+-- wayland (WAYLAND_DISPLAY=wayland-0 DISPLAY=) --
+  audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc)
+  -  .stale-thing                                 stale link
+  -  .config/shell/old-thing                      stale link
+  +  .config/git/os.gitconfig                     [missing]
+  +  .config/shell/os.sh                          [missing]
+  +  .config/zathura/zathurarc                    [missing]
+  +  .profile                                     [missing]
+  +  bin/arch-scripts/* ... (all repo files lacking a home link, [missing])
+  +  .gitconfig                                   [missing]
+  +  .tmux.conf                                   [missing]
+  !  .config/mpv/mpv.conf                         [conflict]   <- foreign symlink
+  !  .zshrc                                       [conflict]   <- real file
+  +  .config/nvim/newfile.lua                     [unlinked]   <- direction (b)
+  Audit findings: 69.
+  exit: 1
+  grep Xmodmap|xinitrc in output: ONLY the header line (neglected, NOT reported)  [PASS]
+-- x11 (WAYLAND_DISPLAY= DISPLAY=:0) --
+  audit context: x11
+  +  .xinitrc                                     [missing]
+  !  .Xmodmap                                     [conflict]
+  exit: 1   [PASS - x11 session reports the x11 files; header has no neglect list]
+-- headless (WAYLAND_DISPLAY= DISPLAY=) --
+  audit context: headless (neglecting: x11: .Xmodmap, x11: .xinitrc)
+  exit: 1   [PASS - both x11 files neglected, other findings still reported]
+
+### 4. Read-only sentinel proof
+  touch /tmp/opencode/sentinel-t2; run wayland audit; then:
+  find /tmp/opencode/fx-repo /tmp/opencode/fx-home -newer /tmp/opencode/sentinel-t2
+  -> EMPTY (nothing modified)                                    [PASS]
+  readlink of all 4 symlinks BEFORE == AFTER (identical)          [PASS]
+  git status --short of fx-repo before == after (clean)           [PASS]
+
+### 5. Clean audit (second fixture fx2, everything linked via normal --yes flow)
+  WAYLAND_DISPLAY=wayland-0 DISPLAY= HOME=/tmp/opencode/fx2-home ./link-files.bash --audit
+  audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc)
+  Audit clean (69 links correct, 0 neglected).
+  exit: 0   [PASS - exit 0 contract]
+
+### 6. Missing link-context.txt (removed from fx-repo)
+  audit still runs, no error; header 'audit context: wayland' (no neglect list);
+  !  .Xmodmap [conflict] IS reported (no neglect); exit 1         [PASS]
+
+### 7. Malformed lines (appended 'garbage-line' and 'foo:bar' - no ': ')
+  both ignored; header still 'neglecting: x11: .Xmodmap, x11: .xinitrc';
+  .Xmodmap still suppressed; Audit findings: 69.; exit 1          [PASS]
+
+### 8. Pattern filter narrows the report
+  ./link-files.bash --audit '\.lua$'   -> only .lua lines (12 findings), exit 1
+  (gawk '\.' escape warning is pre-existing stderr noise, exit 0, same as T1)
+
+### 9. Metis M7 neglect-inversion guard (dual-context line 'wayland: .zshrc' + 'x11: .zshrc')
+  wayland session: .zshrc REPORTED (wayland is among its contexts)  [PASS]
+  x11 session:     .zshrc REPORTED                                  [PASS]
+  headless:        .zshrc NEGLECTED (suppressed)                    [PASS]
+  plus .Xmodmap inversion: reported under x11, suppressed under wayland  [PASS]
+
+### 10. T1 --refresh pattern regression (collect-gate change did not break refresh)
+  fx2-home + real files .config/nvim/zzz.lua and zzz.conf:
+  ./link-files.bash --refresh '\.lua$' --dry-run
+  -> lists ONLY zzz.lua [refresh] (not zzz.conf), exit 0           [PASS]
+
+### 11. Syntax/compat gate
+  bash -n link-files.bash (real repo): OK
+  forbidden-construct scan of added lines (<<< mapfile readarray declare -A ${v,,}
+    globstar sort -V find -mindepth): clean
+  picker bypass condition contains [ -z "$is_audit" ] at main (line 741)  [PASS]
+
+### 12. Adversarial classes
+  - malformed input (malformed link-context.txt lines, bad pattern '[invalid'):
+    malformed ctx lines ignored (section 7); bad pattern -> every finding filtered
+    (report 'Audit clean (1 links correct, 2 neglected)', exit 0) - consistent with
+    T1's --refresh bad-regex behavior (silently narrows to nothing, no crash).
+  - stale state: fixtures rebuilt from scratch (rm -rf) before every evidence run.
+  - dirty worktree: real repo is 'MM .gitignore' + '?? .omo/'; commit by pathspec only.
+  - misleading success output: exit codes are the contract; clean-audit fixture (fx2)
+    proves the 0 path, findings fixtures prove the 1 path (sections 3-5).
+  - mid-operation interrupts: N/A - audit is read-only, no write/apply phase to interrupt.
+  - prompt injection: N/A - no prompts, no eval of untrusted input; relpaths are compared
+    literally (=, not regex/glob).
+  - cancel/resume: N/A - single-pass read-only report, no persisted state.
+  - hung/long commands: N/A - bounded `find` over $HOME-linked dirs only (same as T1 refresh).
+  - flaky tests: N/A - deterministic file/symlink states; sentinel proof runs on fresh builds.
+
+### 13. Final fx-repo state after all audit runs
+  git status --short: (clean - no modifications from any --audit run)
