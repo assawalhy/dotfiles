@@ -29,7 +29,7 @@ die() { printf '%s: %s\n' "$(basename "$0")" "$*" >&2; exit 1; }
 # --------------------------------------------------------------- cli ---
 
 is_dry=; want_all=; is_yes=; only_list=; show_installed=
-steps_only=; packages_only=; groups=
+steps_only=; packages_only=; groups=; prios=
 
 print_help() {
 cat <<EOF
@@ -45,6 +45,10 @@ OPTIONS:
   -h, --help          show this message and exit
   -n, --dry-run       print what would be installed, change nothing
       --all           select everything (skips the picker)
+      --priority LIST select a priority tier, e.g. p1 or p1,p2 (repeatable)
+                        auto-selects the tier without the picker; has priority
+                        over --all; combines with --group; steps without a
+                        "# prio:" header are excluded
       --group NAME    restrict to one section; repeatable
       --list          print the resolved entries and exit
       --show-installed  keep already-installed entries in the picker
@@ -66,6 +70,16 @@ while [ $# -gt 0 ]; do
     -y|--yes)          is_yes=1 ;;
     --group)           shift; [ -n "$1" ] || die "--group needs a name"
                        groups="$groups $1" ;;
+    --priority)        shift; [ -n "$1" ] || die "--priority needs a value"
+                       v="$1"
+                       while [ -n "$v" ]; do
+                         piece="${v%%,*}"
+                         case "$v" in *,*) v="${v#*,}" ;; *) v= ;; esac
+                         case "$piece" in
+                           p[0-9]*) prios="$prios $piece" ;;
+                           *) die "invalid priority \"$piece\"" ;;
+                         esac
+                       done ;;
     -*)                die "unknown option \"$1\"" ;;
     *)                 die "unexpected argument \"$1\"" ;;
   esac
@@ -245,7 +259,7 @@ choose() {
     fzf --multi --delimiter=$'\t' --with-nth=2.. \
         --height=90% --reverse --tiebreak=index \
         --prompt='install> ' \
-        --header='TAB select · CTRL-A all matches · CTRL-D none · ENTER confirm' \
+        --header='TAB select · CTRL-A all matches · CTRL-D none · ENTER confirm · type "p1" to filter a tier' \
         --bind 'ctrl-a:select-all,ctrl-d:deselect-all' \
       | cut -f1
   else
@@ -332,6 +346,16 @@ if [ -n "$groups" ]; then
   awk -F'\t' -v p="^($pat)$" '$1 ~ p' "$TMP" > "$TMP.f" && mv "$TMP.f" "$TMP"
 fi
 
+# --priority tier filter: auto-selects a whole tier, like --all limited to it
+if [ -n "$prios" ]; then
+  want_all=1
+  pat="$(printf '%s' "$prios" | sed 's/^ //; s/ /|/g')"
+  awk -F'\t' -v p="^($pat)$" '$5 ~ p' "$TMP" > "$TMP.f" && mv "$TMP.f" "$TMP"
+  # steps without a "# prio:" header emit an empty 5th field, so they never
+  # match the anchored regex and are excluded from the tier
+  [ -s "$TMP" ] || die "no entries match priority${prios}"
+fi
+
 if [ -n "$only_list" ]; then
   printf '%-10s %-22s %-6s %-8s %s\n' GROUP ID PRIORITY MANAGER PACKAGE
   awk -F'\t' '{ printf "%-10s %-22s %-6s %-8s %s\n", $1, $2, $5, $3, $4 }' "$TMP"
@@ -340,7 +364,7 @@ fi
 
 # Build the menu, dropping what is already present unless --show-installed.
 n_skipped=0
-while IFS=$'\t' read -r group id mgr pkg || [ -n "$group" ]; do
+while IFS=$'\t' read -r group id mgr pkg prio || [ -n "$group" ]; do
   state=''
   if [ "$mgr" = step ]; then
     step_done "$pkg" && state=' (done)'
@@ -351,8 +375,8 @@ while IFS=$'\t' read -r group id mgr pkg || [ -n "$group" ]; do
     n_skipped=$((n_skipped + 1))
     continue
   fi
-  printf '%s\t%s\t%s\t%s\t[%s] %-24s %s%s\n' \
-    "$group" "$id" "$mgr" "$pkg" "$group" "$id" "$mgr" "$state"
+  printf '%s\t%s\t%s\t%s\t[%s] %-24s [%s] %s%s\n' \
+    "$group" "$id" "$mgr" "$pkg" "$group" "$id" "$prio" "$mgr" "$state"
 done < "$TMP" > "$MENU"
 
 if [ ! -s "$MENU" ]; then
