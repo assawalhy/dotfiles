@@ -1,15 +1,16 @@
 # Packages that setup-os can install.
 #
 # FORMAT
-#   <id>  [mgr:name ...] [!macos] [!linux]
+#   <id>  [mgr:name ...] [!macos] [!linux] [pN]
 #
 #   <id>        logical name, and the default package name
 #   mgr:name    override the package name for one manager
 #   mgr:-       not available for that manager -- skip it
 #   !macos      not available (or not wanted) on macOS
 #   !linux      not available (or not wanted) on Linux
+#   pN          priority tier (p1 highest, p4 lowest); unlabeled defaults to p4
 #
-#   mgr is one of: brew cask pacman aur apt dnf zypper
+#   mgr is one of: brew cask pacman aur apt dnf zypper cargo pip
 #
 #   RESOLUTION: use the entry for the active manager if present, else fall
 #   back to <id> verbatim. So packages named the same everywhere need one word.
@@ -20,66 +21,66 @@
 #   Comments must be on their own line.
 
 [terminal]
-git
-zsh
-tmux
-neovim
-ranger
-fzf
-bat                 apt:batcat
-pipx
-fd                  apt:fd-find  dnf:fd-find
-mousepad            !macos                       # GTK editor; macOS has TextEdit
-xsel                !macos                       # X11 clipboard
-xclip               !macos                       # X11 clipboard
-wl-clipboard        !macos                       # Wayland clipboard
-luarocks
+git p1
+zsh p1
+tmux p1
+neovim p2
+ranger p2
+fzf p1
+bat                 apt:batcat p1
+pipx p2
+fd                  apt:fd-find  dnf:fd-find p1
+mousepad            !macos                       p3  # GTK editor; macOS has TextEdit
+xsel                !macos                       p3  # X11 clipboard
+xclip               !macos                       p3  # X11 clipboard
+wl-clipboard        !macos                       p3  # Wayland clipboard
+luarocks p4
 
 [extra]
-gh                  pacman:github-cli
-git-delta           apt:-  dnf:-                 # not packaged on Debian; see [cargo]
-yt-dlp
-ffmpeg
-pandoc
-glow                apt:-                        # was an install-script step; it's a real package now
-gitui               apt:-  dnf:-                 # not in Debian/Ubuntu repos
-lazygit             apt:-                        # not in Debian/Ubuntu repos
-texlive             cask:basictex  pacman:texlive-core  apt:texlive  dnf:texlive
+gh                  pacman:github-cli p1
+git-delta           apt:-  dnf:-                 p2  # not packaged on Debian; see [cargo]
+yt-dlp p2
+ffmpeg p2
+pandoc p2
+glow                apt:-                        p2  # was an install-script step; it's a real package now
+gitui               apt:-  dnf:-                 p2  # not in Debian/Ubuntu repos
+lazygit             apt:-                        p2  # not in Debian/Ubuntu repos
+texlive             cask:basictex  pacman:texlive-core  apt:texlive  dnf:texlive p4
 
 [gui]
-mpv !macos
-syncthing
-obsidian            cask:obsidian  aur:obsidian
-typora              cask:typora  aur:typora
-copyq               cask:copyq
-megasync            cask:megasync  aur:megasync-bin  pacman:-  apt:-  dnf:-
-zathura             !macos
-zathura-pdf-mupdf   !macos
-okular              !macos                       # KDE document viewer
-feh                 !macos                       # X11 image viewer
-skim                !linux  cask:skim            # macOS PDF viewer, the zathura stand-in
-pngpaste            !linux                       # required by the `pasteimage` alias on macOS
+mpv !macos p3
+syncthing p3
+obsidian            cask:obsidian  aur:obsidian p3
+typora              cask:typora  aur:typora p3
+copyq               cask:copyq p3
+megasync            cask:megasync  aur:megasync-bin  pacman:-  apt:-  dnf:- p4
+zathura             !macos p3
+zathura-pdf-mupdf   !macos p3
+okular              !macos                       p3  # KDE document viewer
+feh                 !macos                       p3  # X11 image viewer
+skim                !linux  cask:skim            p3  # macOS PDF viewer, the zathura stand-in
+pngpaste            !linux                       p3  # required by the `pasteimage` alias on macOS
 
 [dev]
-docker              cask:docker                  # cask = Docker Desktop
-meld                cask:meld
-lldb                brew:llvm                    # macOS: lldb ships with the Xcode CLT; llvm is newer
+docker              cask:docker                  p2  # cask = Docker Desktop
+meld                cask:meld p2
+lldb                brew:llvm                    p2  # macOS: lldb ships with the Xcode CLT; llvm is newer
 
 [fonts]
-noto-fonts-emoji    cask:font-noto-color-emoji
-noto-fonts-cjk      cask:font-noto-sans-cjk
-libxft-bgra         !macos  aur:libxft-bgra  pacman:-  apt:-  dnf:-   # st emoji crash fix
+noto-fonts-emoji    cask:font-noto-color-emoji p4
+noto-fonts-cjk      cask:font-noto-sans-cjk p4
+libxft-bgra         !macos  aur:libxft-bgra  pacman:-  apt:-  dnf:-   p4  # st emoji crash fix
 
 [cargo]
-fastmod
-ripgrep
-eza                                              # exa is unmaintained since 2023
-broot                                            # the `br` shell function comes from this crate
-rmem
-sd
+fastmod p1
+ripgrep p1
+eza                                              p1  # exa is unmaintained since 2023
+broot                                            p2  # the `br` shell function comes from this crate
+rmem p2
+sd p1
 
 [pip]
-git-fame                                         # lines per contributor
-autopep8
-black
-mdtoc
+git-fame                                         p2  # lines per contributor
+autopep8 p2
+black p2
+mdtoc p2
