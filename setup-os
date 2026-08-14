@@ -177,17 +177,18 @@ resolve() {
     /^\[/ { group = substr($0, 2, index($0, "]") - 2); next }
     {
       split("", m)            # portable array clear (macOS ships BWK awk)
-      id = $1; skip = 0
+      id = $1; skip = 0; prio = ""
       for (i = 2; i <= NF; i++) {
         if ($i == "!" os)  { skip = 1; continue }
         if ($i ~ /^!/)     { continue }
+        if ($i ~ /^p[0-9]+$/) { prio = $i; continue }
         p = index($i, ":"); if (!p) continue
         m[substr($i, 1, p - 1)] = substr($i, p + 1)
       }
       if (skip) next
 
       if (group == "cargo" || group == "pip") {
-        print group "\t" id "\t" group "\t" id
+        print group "\t" id "\t" group "\t" id "\t" (prio ? prio : "p4")
         next
       }
 
@@ -206,14 +207,14 @@ resolve() {
       pkg = (mgr in m) ? m[mgr] : id
       if (pkg == "-") next     # explicitly unavailable for this manager
 
-      print group "\t" id "\t" mgr "\t" pkg
+      print group "\t" id "\t" mgr "\t" pkg "\t" (prio ? prio : "p4")
     }' "$LIST"
 }
 
 # emits: step \t <name> \t step \t <path>   for steps valid on this machine
 resolve_steps() {
   [ -d "$STEPS" ] || return 0
-  local f os_hdr desc
+  local f os_hdr desc prio
   for f in "$STEPS"/*.sh; do
     [ -f "$f" ] || continue
     os_hdr="$(sed -n 's/^# os:[[:space:]]*//p' "$f" | head -1)"
@@ -224,7 +225,8 @@ resolve_steps() {
     esac
     desc="$(sed -n 's/^# desc:[[:space:]]*//p' "$f" | head -1)"
     [ -n "$desc" ] || desc="$(basename "$f" .sh)"
-    printf 'step\t%s\tstep\t%s\n' "$desc" "$f"
+    prio="$(sed -n 's/^# prio:[[:space:]]*//p' "$f" | head -1)"
+    printf 'step\t%s\tstep\t%s\t%s\n' "$desc" "$f" "$prio"
   done
 }
 
@@ -331,8 +333,8 @@ if [ -n "$groups" ]; then
 fi
 
 if [ -n "$only_list" ]; then
-  printf '%-10s %-22s %-8s %s\n' GROUP ID MANAGER PACKAGE
-  awk -F'\t' '{ printf "%-10s %-22s %-8s %s\n", $1, $2, $3, $4 }' "$TMP"
+  printf '%-10s %-22s %-6s %-8s %s\n' GROUP ID PRIORITY MANAGER PACKAGE
+  awk -F'\t' '{ printf "%-10s %-22s %-6s %-8s %s\n", $1, $2, $5, $3, $4 }' "$TMP"
   exit 0
 fi
 
