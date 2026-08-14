@@ -43,12 +43,12 @@ STAMP="$(date +%Y%m%d%H%M%S)"
 
 # --------------------------------------------------------------- cli ---
 
-is_help=; is_force=; is_dry=; is_yes=; is_refresh=; is_audit=; filter=; pattern_given=
+is_help=; is_force=; is_no_backup=; is_dry=; is_yes=; is_refresh=; is_audit=; filter=; pattern_given=
 
 print_help() {
 cat <<EOF
 USAGE:
-  $(basename "$0") [--help] [--force] [--dry-run] [--yes] [--refresh] [--audit] [filtering_pattern]
+  $(basename "$0") [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [filtering_pattern]
   $(basename "$0") --force '.*nvim/lua.*'
   $(basename "$0") --refresh --dry-run
   $(basename "$0") --audit
@@ -60,6 +60,9 @@ OPTIONS:
   -h, --help      show this message and exit
       --force     resolve conflicts: replace foreign symlinks, and back up
                   real files to <file>.bak.<timestamp> before linking
+      --no-backup with --force, delete a conflicting real file instead of
+                  backing it up to <file>.bak.<timestamp>; refuses to
+                  replace a directory; requires --force
   -n, --dry-run   show what would happen, then exit without changing anything
   -y, --yes       skip the confirmation prompt
       --refresh   capture new files that appeared inside linked dirs into the
@@ -99,6 +102,7 @@ parse_args() {
       -y|--yes)     is_yes=1;   continue ;;
       --refresh)    is_refresh=1; continue ;;
       --audit)      is_audit=1;   continue ;;
+      --no-backup)  is_no_backup=1; continue ;;
       -r|--reverse)
         printf -- '--reverse was removed: the repo is now the source of truth.\n' >&2
         printf -- 'To adopt a file from $HOME:  mv ~/.foo %s/.foo && %s\n' \
@@ -115,6 +119,10 @@ parse_args() {
   done
 
   if [ -n "$is_help" ]; then print_help; exit 0; fi
+  if [ -n "$is_no_backup" ] && [ -z "$is_force" ]; then
+    printf 'error: --no-backup requires --force\n' >&2
+    exit 1
+  fi
   [ -n "$filter" ] || filter='.*'
 }
 
@@ -697,8 +705,20 @@ link_one() { # $1=src $2=dst $3=1 to back up an existing real file
   if [ -d "$d" ]; then in_repo_guard "$d"; fi
   mkdir -p "$d"
   if [ "$3" = 1 ] && [ -e "$2" ] && [ ! -L "$2" ]; then
-    printf -- '   backup %s -> %s\n' "$2" "$2.bak.$STAMP"
-    mv "$2" "$2.bak.$STAMP"
+    # --no-backup deletes the real file instead of moving it aside. A
+    # directory cannot be rm -f'd (rm fails and set -e aborts mid-apply), so
+    # refuse before touching anything. Plain --force keeps the backup mv.
+    if [ -n "$is_no_backup" ] && [ -d "$2" ]; then
+      printf 'error: --no-backup cannot replace a directory (%s); run --force without --no-backup or remove it manually\n' "$2" >&2
+      exit 1
+    fi
+    if [ -n "$is_no_backup" ]; then
+      printf -- '-> rm (no backup) %s\n' "$2"
+      rm -f "$2"
+    else
+      printf -- '   backup %s -> %s\n' "$2" "$2.bak.$STAMP"
+      mv "$2" "$2.bak.$STAMP"
+    fi
   fi
   # rm + ln, never `ln -sf`: on BSD, forcing a link over an existing symlink
   # to a directory creates the link *inside* it, and the flag that prevents

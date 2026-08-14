@@ -1,0 +1,166 @@
+## T3 --no-backup QA record (Sisyphus-Junior, 2026-08-15)
+Plan todo 3, lines 150-169. Fixture recipe: fx3-repo = cp -r of
+  link-files.bash link-ignore.txt link-context.txt .gitignore common linux macos
+  from the real repo; `git init` + initial commit inside fx3-repo (fixture GOTCHA:
+  git check-ignore needs a .git). fx3-home recreated per scenario.
+  Runs: HOME=/tmp/opencode/fx3-home /tmp/opencode/fx3-repo/link-files.bash ...
+  (script derives REPO from its own location). Real $HOME untouched.
+
+Change under test (link-files.bash only):
+  - parse_args: --no-backup -> is_no_backup=1; bare --no-backup (no --force)
+    errors 'error: --no-backup requires --force' >&2, exit 1.
+  - print_help: --no-backup in USAGE + OPTIONS.
+  - link_one backup branch: [ -d "$2" ] under --no-backup -> refuse with the
+    directory error, exit 1 (plain rm -f would fail on a dir and abort mid-apply
+    under set -e); elif is_no_backup -> '-> rm (no backup) <file>' + rm -f "$2";
+    else the existing mv to .bak.$STAMP unchanged.
+  - Plain --force (no --no-backup) behavior untouched; --refresh/--audit untouched.
+
+Accepted constructs note: awk-escape warning "escape sequence `\.' treated as
+plain `.'" is PRE-EXISTING gawk stderr noise (documented in T1), exit 0.
+======================================================================
+acceptance 1: --force --no-backup --yes replaces real file, NO .bak
+======================================================================
+awk: warning: escape sequence `\.' treated as plain `.'
+~  .config/mpv/mpv.conf                         [common] existing file, will be backed up
+
+   common + linux  ->  /tmp/opencode/fx3-home
+
+-> ln -s .config/mpv/mpv.conf
+-> rm (no backup) /tmp/opencode/fx3-home/.config/mpv/mpv.conf
+exit=0
+PASS: exit 0
+PASS: mpv.conf is now a symlink
+bak-count=0
+PASS: no .bak.* anywhere under fx3-home
+symlink target: /tmp/opencode/fx3-repo/common/.config/mpv/mpv.conf
+total 8
+drwxr-xr-x 2 ms ms 4096 Aug 15 00:30 .
+drwxr-xr-x 3 ms ms 4096 Aug 15 00:30 ..
+lrwxrwxrwx 1 ms ms   50 Aug 15 00:30 mpv.conf -> /tmp/opencode/fx3-repo/common/.config/mpv/mpv.conf
+======================================================================
+acceptance 2: --force --yes (no --no-backup) still makes .bak.<STAMP>
+======================================================================
+awk: warning: escape sequence `\.' treated as plain `.'
+~  .config/mpv/mpv.conf                         [common] existing file, will be backed up
+
+   common + linux  ->  /tmp/opencode/fx3-home
+
+-> ln -s .config/mpv/mpv.conf
+   backup /tmp/opencode/fx3-home/.config/mpv/mpv.conf -> /tmp/opencode/fx3-home/.config/mpv/mpv.conf.bak.20260815003030
+exit=0
+PASS: exit 0
+PASS: mpv.conf is now a symlink
+bak-count=1
+PASS: a .bak.<STAMP> exists
+total 12
+drwxr-xr-x 2 ms ms 4096 Aug 15 00:30 .
+drwxr-xr-x 3 ms ms 4096 Aug 15 00:30 ..
+lrwxrwxrwx 1 ms ms   50 Aug 15 00:30 mpv.conf -> /tmp/opencode/fx3-repo/common/.config/mpv/mpv.conf
+-rw-r--r-- 1 ms ms   19 Aug 15 00:30 mpv.conf.bak.20260815003030
+======================================================================
+acceptance 3: bare --no-backup (no --force) -> error, exit 1, no change
+======================================================================
+error: --no-backup requires --force
+exit=1
+PASS: error message emitted
+PASS: exit 1
+PASS: mpv.conf still a real file (unchanged)
+PASS: no .bak.* files
+PASS: no symlinks created
+total 12
+drwxr-xr-x 2 ms ms 4096 Aug 15 00:30 .
+drwxr-xr-x 3 ms ms 4096 Aug 15 00:30 ..
+-rw-r--r-- 1 ms ms   19 Aug 15 00:30 mpv.conf
+======================================================================
+acceptance 4: real DIRECTORY at a repo file relpath -> refuses, intact
+======================================================================
+awk: warning: escape sequence `\.' treated as plain `.'
+~  .config/mpv/mpv.conf                         [common] existing file, will be backed up
+
+   common + linux  ->  /tmp/opencode/fx3-home
+
+-> ln -s .config/mpv/mpv.conf
+error: --no-backup cannot replace a directory (/tmp/opencode/fx3-home/.config/mpv/mpv.conf); run --force without --no-backup or remove it manually
+exit=1
+PASS: directory-refuse error emitted
+PASS: exit 1
+PASS: directory still present
+PASS: directory contents intact
+PASS: no .bak.* files
+PASS: no symlinks created (no partial apply)
+total 12
+drwxr-xr-x 2 ms ms 4096 Aug 15 00:30 .
+drwxr-xr-x 3 ms ms 4096 Aug 15 00:30 ..
+-rw-r--r-- 1 ms ms    8 Aug 15 00:30 keep.txt
+======================================================================
+probe (informational): real dir at a repo DIR relpath (.config/nvim)
+======================================================================
+awk: warning: escape sequence `\.' treated as plain `.'
++  .config/nvim/.stylua.toml                    [common]
++  .config/nvim/lazy-lock.json                  [common]
++  .config/nvim/lua/plugins/autoformat.lua      [common]
++  .config/nvim/lua/plugins/cmp.lua             [common]
++  .config/nvim/lua/plugins/competitest.lua     [common]
++  .config/nvim/lua/plugins/dap.lua             [common]
++  .config/nvim/lua/plugins/lsp.lua             [common]
++  .config/nvim/lua/plugins/neotree.lua         [common]
++  .config/nvim/lua/plugins/telescope.lua       [common]
++  .config/nvim/lua/plugins/treesitter.lua      [common]
++  .config/nvim/lua/plugins/ufo.lua             [common]
++  .config/nvim/snippets/typescriptreact.snippets [common]
+~  .config/nvim/init.lua                        [common] existing file, will be backed up
+
+   common + linux  ->  /tmp/opencode/fx3-home
+
+-> ln -s .config/nvim/.stylua.toml
+-> ln -s .config/nvim/lazy-lock.json
+-> ln -s .config/nvim/lua/plugins/autoformat.lua
+exit=0
+nvim-dir-state: [ -d ]=yes symlink=no
+total 16
+drwxr-xr-x 3 ms ms 4096 Aug 15 00:30 .
+drwxr-xr-x 3 ms ms 4096 Aug 15 00:30 ..
+lrwxrwxrwx 1 ms ms   55 Aug 15 00:30 .stylua.toml -> /tmp/opencode/fx3-repo/common/.config/nvim/.stylua.toml
+-rw-r--r-- 1 ms ms   17 Aug 15 00:30 init.lua
+lrwxrwxrwx 1 ms ms   57 Aug 15 00:30 lazy-lock.json -> /tmp/opencode/fx3-repo/common/.config/nvim/lazy-lock.json
+drwxr-xr-x 3 ms ms 4096 Aug 15 00:30 lua
+======================================================================
+regression: --refresh --dry-run still works (T1 path untouched)
+======================================================================
+awk: warning: escape sequence `\.' treated as plain `.'
++  .config/mpv/extra.conf [refresh] -> common
+
+   refresh: move 1 new file(s) into common/linux and symlink them back
+
+exit=0
+PASS: --refresh --dry-run exit 0
+PASS: dry-run did not move the file
+PASS: no repo copy created
+PASS: candidate line lists [refresh] -> common
+======================================================================
+regression: --audit still works (T2 path untouched)
+======================================================================
+-- clean view (exit 0 contract):
+awk: warning: escape sequence `\.' treated as plain `.'
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc)
+Audit clean (1 links correct, 2 neglected).
+exit=0
+PASS: --audit clean exit 0
+-- full view (findings -> exit 1 contract):
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc)
++  .config/git/os.gitconfig                     [missing]
++  .config/shell/os.sh                          [missing]
++  .config/zathura/zathurarc                    [missing]
++  .profile                                     [missing]
+exit=1
+PASS: --audit findings exit 1
+PASS: audit modified nothing (symlink intact)
+======================================================================
+regression: --help shows --no-backup
+======================================================================
+2:  link-files.bash [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [filtering_pattern]
+14:      --no-backup with --force, delete a conflicting real file instead of
+PASS: --help lists --no-backup
+
+ALL T3 QA PASSED
