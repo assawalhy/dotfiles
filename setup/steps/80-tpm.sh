@@ -2,5 +2,6 @@
 # desc: tmux plugin manager
 # os: any
 # check: [ -d "$HOME/.tmux/plugins/tpm" ]
+# prio: p1
 set -euo pipefail
 git clone https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"

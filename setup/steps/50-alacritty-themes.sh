@@ -2,6 +2,7 @@
 # desc: alacritty colorschemes
 # os: any
 # check: [ -d "$HOME/.eendroroy-colorschemes" ]
+# prio: p3
 set -euo pipefail
 dest="$HOME/.eendroroy-colorschemes"
 [ -d "$dest" ] || git clone https://github.com/eendroroy/alacritty-theme.git "$dest"

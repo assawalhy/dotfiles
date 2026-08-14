@@ -2,6 +2,7 @@
 # desc: cht.sh
 # os: any
 # check: command -v cht.sh
+# prio: p2
 set -euo pipefail
 # install to ~/.local/bin (already on PATH via .bash_profile) -- no sudo needed
 mkdir -p "$HOME/.local/bin"

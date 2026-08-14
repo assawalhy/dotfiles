@@ -2,6 +2,7 @@
 # desc: wallpapers (dwt1)
 # os: any
 # check: [ -d "${XDG_PICTURES_DIR:-$HOME/Pictures}/wallpapers" ]
+# prio: p3
 set -euo pipefail
 dest="${XDG_PICTURES_DIR:-$HOME/Pictures}/wallpapers"
 mkdir -p "$(dirname "$dest")"

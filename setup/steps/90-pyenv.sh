@@ -2,6 +2,7 @@
 # desc: pyenv
 # os: any
 # check: command -v pyenv || [ -d "$HOME/.pyenv" ]
+# prio: p2
 set -euo pipefail
 # on macOS the packaged build is far less trouble than compiling the shim
 if [ "$(uname -s)" = Darwin ] && command -v brew >/dev/null 2>&1; then

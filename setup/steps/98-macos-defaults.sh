@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # desc: macOS system defaults (key repeat, Finder)
 # os: macos
+# prio: p3
 set -euo pipefail
 
 # The one that actually matters: without it, holding j/k in nvim opens the
