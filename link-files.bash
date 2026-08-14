@@ -8,6 +8,7 @@
 #
 # NOTE: must stay bash 3.2 compatible -- stock macOS /bin/bash is 3.2.57.
 #       No readarray/mapfile, no `declare -A`, no ${v,,}, no globstar.
+#       The file lister is pure bash + POSIX find/awk/sort -- no node.
 
 PS4='$LINENO: '
 set -e
@@ -36,7 +37,6 @@ REPO="$(cd -P "$(dirname "$self")" >/dev/null && pwd)"
 COMMON="$REPO/common"
 OSDIR="$REPO/$OS"
 IGNORE_FILE="$REPO/link-ignore.txt"
-LISTER="$REPO/list-files.mjs"
 STAMP="$(date +%Y%m%d%H%M%S)"
 
 # --------------------------------------------------------------- cli ---
@@ -114,17 +114,34 @@ read_ignores() {
 # emits "<root>\t<relpath>" for every linkable file under $1
 list_root() {
   [ -d "$1" ] || return 0
-  # ${ignores[@]/#/!} prefixes each element with '!' (the lister's ignore
-  # marker) and correctly expands to zero args when the array is empty.
-  node "$LISTER" "$1" . ${ignores[@]+"${ignores[@]/#/!}"} \
+  # Pure bash/POSIX lister, no node. Ignore set ($IGN_TMP, built once in
+  # collect()): exact relpath, or any path under a directory entry. Files of
+  # unknown type (fifo/socket) never reach here -- `find -type f` skips them
+  # silently, where list-files.mjs used to error and exit 1. Deliberate.
+  find "$1" -type f 2>/dev/null \
+    | awk -v r="$1" '
+        NR == FNR { ign[$0] = 1; next }
+        { rel = substr($0, length(r) + 2)
+          if (rel ~ /^!/) next
+          for (i in ign)
+            if (rel == i || index(rel, i "/") == 1) { skip = 1; break }
+          if (!skip) print rel
+          skip = 0 }' "$IGN_TMP" - \
+    | sort \
     | awk -v r="$1" 'BEGIN { OFS = "\t" } { print r, $0 }'
+  find "$1" -type l 2>/dev/null | while IFS= read -r l; do printf 'skip symlink: %s\n' "${l#$1/}" >&2; done
 }
 
 collect() {
   merged="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   desired="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   mdirs="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
-  trap 'rm -f "$merged" "$desired" "$mdirs"' EXIT INT TERM HUP
+  IGN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  trap 'rm -f "$merged" "$desired" "$mdirs" "$IGN_TMP"' EXIT INT TERM HUP
+
+  # Ignore set, built once for all list_root calls: strip any leading ./ and
+  # trailing / so entries compare cleanly against the lister's relpaths.
+  printf '%s\n' "${ignores[@]}" | sed 's#^\./##; s#/$##' > "$IGN_TMP"
 
   # OS root first, common second; awk keeps the FIRST hit per relpath, which
   # is exactly the overlay-wins rule. The filter is applied to the relative
