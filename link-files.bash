@@ -4,7 +4,8 @@
 #
 # Sources are  <repo>/common  and  <repo>/<os>  where <os> is linux or macos.
 # On a path collision the OS overlay wins. The repo is the source of truth;
-# there is no capture-from-$HOME direction (see --reverse below).
+# --refresh captures new files that appeared inside linked dirs back into the
+# repo and symlinks them in place (see --reverse below).
 #
 # NOTE: must stay bash 3.2 compatible -- stock macOS /bin/bash is 3.2.57.
 #       No readarray/mapfile, no `declare -A`, no ${v,,}, no globstar.
@@ -41,13 +42,14 @@ STAMP="$(date +%Y%m%d%H%M%S)"
 
 # --------------------------------------------------------------- cli ---
 
-is_help=; is_force=; is_dry=; is_yes=; filter=; pattern_given=
+is_help=; is_force=; is_dry=; is_yes=; is_refresh=; filter=; pattern_given=
 
 print_help() {
 cat <<EOF
 USAGE:
-  $(basename "$0") [--help] [--force] [--dry-run] [--yes] [filtering_pattern]
+  $(basename "$0") [--help] [--force] [--dry-run] [--yes] [--refresh] [filtering_pattern]
   $(basename "$0") --force '.*nvim/lua.*'
+  $(basename "$0") --refresh --dry-run
 
 Symlinks $COMMON and $OSDIR into \$HOME.
 Detected OS: $OS
@@ -58,15 +60,18 @@ OPTIONS:
                   real files to <file>.bak.<timestamp> before linking
   -n, --dry-run   show what would happen, then exit without changing anything
   -y, --yes       skip the confirmation prompt
+      --refresh   capture new files that appeared inside linked dirs into the
+                  repo (OS overlay first, else common) and symlink them back;
+                  never overwrites repo files; --force has no effect
   <pattern>       extended regex; only paths matching it are considered
 
 INTERACTIVE SELECTION:
-  Run bare (no --dry-run, --yes or pattern) to choose exactly which files to
-  link. With fzf on a terminal: TAB toggles one entry, CTRL-A selects all
-  matches, CTRL-D clears the selection, ENTER links. Without fzf -- or when
-  stdin is not a terminal -- a numbered menu is shown instead: 'a' selects
-  all (the default), 'n' selects none, numbers and ranges pick specific
-  files, and an empty answer selects everything.
+  Run bare (no --dry-run, --yes, --refresh or pattern) to choose exactly which
+  files to link. With fzf on a terminal: TAB toggles one entry, CTRL-A selects
+  all matches, CTRL-D clears the selection, ENTER links. Without fzf -- or
+  when stdin is not a terminal -- a numbered menu is shown instead: 'a'
+  selects all (the default), 'n' selects none, numbers and ranges pick
+  specific files, and an empty answer selects everything.
 
 MARKERS IN THE PREVIEW:
   +  new link
@@ -84,6 +89,7 @@ parse_args() {
       --force)      is_force=1; continue ;;
       -n|--dry-run) is_dry=1;   continue ;;
       -y|--yes)     is_yes=1;   continue ;;
+      --refresh)    is_refresh=1; continue ;;
       -r|--reverse)
         printf -- '--reverse was removed: the repo is now the source of truth.\n' >&2
         printf -- 'To adopt a file from $HOME:  mv ~/.foo %s/.foo && %s\n' \
@@ -155,8 +161,12 @@ collect() {
   # is exactly the overlay-wins rule. The filter is applied to the relative
   # path only -- matching the whole line would also match the absolute root.
   # Doing it in awk also avoids `set -e` tripping on grep's empty-result exit 1.
+  # --refresh (and --audit) keep the overlay set complete instead of applying
+  # the pattern here: the pattern narrows their candidates later, but their
+  # linked-dir discovery and in-repo exclusion need every repo relpath.
   { list_root "$OSDIR"; list_root "$COMMON"; } \
-    | awk -F'\t' -v pat="$filter" '!seen[$2]++ && $2 ~ pat' > "$merged"
+    | awk -F'\t' -v pat="$filter" -v all="$is_refresh" \
+        '!seen[$2]++ && (all == 1 || $2 ~ pat)' > "$merged"
 
   awk -F'\t' -v h="$HOME" '{ print h "/" $2 }' "$merged" | sort -u > "$desired"
 
@@ -374,6 +384,109 @@ find_stale() {
   done < "$mdirs"
 }
 
+# ---------------------------------------------------------- refresh ---
+
+# --refresh: capture new real files that appeared inside linked dirs into the
+# repo (mirror-root: OS overlay wins, else common) and symlink them back.
+# One direction only (home -> repo); never touches existing repo files;
+# conflicts and ignored paths are skipped, not resolved.
+rfr_rel=(); rfr_home=(); rfr_dest=(); rfr_root=()
+
+refresh_scan() {
+  local d rel f ddir dest root
+
+  # Linked dirs = unique dirnames of merged rels that contain a `/`. Top-level
+  # rels (parent is $HOME itself) are skipped -- $HOME is never scanned. Nested
+  # dirs collapse to their shallowest ancestor so `find` never reports a file
+  # twice (e.g. .config/nvim and .config/nvim/lua/plugins).
+  # `$desired` (built in collect) doubles as the in-repo rel set: a candidate
+  # whose absolute path is listed there is already managed (or a conflict) and
+  # is skipped silently, exactly like find_stale (:368).
+  while IFS= read -r d || [ -n "$d" ]; do
+    [ -d "$HOME/$d" ] || continue
+    [ -L "$HOME/$d" ] && continue
+    # find -type f skips symlinks and never descends into symlinked subdirs
+    while IFS= read -r f || [ -n "$f" ]; do
+      rel="${f#$HOME/}"
+      # already in the repo (managed or conflict) -> skip silently
+      if grep -Fxq "$f" "$desired"; then continue; fi
+      # link-ignore.txt, exact or under a directory entry (list_root:130-137)
+      if awk -v rel="$rel" \
+          'rel == $0 || index(rel, $0 "/") == 1 { found = 1 } END { exit !found }' \
+          "$IGN_TMP"; then continue; fi
+      # gitignored; a git error (no repo) also skips -- never capture a file
+      # we cannot prove is not ignored (git check-ignore --no-index works
+      # without the index but still needs a repository)
+      if git -C "$REPO" check-ignore --no-index -q -- "$rel" 2>/dev/null; then
+        continue
+      elif [ $? -ne 1 ]; then
+        continue
+      fi
+      case "$rel" in
+        */.git/*|.git/*) continue ;;
+        *.bak.*)         continue ;;
+      esac
+      # `=~` RHS must stay unquoted for bash 3.2 (find_stale:371)
+      [[ $rel =~ $filter ]] || continue
+      # mirror-root rule: OS overlay if the dir exists there, else common
+      ddir="$(dirname "$rel")"
+      if [ -d "$OSDIR/$ddir" ]; then
+        dest="$OSDIR/$rel"; root="$OS"
+      else
+        dest="$COMMON/$rel"; root=common
+      fi
+      rfr_rel+=("$rel"); rfr_home+=("$f"); rfr_dest+=("$dest"); rfr_root+=("$root")
+    done < <(find "$HOME/$d" -type f 2>/dev/null)
+  done < <(
+    awk -F'\t' '{ r = $2; sub(/\/[^\/]*$/, "", r); if (r != $2) print r }' "$merged" \
+      | sort -u \
+      | awk '{ if ($0 != prev && index($0, prev "/") != 1) { print; prev = $0 } }'
+  )
+}
+
+refresh_confirm() {
+  local i
+
+  if [ "${#rfr_rel[@]}" -eq 0 ]; then
+    printf 'Nothing to refresh.\n'
+    exit 0
+  fi
+
+  for ((i = 0; i < ${#rfr_rel[@]}; i++)); do
+    printf -- '+  %s [refresh] -> %s\n' "${rfr_rel[$i]}" "${rfr_root[$i]}"
+  done
+  echo
+  printf '   refresh: move %d new file(s) into %s/%s and symlink them back\n' \
+    "${#rfr_rel[@]}" "${COMMON#$REPO/}" "${OSDIR#$REPO/}"
+  echo
+
+  [ -n "$is_dry" ] && exit 0
+  [ -n "$is_yes" ] && return 0
+
+  read -r -p "🔥 Are you sure? [y/N] " response
+  case "$response" in
+    [yY][eE][sS]|[yY]) return 0 ;;
+    *) exit 1 ;;
+  esac
+}
+
+refresh_apply() {
+  local i
+
+  for ((i = 0; i < ${#rfr_rel[@]}; i++)); do
+    printf -- '-> mv + ln -s %s\n' "${rfr_rel[$i]}"
+    mkdir -p "$(dirname "${rfr_dest[$i]}")"
+    mv "${rfr_home[$i]}" "${rfr_dest[$i]}"
+    # Rollback: a user file must never be left only in the repo.
+    if ! ln -s "${rfr_dest[$i]}" "${rfr_home[$i]}"; then
+      mv "${rfr_dest[$i]}" "${rfr_home[$i]}"
+      printf 'error: ln failed for %s; file moved back to %s\n' \
+        "${rfr_rel[$i]}" "${rfr_home[$i]}" >&2
+      exit 1
+    fi
+  done
+}
+
 # ----------------------------------------------------------- preview ---
 
 tag_of() { # $1 = absolute src -> [common] / [linux] / [macos]
@@ -498,8 +611,17 @@ apply() {
 parse_args "$@"
 read_ignores
 collect
-if [ -z "$is_dry" ] && [ -z "$is_yes" ] && [ -z "$pattern_given" ]; then
+# The picker chooses which repo files to link out; capture/report modes
+# (--refresh, and --audit in a later change) never open it.
+if [ -z "$is_dry" ] && [ -z "$is_yes" ] && [ -z "$pattern_given" ] \
+  && [ -z "$is_refresh" ] && [ -z "$is_audit" ]; then
   picker
+fi
+if [ -n "$is_refresh" ]; then
+  refresh_scan
+  refresh_confirm
+  refresh_apply
+  exit 0
 fi
 classify
 find_stale

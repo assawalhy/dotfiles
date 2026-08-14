@@ -1,0 +1,275 @@
+======================================================================
+task-1-link-refresh-audit evidence
+date: 2026-08-14T21:02:05Z  host: Linux  bash: GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+HEAD: 92f956c
+======================================================================
+
+## 0. Baseline characterization (UNCHANGED script, HEAD 92f956c)
+
+### 0.1 bash -n link-files.bash (unchanged)
+bash -n: OK (exit 0)
+
+### 0.2 fixture build (recipe per plan)
+cp: target '/tmp/opencode/fx-repo/': No such file or directory
+zsh:18: no such file or directory: /tmp/opencode/fx-repo/link-ignore.txt
+fixture built:
+/tmp/opencode/fx-home/.config/nvim/__pycache__/junk.pyc
+/tmp/opencode/fx-home/.config/nvim/init.lua
+/tmp/opencode/fx-home/.config/nvim/lua/extra.lua
+/tmp/opencode/fx-home/.config/nvim/newfile.lua
+/tmp/opencode/fx-home/.config/nvim/skip.me
+/tmp/opencode/fx-home/.config/shell/new.sh
+
+repo fixture top-level:
+ls: cannot access '/tmp/opencode/fx-repo': No such file or directory
+### 0.2 fixture build (rebuild, fixed: mkdir fx-repo)
+fixture home tree:
+/tmp/opencode/fx-home/.config/nvim/__pycache__/junk.pyc
+/tmp/opencode/fx-home/.config/nvim/init.lua
+/tmp/opencode/fx-home/.config/nvim/lua/extra.lua
+/tmp/opencode/fx-home/.config/nvim/newfile.lua
+/tmp/opencode/fx-home/.config/nvim/skip.me
+/tmp/opencode/fx-home/.config/shell/new.sh
+fx-repo top-level:
+common
+link-files.bash
+link-ignore.txt
+linux
+macos
+
+### 0.3 baseline fixture linking pass: HOME=/tmp/opencode/fx-home /tmp/opencode/fx-repo/link-files.bash --dry-run
++  .Xmodmap                                     [linux]
++  .config/git/os.gitconfig                     [linux]
++  .config/shell/os.sh                          [linux]
++  .config/zathura/zathurarc                    [linux]
++  .profile                                     [linux]
++  .xinitrc                                     [linux]
++  bin/arch-scripts/alac                        [linux]
++  bin/arch-scripts/alcrty                      [linux]
++  bin/arch-scripts/argv                        [linux]
++  bin/arch-scripts/asciiquarium                [linux]
++  bin/arch-scripts/checkstyle                  [linux]
++  bin/arch-scripts/dwm-iconbar                 [linux]
++  bin/arch-scripts/egrep                       [linux]
++  bin/arch-scripts/emojis                      [linux]
++  bin/arch-scripts/emojis-window               [linux]
++  bin/arch-scripts/emojis.txt                  [linux]
++  bin/arch-scripts/finalurl                    [linux]
++  bin/arch-scripts/links.txt.backup            [linux]
++  bin/arch-scripts/mic_over_mumble             [linux]
++  bin/arch-scripts/mpv-yt                      [linux]
++  bin/arch-scripts/name-sorted-date            [linux]
++  bin/arch-scripts/notify-posture              [linux]
++  bin/arch-scripts/runwomic                    [linux]
++  bin/arch-scripts/scr                         [linux]
++  bin/arch-scripts/wal                         [linux]
++  bin/arch-scripts/windows                     [linux]
++  bin/arch-scripts/xset-my-root                [linux]
++  bin/keyboard                                 [linux]
++  bin/monitor-my-ram                           [linux]
++  bin/screenlayouts                            [linux]
++  ._بسم_الله_الرحمن_الرحيم  [common]
++  .bash_profile                                [common]
++  .bashrc                                      [common]
++  .config/delta/themes.gitconfig               [common]
++  .config/mpv/input.conf                       [common]
++  .config/mpv/mpv.conf                         [common]
++  .config/mpv/scripts/cycle_video_rotate.lua   [common]
++  .config/mpv/scripts/youtube-quality.lua      [common]
++  .config/nvim/.stylua.toml                    [common]
++  .config/nvim/lazy-lock.json                  [common]
++  .config/nvim/lua/plugins/autoformat.lua      [common]
++  .config/nvim/lua/plugins/cmp.lua             [common]
++  .config/nvim/lua/plugins/competitest.lua     [common]
++  .config/nvim/lua/plugins/dap.lua             [common]
++  .config/nvim/lua/plugins/lsp.lua             [common]
++  .config/nvim/lua/plugins/neotree.lua         [common]
++  .config/nvim/lua/plugins/telescope.lua       [common]
++  .config/nvim/lua/plugins/treesitter.lua      [common]
++  .config/nvim/lua/plugins/ufo.lua             [common]
++  .config/nvim/snippets/typescriptreact.snippets [common]
++  .config/ranger/plugins/__init__.py           [common]
++  .config/ranger/rc.conf                       [common]
++  .config/ranger/scope.sh                      [common]
++  .gitconfig                                   [common]
++  .gitignore_global                            [common]
++  .hushlogin                                   [common]
++  .tmux.conf                                   [common]
++  .zshrc                                       [common]
++  bin/arnums                                   [common]
++  bin/clip                                     [common]
++  bin/git-large-objects                        [common]
++  bin/montag                                   [common]
++  bin/obsidian-export                          [common]
++  bin/tmux-da7ee7-platform                     [common]
++  bin/tmux-ide                                 [common]
++  bin/tmux-yadwy                               [common]
++  bin/ydi                                      [common]
++  bin/ytdl-list                                [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+   (1 link(s) already correct)
+
+baseline dry-run exit code: 0
+
+## 1. Failing-first proof (UNCHANGED script): --refresh is not yet implemented
+
+### 1.1 HOME=/tmp/opencode/fx-home /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run
+unknown option "--refresh"
+failing-first exit code: 1
+
+==> EXPECTED: unknown option error + exit 1 (proves --refresh is new)
+
+==============================================================
+## 2. Acceptance criteria (implemented script)
+==============================================================
+
+### 2.1 fixture rebuild (fresh; note the rm -rf for stale-state probe)
+fx-home tree:
+/tmp/opencode/fx-home/.config/nvim/__pycache__/junk.pyc
+/tmp/opencode/fx-home/.config/nvim/init.lua
+/tmp/opencode/fx-home/.config/nvim/lua/extra.lua
+/tmp/opencode/fx-home/.config/nvim/newfile.lua
+/tmp/opencode/fx-home/.config/nvim/skip.me
+/tmp/opencode/fx-home/.config/shell/new.sh
+
+fx-repo initial git status --short (expect clean):
+
+### 2.2 bash -n on the fixture copy
+bash -n: OK (exit 0)
+
+### 2.3 --refresh --dry-run (full candidate scan)
++  .config/nvim/newfile.lua [refresh] -> common
++  .config/nvim/lua/extra.lua [refresh] -> common
++  .config/shell/new.sh [refresh] -> linux
+
+   refresh: move 3 new file(s) into common/linux and symlink them back
+
+exit code: 0
+-- files created by the dry run (sentinel find; expect EMPTY):
+
+### 2.4 --refresh '\.lua$' --dry-run (pattern filter)
+awk: warning: escape sequence `\.' treated as plain `.'
++  .config/nvim/newfile.lua [refresh] -> common
++  .config/nvim/lua/extra.lua [refresh] -> common
+
+   refresh: move 2 new file(s) into common/linux and symlink them back
+
+exit code: 0
+
+### 2.5 confirm prompt: printf 'n\n' | --refresh (must exit 1, move nothing)
++  .config/nvim/newfile.lua [refresh] -> common
++  .config/nvim/lua/extra.lua [refresh] -> common
++  .config/shell/new.sh [refresh] -> linux
+
+   refresh: move 3 new file(s) into common/linux and symlink them back
+
+exit code: 1
+-- newfile.lua still a real file at home (expect 'real'):
+newfile.lua: real file (not moved)
+-- repo untouched (expect no newfile.lua in fx-repo):
+ls: cannot access '/tmp/opencode/fx-repo/common/.config/nvim/newfile.lua': No such file or directory
+not in repo (OK)
+
+### 2.6 --refresh --yes (the apply run -- completion evidence)
++  .config/nvim/newfile.lua [refresh] -> common
++  .config/nvim/lua/extra.lua [refresh] -> common
++  .config/shell/new.sh [refresh] -> linux
+
+   refresh: move 3 new file(s) into common/linux and symlink them back
+
+-> mv + ln -s .config/nvim/newfile.lua
+-> mv + ln -s .config/nvim/lua/extra.lua
+-> mv + ln -s .config/shell/new.sh
+exit code: 0
+-- repo side now holds the files:
+-rw-r--r-- 1 ms ms 31 Aug 15 00:09 /tmp/opencode/fx-repo/common/.config/nvim/newfile.lua
+-rw-r--r-- 1 ms ms 31 Aug 15 00:09 /tmp/opencode/fx-repo/common/.config/nvim/lua/extra.lua
+-- overlay mirror (expect linux/.config/shell/new.sh, NOT common):
+-rw-r--r-- 1 ms ms 23 Aug 15 00:09 /tmp/opencode/fx-repo/linux/.config/shell/new.sh
+common/.config/shell/new.sh absent (OK)
+-- home side is now symlinks (readlink must equal the fx-repo path):
+/tmp/opencode/fx-repo/common/.config/nvim/newfile.lua
+/tmp/opencode/fx-repo/common/.config/nvim/lua/extra.lua
+/tmp/opencode/fx-repo/linux/.config/shell/new.sh
+-- originals gone from fx-home (expect 'not found'):
+PRESENT (real)
+PRESENT (real)
+newfile.lua is a symlink (original gone) (OK)
+extra.lua is a symlink (original gone) (OK)
+-- init.lua symlink untouched:
+/tmp/opencode/fx-repo/common/.config/nvim/init.lua
+-- gitignored + link-ignored junk still real files:
+junk.pyc: still real (OK)
+skip.me: still real (OK)
+-- fx-repo git status --short (expect only the 3 captured files untracked):
+?? common/.config/nvim/lua/extra.lua
+?? common/.config/nvim/newfile.lua
+?? linux/.config/shell/new.sh
+
+### 2.7 failure QA (a): rollback on ln failure (stubbed ln)
++  .config/nvim/newfile.lua [refresh] -> common
++  .config/nvim/lua/extra.lua [refresh] -> common
++  .config/shell/new.sh [refresh] -> linux
+
+   refresh: move 3 new file(s) into common/linux and symlink them back
+
+-> mv + ln -s .config/nvim/newfile.lua
+error: ln failed for .config/nvim/newfile.lua; file moved back to /tmp/opencode/fx-home/.config/nvim/newfile.lua
+exit code: 1 (expect 1)
+-- moved file rolled BACK to home (expect real file):
+newfile.lua back at home as real file (rollback OK)
+-- repo dest absent (expect 'not found'):
+ls: cannot access '/tmp/opencode/fx-repo/common/.config/nvim/newfile.lua': No such file or directory
+repo dest absent (OK)
+
+### 2.8 failure QA (b): write-and-rename conflict (real init.lua at home)
++  .config/nvim/newfile.lua [refresh] -> common
++  .config/nvim/lua/extra.lua [refresh] -> common
++  .config/shell/new.sh [refresh] -> linux
+
+   refresh: move 3 new file(s) into common/linux and symlink them back
+
+dry-run exit code: 0 (init.lua must NOT be listed above)
++  .config/nvim/newfile.lua [refresh] -> common
++  .config/nvim/lua/extra.lua [refresh] -> common
++  .config/shell/new.sh [refresh] -> linux
+
+   refresh: move 3 new file(s) into common/linux and symlink them back
+
+-> mv + ln -s .config/nvim/newfile.lua
+-> mv + ln -s .config/nvim/lua/extra.lua
+-> mv + ln -s .config/shell/new.sh
+-- repo file unchanged (expect md5 equal):
+before=73415039e2c792fac88dd51a8055f713 after=73415039e2c792fac88dd51a8055f713
+repo init.lua unchanged (OK)
+-- home init.lua still the real file (not captured):
+init.lua still real at home (skipped, OK)
+
+### 2.9 adversarial: malformed pattern '[' (must not crash)
+Nothing to refresh.
+exit code: 0 (expect 0, no crash)
+
+==============================================================
+## 3. Adversarial classes (probe + record)
+==============================================================
+- malformed input: --refresh '[' --dry-run (2.9) -> 'Nothing to refresh.', exit 0, no crash (bad regex skipped per candidate via '|| continue')
+- stale state: fixtures rebuilt fresh every run (rm -rf in 2.1/2.7/2.8 build_fixture) so no state leaks between runs
+- dirty worktree: real repo pinned at 'MM .gitignore' + '?? .omo/'; verified identical before and after the commit (below)
+- misleading success output: --dry-run (2.3) is a preview only; the --yes apply run (2.6) with repo-file + readlink + git-status assertions is the completion evidence
+- mid-operation interrupts: mv-then-ln-failure covered by the rollback run (2.7): stub ln exits 1 -> file moved back, exit 1
+- NOT APPLICABLE - prompt injection: no untrusted external text is ever eval'd/executed (paths are compared, never sourced)
+- NOT APPLICABLE - cancel/resume: single-shot script, no state to resume
+- NOT APPLICABLE - hung/long commands: find is bounded to the linked-dir set under the fixture HOME; all runs completed in ms
+- NOT APPLICABLE - flaky tests: deterministic fixtures (fixed content, rebuilt from scratch)
+
+## 4. Syntax/compat gate
+bash -n link-files.bash (real repo):
+OK
+forbidden-construct scan of the working diff (only hit must be the pre-existing line-11 comment listing them):
+no forbidden constructs in added lines
+
+## 5. Dirty-worktree pin (real repo, BEFORE commit)
+MM .gitignore
+ M link-files.bash
+?? .omo/
