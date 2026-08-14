@@ -401,6 +401,16 @@ fi
   printf '(%d entr%s already present, hidden -- use --show-installed to see them)\n\n' \
     "$n_skipped" "$([ "$n_skipped" = 1 ] && echo y || echo ies)"
 
+# A cargo batch is impossible without the Rust toolchain. When one is about to
+# run, drop the rustup step from PICKED -- the steps-last loop does not re-check
+# `# check:` and would otherwise run it a second time. Auto-run it here instead,
+# but only when cargo is actually missing, so an existing toolchain is never
+# stomped by a fresh rustup install.
+if awk -F'\t' '$3=="cargo"' "$PICKED" | grep -q . && [ -f "$STEPS/10-rustup.sh" ]; then
+  awk -F'\t' -v rp="$STEPS/10-rustup.sh" '$4 != rp' "$PICKED" > "$PICKED.t" && mv "$PICKED.t" "$PICKED"
+  if ! command -v cargo >/dev/null 2>&1; then RUN_RUSTUP_AUTO=1; fi
+fi
+
 echo 'Will install:'
 awk -F'\t' '{ printf "  [%s] %-24s %s %s\n", $1, $2, $3, $4 }' "$PICKED"
 echo
@@ -430,6 +440,16 @@ for mgr in brew cask pacman aur apt dnf zypper cargo pip; do
   [ ${#pkgs[@]} -gt 0 ] || continue
 
   printf '\n== %s (%d) ==\n' "$mgr" "${#pkgs[@]}"
+  # The rustup step was dropped from PICKED above; run it now so the cargo
+  # batch below has a toolchain to build with.
+  if [ "$mgr" = cargo ] && [ -n "$RUN_RUSTUP_AUTO" ]; then
+    printf '\n== step: rustup (auto, required by cargo) ==\n'
+    if [ -n "$is_dry" ]; then
+      printf '   [dry-run] rustup (auto, required by cargo)\n'
+    else
+      ( set +e; bash "$STEPS/10-rustup.sh" ) || FAILED="$FAILED step:rustup(auto)"
+    fi
+  fi
   if pm_install "$mgr" "${pkgs[@]}"; then continue; fi
 
   printf '   batch failed, retrying individually...\n' >&2
