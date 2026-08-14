@@ -1,0 +1,82 @@
+
+## 2026-08-15 T4 README documentation (executor: Sisyphus-Junior)
+### Files changed
+- README.md ONLY (docs). Evidence + learnings appends are the allowed extras.
+### What changed in README.md
+1. "Linking" usage block: replaced the pre-T1 USAGE/OPTIONS listing with the verbatim
+   `./link-files.bash --help` USAGE block (4 lines) + OPTIONS block (all 8 options,
+   including --no-backup, --refresh, --audit with their exact descriptions).
+2. "What gets linked": added `link-context.txt` as the session neglect list for
+   --audit, right after the link-ignore.txt exception-list sentence.
+3. New subsection "Capturing new files (--refresh)": what gets captured (new real
+   files in linked dirs, not in repo / link-ignore.txt / gitignore), the mirror
+   rule (OS overlay when that path exists there, else common/), the 🔥 confirm
+   prompt, --dry-run / --yes / <pattern>, and that it never overwrites repo files
+   (--force has no effect).
+4. New subsection "Checking the link state (--audit)": read-only, both directions
+   (repo files with no correct home link + real files in linked dirs absent from
+   repo), exit 0/1 contract, session contexts (wayland/x11/headless) via
+   link-context.txt with the `x11: .Xmodmap` example.
+5. "Conflicts" paragraph amended: "Real files are never deleted. Under `--force`
+   they are moved to `<file>.bak.<timestamp>` first, unless `--no-backup` is
+   given, which deletes the real file instead (and refuses directory conflicts)."
+### Acceptance commands + outputs (all PASS)
+[1] grep -c -- '--refresh' README.md -> 9 (want >=3)
+[2] grep -c -- '--audit' README.md -> 7 (want >=3)
+[3] grep -c -- '--no-backup' README.md -> 3 (want >=2)
+[4] grep -q 'link-context.txt' README.md -> PASS
+[5] grep -q 'no-backup' README.md (Conflicts ctx) -> PASS
+[6] fence lines: awk '/^```/{n++} END{print n}' -> 14, EVEN (7 pairs; the 5 extra
+    lines vs a bare-fence grep are the ```sh fences, which start with ```)
+[7a] ./link-files.bash --help | grep -q -- '--refresh' -> PASS
+[7b] ./link-files.bash --help | grep -q -- '--audit' -> PASS
+[7c] ./link-files.bash --help | grep -q -- '--no-backup' -> PASS
+[8] --reverse removal note still present -> PASS
+[9] 'no longer needs node' claim intact -> PASS
+[10] bash -n link-files.bash -> PASS
+[11] USAGE block in README (lines 47-50) byte-identical to help (sed -n '1,4p') -> PASS
+[12] OPTIONS option lines identical to help; only structural diffs are the
+     "OPTIONS:" header position and README omitting the INTERACTIVE SELECTION /
+     MARKERS sections (not in plan scope) -> PASS
+### Notes
+- Gate: shell-quoting artifact: grep -c '^```' inside $(...) in zsh collapsed the
+  pattern and returned 250 (the whole file). True count via awk is 14, even.
+  Use awk or a file for fence counting.
+- Pre-existing working-tree wrinkle: `M .omo/evidence/task-1-link-refresh-audit.txt`
+  was already modified before T4; NOT staged by the pathspec commit.
+- markdownlint-cli2 not installed: `npx markdownlint-cli2 README.md 2>/dev/null || true`
+  informational only, skipped (per plan).
+
+## 2026-08-15 T4 FIX: neglect semantics were inverted in README (verifier-found, proven)
+### The bug
+Fixture: context file with ONLY `x11: .Xmodmap`, repo linux/.Xmodmap unlinked.
+- WAYLAND (WAYLAND_DISPLAY=wayland-0 DISPLAY=:0): header "audit context: wayland
+  (neglecting: x11: .Xmodmap)", .Xmodmap SUPPRESSED (no [missing] line).
+- X11 (DISPLAY=:0, no WAYLAND_DISPLAY): header "audit context: x11", .Xmodmap
+  REPORTED as `+ .Xmodmap [missing]`.
+=> `x11: .Xmodmap` neglects .Xmodmap when the session is NOT x11; reports it when
+   the session IS x11 (matches pinned predicate, plan line 136, Metis M7).
+My commit ced8606 had TWO inverted spots:
+1. --audit subsection said "a line like `x11: .Xmodmap` means --audit neglects
+   .Xmodmap when the current session is x11" (contradicting my own next sentence,
+   which was correct).
+2. "What gets linked" said "paths named there, for the current session context,
+   are skipped" (ambiguous/inverted).
+### The fix (exact final wording, now in README.md)
+Passage 1 (What gets linked):
+"`link-context.txt` is the session neglect list for `--audit`: a relpath named
+there for a context other than the current session (like `x11: .Xmodmap` under
+wayland) is skipped by the link-drift report."
+Passage 2 (--audit subsection):
+"a line like `x11: .Xmodmap` marks `.Xmodmap` as x11-only, so `--audit` neglects
+it on every other session and reports it when the session is x11." (followed by
+the kept, already-correct "skipped on a Wayland session and reported on an X11
+one").
+### Re-verification (all PASS)
+[1] --refresh count 9 (>=3)  [2] --audit count 7 (>=3)  [3] --no-backup count 3 (>=2)
+[4] link-context.txt PASS  [5] no-backup (Conflicts ctx) PASS
+[6] fences 14 EVEN  [7a/b/c] help --refresh/--audit/--no-backup PASS
+No other README content changed; link-files.bash and link-context.txt untouched.
+### Commit note
+T4 commit rewritten in place (git reset --soft HEAD~1 + pathspec re-commit, T1
+recovery recipe) to keep ONE commit per todo; .gitignore stays MM.

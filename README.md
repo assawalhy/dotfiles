@@ -45,13 +45,30 @@ will do, and asks before touching anything.
 
 ```
 USAGE:
-  link-files.bash [--help] [--force] [--dry-run] [--yes] [filtering_pattern]
+  link-files.bash [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [filtering_pattern]
+  link-files.bash --force '.*nvim/lua.*'
+  link-files.bash --refresh --dry-run
+  link-files.bash --audit
 
-  -h, --help      show the help and exit
-      --force     resolve conflicts (see below)
-  -n, --dry-run   show what would happen, then exit
+OPTIONS:
+  -h, --help      show this message and exit
+      --force     resolve conflicts: replace foreign symlinks, and back up
+                  real files to <file>.bak.<timestamp> before linking
+      --no-backup with --force, delete a conflicting real file instead of
+                  backing it up to <file>.bak.<timestamp>; refuses to
+                  replace a directory; requires --force
+  -n, --dry-run   show what would happen, then exit without changing anything
   -y, --yes       skip the confirmation prompt
-  <pattern>       extended regex; only matching paths are considered
+      --refresh   capture new files that appeared inside linked dirs into the
+                  repo (OS overlay first, else common) and symlink them back;
+                  never overwrites repo files; --force has no effect
+      --audit     read-only link-drift report: repo files lacking a correct
+                  home link (missing/relink/conflict/stale) plus real files
+                  in linked dirs absent from the repo. Applies the
+                  link-context.txt neglect list for the current session
+                  (wayland/x11/headless). Exit 0 = clean, 1 = findings;
+                  never writes, no picker, no prompt
+  <pattern>       extended regex; only paths matching it are considered
 ```
 
 ```sh
@@ -80,7 +97,10 @@ listing is a bash script now.
 
 Everything committed under `common/` and the active OS directory — **there is
 no include list**. `link-ignore.txt` is the exception list: paths named there
-are committed but not linked.
+are committed but not linked. `link-context.txt` is the session neglect list
+for `--audit`: a relpath named there for a context other than the current
+session (like `x11: .Xmodmap` under wayland) is skipped by the link-drift
+report.
 
 Adopting a new dotfile is therefore just a move:
 
@@ -91,6 +111,42 @@ mv ~/.foo common/.foo && ./link-files.bash
 (This replaces the old `--reverse` flag, which captured files from `$HOME` back
 into the repo. With symlinks the repo *is* the live copy, so there is nothing to
 capture and the flag is gone.)
+
+### Capturing new files (`--refresh`)
+
+Programs sometimes write new files straight into a linked directory, a plugin
+adding its own config, a program creating a state file. Run with `--refresh`
+after that and the script picks those files up: anything inside a linked dir
+that is not already in the repo, not named in `link-ignore.txt`, and not
+matched by gitignore. Each one lands at the same relative path in the repo, in
+the OS overlay when that path exists there and in `common/` otherwise, and is
+symlinked back so the live file keeps working.
+
+`--refresh` never overwrites a repo file, and `--force` has no effect on it.
+Like every other mode it previews what it will capture and then asks for the 🔥
+confirmation before moving anything. `--dry-run` shows the preview and stops,
+`--yes` skips the prompt, and a `<pattern>` narrows the scan.
+
+```sh
+link-files.bash --refresh             # capture everything new
+link-files.bash --refresh --dry-run   # preview only
+link-files.bash --refresh 'extra\.conf$'
+```
+
+### Checking the link state (`--audit`)
+
+`--audit` is a read-only report of link drift in both directions: repo files
+that are not correctly linked in `$HOME` (missing, pointing at the wrong
+source, a conflict, or stale), and real files inside linked dirs that are
+absent from the repo. It never writes anything, opens no picker, and asks
+nothing. Exit 0 means the links are clean, exit 1 that there are findings.
+
+Some files only belong to particular desktop sessions. `link-context.txt`
+lists those, per session context: a line like `x11: .Xmodmap` marks `.Xmodmap`
+as x11-only, so `--audit` neglects it on every other session and reports it
+when the session is x11. The context is detected from the environment (wayland,
+x11, or headless), so `.Xmodmap` is skipped on a Wayland session and reported
+on an X11 one.
 
 ### Conflicts
 
@@ -106,7 +162,8 @@ Every candidate path falls into one of these:
 | `!` | a conflict — a real file, or a symlink pointing outside this repo | yes |
 
 Real files are never deleted. Under `--force` they are moved to
-`<file>.bak.<timestamp>` first.
+`<file>.bak.<timestamp>` first, unless `--no-backup` is given, which deletes
+the real file instead (and refuses directory conflicts).
 
 Old hard links from the previous scheme are detected by inode, so the migration
 to symlinks needs no flags and creates no backups — the content is identical by
