@@ -61,6 +61,21 @@ link-files.bash '.*nvim/lua.*'  # just the nvim plugin files
 link-files.bash --force         # also resolve conflicts
 ```
 
+### Interactive selection
+
+Run bare, `link-files.bash` opens an interactive picker over every linkable
+file, each tagged with a `[group]` label (git, shell, tmux, x11, bin, other).
+Type to filter, `TAB` toggles a file, `CTRL-A` selects all current matches and
+`CTRL-D` clears the selection. Marks survive when you clear the query, so you
+can build a set across several searches. fzf 0.48 and newer starts with everything selected;
+older fzf needs a `CTRL-A` first. Without fzf there is a numbered fallback menu
+with `a` for all and `n` for none.
+
+The picker only opens when nothing else tells the script what to do: a
+`<pattern>` argument, `--dry-run` or `--yes` all skip it, so the invocations
+above behave exactly as before. The linker no longer needs node: the path
+listing is a bash script now.
+
 ### What gets linked
 
 Everything committed under `common/` and the active OS directory — **there is
@@ -106,11 +121,28 @@ Unrelated symlinks in `$HOME` are left alone.
 ./setup-os              # pick from a list, then install
 ./setup-os --list       # just show what resolves on this machine
 ./setup-os --dry-run --all
+./setup-os --priority p1 -y     # temp machine: essentials + agents, no prompt
+./setup-os --priority p1,p2     # the dev workstation tiers in one run
 ```
 
 Uses Homebrew on macOS and pacman / apt / dnf / zypper on Linux (plus `paru` or
 `yay` for AUR packages, when one is installed). Already-installed entries are
 hidden from the picker; `--show-installed` keeps them.
+
+Every entry belongs to a priority tier, `p1` to `p4`:
+
+| Tier | Covers |
+|---|---|
+| `p1` | SSH essentials and agents: git, zsh, tmux, fzf, bat, fd, ripgrep, eza, sd, fastmod, gh, plus the rustup, oh-my-zsh, tpm, opencode and claude steps |
+| `p2` | dev workstation |
+| `p3` | GUI |
+| `p4` | occasional |
+
+`--priority` selects a tier and skips the picker, so a temp machine is one
+command: `./setup-os --priority p1 -y` installs the essentials with no prompt.
+The flag is repeatable and comma-separated, so `./setup-os --priority p1,p2`
+covers a dev workstation in one run. It also takes precedence over `--all`,
+narrowing that to the tiers you named.
 
 Selection uses `fzf --multi` when available and falls back to a numbered menu
 otherwise, so it works on a machine where nothing is installed yet. Type a group
@@ -121,18 +153,26 @@ name then `Ctrl-A` to select a whole group at once.
 
   ```
   fd            apt:fd-find  dnf:fd-find    # `fd` everywhere else
+  zsh           p1                          # bare pN token = priority tier
   texlive       cask:basictex  pacman:texlive-core
   xclip         !macos                      # X11 only
   megasync      cask:megasync  aur:megasync-bin  pacman:-
   ```
 
+  The bare `pN` token sets the priority tier; it goes at the end of the line,
+  before any comment. Lines without one default to `p4`.
+
 - **`setup/steps/*.sh`** — the things that aren't packages (rustup, oh-my-zsh,
   tpm, volta, pnpm, macOS `defaults`, …). One executable file each, with
-  `# desc:`, `# os:` and `# check:` headers so `setup-os` can label them, filter
-  them by platform, and skip the ones already done. Each is runnable on its own.
+  `# desc:`, `# os:`, `# check:` and `# prio:` headers so `setup-os` can label
+  them, filter them by platform, skip the ones already done, and include each
+  one in its priority tier. Each is runnable on its own.
 
 Failures don't abort the run — a batch that fails is retried one package at a
 time to isolate the culprit, and everything that failed is listed at the end.
+
+On a fresh box with no cargo, rustup runs automatically right before the cargo
+packages, so you don't have to bootstrap it by hand first.
 
 ## Caveats
 
