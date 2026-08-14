@@ -41,7 +41,7 @@ STAMP="$(date +%Y%m%d%H%M%S)"
 
 # --------------------------------------------------------------- cli ---
 
-is_help=; is_force=; is_dry=; is_yes=; filter=
+is_help=; is_force=; is_dry=; is_yes=; filter=; pattern_given=
 
 print_help() {
 cat <<EOF
@@ -59,6 +59,14 @@ OPTIONS:
   -n, --dry-run   show what would happen, then exit without changing anything
   -y, --yes       skip the confirmation prompt
   <pattern>       extended regex; only paths matching it are considered
+
+INTERACTIVE SELECTION:
+  Run bare (no --dry-run, --yes or pattern) to choose exactly which files to
+  link. With fzf on a terminal: TAB toggles one entry, CTRL-A selects all
+  matches, CTRL-D clears the selection, ENTER links. Without fzf -- or when
+  stdin is not a terminal -- a numbered menu is shown instead: 'a' selects
+  all (the default), 'n' selects none, numbers and ranges pick specific
+  files, and an empty answer selects everything.
 
 MARKERS IN THE PREVIEW:
   +  new link
@@ -87,7 +95,7 @@ parse_args() {
         if [ -n "$filter" ]; then
           printf 'you can only specify one filtering pattern\n' >&2; exit 1
         fi
-        filter="$o" ;;
+        filter="$o"; pattern_given=1 ;;
     esac
   done
 
@@ -137,7 +145,7 @@ collect() {
   desired="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   mdirs="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   IGN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
-  trap 'rm -f "$merged" "$desired" "$mdirs" "$IGN_TMP"' EXIT INT TERM HUP
+  trap 'rm -f "$merged" "$desired" "$mdirs" "$IGN_TMP" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
 
   # Ignore set, built once for all list_root calls: strip any leading ./ and
   # trailing / so entries compare cleanly against the lister's relpaths.
@@ -160,6 +168,143 @@ collect() {
     | awk -F'\t' -v h="$HOME" \
         '{ p = h "/" $2; sub(/\/[^\/]*$/, "", p); print p }' \
     | sort -u > "$mdirs"
+}
+
+# ------------------------------------------------------------ picker ---
+
+# Menu lines are "rel \t [<group>] rel"; the group label drives the fallback
+# menu's section headers. fzf >= 0.48 knows the start event, so there we can
+# preselect everything on open; older fzf starts empty (ctrl-a still works).
+fzf_ge() {
+  local v vma vmi ma mi
+  v="$(fzf --version 2>/dev/null | awk '{print $1}')"
+  IFS=. read -r vma vmi _ < <(printf '%s\n' "${v:-0}")
+  IFS=. read -r ma mi _ < <(printf '%s\n' "$1")
+  if [ "${vma:-0}" -gt "${ma:-0}" ] || { [ "${vma:-0}" -eq "${ma:-0}" ] && [ "${vmi:-0}" -ge "${mi:-0}" ]; }; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+picker_bind() {
+  if fzf_ge 0.48; then
+    printf '%s' 'ctrl-a:select-all,ctrl-d:deselect-all,start:select-all'
+  else
+    printf '%s' 'ctrl-a:select-all,ctrl-d:deselect-all'
+  fi
+}
+
+# Pure-bash multi-select when fzf can't be used (not installed, or stdin is
+# not a terminal). Menu entries come from $1; the selection is read from the
+# real stdin (a tty, or a pipe in headless runs). stdout is the result.
+menu_fallback() {
+  local keys labels k l n=0 i sel tok lo hi last_group group menu_file
+  keys=(); labels=()
+  menu_file="$1"
+  while IFS=$'\t' read -r k l || [ -n "$k" ]; do
+    keys[$n]="$k"; labels[$n]="$l"; n=$((n + 1))
+  done < "$menu_file"
+
+  {
+    last_group=''
+    i=0
+    while [ $i -lt $n ]; do
+      group="${labels[$i]#[}"
+      group="${group%%]*}"
+      if [ "$group" != "$last_group" ]; then
+        printf '\n  ---- %s ----\n' "$group"
+        last_group="$group"
+      fi
+      printf '%4d) %s\n' "$((i + 1))" "${labels[$i]}"
+      i=$((i + 1))
+    done
+    printf '\n(fzf not available -- using the basic picker)\n'
+    printf "Select: 'a' = all (default) · 'n' = none · numbers and ranges · empty = all\n> "
+  } 2>/dev/null >/dev/tty || true
+
+  if [ -t 0 ]; then
+    read -r sel </dev/tty || sel=''
+  else
+    read -r sel || sel=''
+  fi
+
+  for i in $(expand_selection "$n" "$sel"); do
+    printf '%s\n' "${keys[$((i - 1))]}"
+  done
+}
+
+# expand_selection <count> <input> -> the selected 1-based indices, one per line
+# Accepts numbers, "lo-hi" ranges, "a"/"all" or empty = everything, "n" = none.
+expand_selection() {
+  local n="$1" sel="$2" tok lo hi i
+
+  case "$sel" in
+    n|N|none) return ;;
+    a|A|all|'')
+      i=1; while [ "$i" -le "$n" ]; do printf '%s\n' "$i"; i=$((i + 1)); done
+      return ;;
+  esac
+
+  for tok in $sel; do
+    case "$tok" in
+      *-*) lo="${tok%%-*}"; hi="${tok##*-}" ;;
+      *)   lo="$tok";       hi="$tok" ;;
+    esac
+    case "$lo$hi" in
+      ''|*[!0-9]*) printf 'ignoring "%s"\n' "$tok" >&2; continue ;;
+    esac
+    i="$lo"
+    while [ "$i" -le "$hi" ]; do
+      if [ "$i" -ge 1 ] && [ "$i" -le "$n" ]; then printf '%s\n' "$i"; fi
+      i=$((i + 1))
+    done
+  done
+}
+
+picker() {
+  # Menu: rel \t [<group>] rel, grouped for the numbered fallback.
+  menu="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  PICKED_LINKS="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+
+  awk -F'\t' '
+    { rel = $2
+      if (rel ~ /^\.config\/[^/]+\//) { split(rel, a, "/"); g = a[2] }
+      else if (rel ~ /^bin\//) g = "bin"
+      else if (rel == ".tmux.conf") g = "tmux"
+      else if (rel == ".gitconfig" || rel == ".gitignore_global" || rel ~ /^\.config\/git\//) g = "git"
+      else if (rel == ".bashrc" || rel == ".bash_profile" || rel == ".zshrc" || rel == ".profile" || rel == ".hushlogin" || rel ~ /^\.config\/shell\//) g = "shell"
+      else if (rel == ".Xmodmap" || rel == ".xinitrc") g = "x11"
+      else g = "other"
+      printf "%s\t[%s] %s\n", rel, g, rel
+    }' "$merged" > "$menu"
+
+  # tty decides fzf-vs-fallback INSIDE the picker; piped stdin, cron/CI and
+  # fzf-less machines all take the numbered menu.
+  if [ -t 0 ] && command -v fzf >/dev/null 2>&1; then
+    fzf --multi --delimiter=$'\t' --with-nth=2.. --height=90% --reverse \
+        --tiebreak=index --prompt='link> ' \
+        --header='TAB toggle · CTRL-A select all matches · CTRL-D deselect all · ENTER link' \
+        --bind "$(picker_bind)" < "$menu" | cut -f1 > "$PICKED_LINKS"
+  else
+    menu_fallback "$menu" > "$PICKED_LINKS"
+  fi
+
+  if [ ! -s "$PICKED_LINKS" ]; then
+    echo 'Nothing selected.'
+    exit 0
+  fi
+
+  # Narrow $merged to the picked relpaths; the rest of the pipeline (classify,
+  # find_stale, confirm, apply) runs on the choice alone.
+  awk -F'\t' 'NR==FNR { p[$0] = 1; next } $2 in p' "$PICKED_LINKS" "$merged" \
+    > "$merged.tmp" && mv "$merged.tmp" "$merged"
+
+  # Rebuild $mdirs from the parents of the picked relpaths, so stale-link
+  # removal stays inside the choice. Top-level files map to $HOME itself,
+  # matching the formula used in collect().
+  awk -v h="$HOME" '{ p = h "/" $0; sub(/\/[^\/]*$/, "", p); print p }' \
+    "$PICKED_LINKS" | sort -u > "$mdirs"
 }
 
 # ---------------------------------------------------------- classify ---
@@ -353,6 +498,9 @@ apply() {
 parse_args "$@"
 read_ignores
 collect
+if [ -z "$is_dry" ] && [ -z "$is_yes" ] && [ -z "$pattern_given" ]; then
+  picker
+fi
 classify
 find_stale
 confirm
