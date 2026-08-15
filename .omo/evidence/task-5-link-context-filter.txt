@@ -1,0 +1,1408 @@
+======================================================================
+task-5-link-context-filter evidence
+date: 2026-08-15T15:57:11Z  host: Linux  bash: GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+HEAD (committed): eadf053
+                  docs: document session-context filtering for all link operations
+fixture script: working-tree copy of /home/ms/myp/dotfiles/link-files.bash
+  (HEAD eadf053 includes todos 1-4; the working tree also carries the pre-existing
+   uncommitted --diff hunks from earlier session work -- --diff is required by R12
+   and is present in the copied fixture script, see learnings task-4 line 19)
+script SHA-256 (working-tree copy): 1fa78165957fcb91a7a3e9bd3f309dbbfe7050e162b4003e2e248ebc2e4102c9
+======================================================================
+
+======================================================================
+## 0. Gates -- syntax (bash -n) on the real repo copy
+$ bash -n /home/ms/myp/dotfiles/link-files.bash 
+
+$ echo $?
+0
+==> PASS: real repo copy bash -n OK
+======================================================================
+
+======================================================================
+## R1 wayland+missing -- fx-home has no .Xmodmap/.xinitrc
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+$ bash -n /tmp/opencode/fx-repo/link-files.bash 
+
+$ echo $?
+0
+==> PASS: fixture copy bash -n OK
+$ git -C /tmp/opencode/fx-repo ls-files
+.gitignore
+common/.config/x11app/settings
+common/.config/x11only/conf
+common/.multi
+common/.zshrc
+link-context.txt
+link-files.bash
+link-ignore.txt
+linux/.Xmodmap
+linux/.xinitrc
+$ echo $?
+0
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ /tmp/opencode/fx-repo/link-files.bash --dry-run 
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+$ echo $?
+0
+==> PASS: R1 dry-run lists .zshrc
+==> PASS: R1 dry-run lists .multi (multi-context, never neglected)
+==> PASS: R1 dry-run does NOT list .Xmodmap
+==> PASS: R1 dry-run does NOT list .xinitrc
+==> PASS: R1 dry-run exit 0
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 2.
+$ echo $?
+1
+==> PASS: R1 audit reports .zshrc [missing]
+==> PASS: R1 audit does NOT report .Xmodmap as a finding
+==> PASS: R1 audit does NOT report .xinitrc as a finding
+==> PASS: R1 audit findings count = 2
+==> PASS: R1 audit exit 1 (findings)
+(The interactive picker menu is exercised by F3 on a real terminal; dry-run is the
+ non-interactive equivalent -- same filtered $merged drives both.)
+PASS R1
+======================================================================
+
+======================================================================
+## R2 wayland+correct symlink -- find_stale must NOT remove .Xmodmap
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ ln -s /tmp/opencode/fx-repo/linux/.Xmodmap /tmp/opencode/fx-home/.Xmodmap
+$ echo $?
+0
+$ /tmp/opencode/fx-repo/link-files.bash --dry-run 
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+$ echo $?
+0
+==> PASS: R2 dry-run silent for .Xmodmap (no -/*/!/+ line for it)
+==> PASS: R2 dry-run still lists .zshrc
+==> PASS: R2 dry-run exit 0
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 2.
+$ echo $?
+1
+==> PASS: R2 audit does NOT report .Xmodmap as a finding
+==> PASS: R2 audit exit 1 (.zshrc/.multi still missing)
+(find_stale keeps the correctly-linked neglected file: $desired is neglect-unfiltered,
+ so /tmp/opencode/fx-home/.Xmodmap is a wanted link, never a stale one.)
+PASS R2
+======================================================================
+
+======================================================================
+## R3 wayland+real-file conflict -- --force --no-backup --dry-run shows NO ~ .Xmodmap
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ printf 'xr=1\n' > /tmp/opencode/fx-home/.Xmodmap
+$ echo $?
+0
+$ /tmp/opencode/fx-repo/link-files.bash --force --no-backup --dry-run 
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+$ echo $?
+0
+==> PASS: R3 preview shows NO ~ .Xmodmap line
+==> PASS: R3 preview has no .Xmodmap line at all
+==> PASS: R3 preview exit 0
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 2.
+$ echo $?
+1
+==> PASS: R3 audit no ! [conflict] for .Xmodmap (no finding line)
+==> PASS: R3 audit no [conflict] line at all
+==> PASS: R3 audit findings count = 2
+==> PASS: R3 audit exit 1 (.zshrc/.multi missing)
+PASS R3
+======================================================================
+
+======================================================================
+## R4 x11+missing -- x11-tagged rels behave exactly as before
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=  DISPLAY=:0        (x11)
+$ /tmp/opencode/fx-repo/link-files.bash --dry-run 
++  .Xmodmap                                     [linux]
++  .xinitrc                                     [linux]
++  .config/x11app/settings                      [common]
++  .config/x11only/conf                         [common]
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+$ echo $?
+0
+==> PASS: R4 x11 dry-run DOES show + .Xmodmap [linux]
+==> PASS: R4 x11 dry-run lists .xinitrc
+==> PASS: R4 dry-run exit 0
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: x11 (neglecting: wayland: .multi)
++  .Xmodmap                                     [missing]
++  .xinitrc                                     [missing]
++  .config/x11app/settings                      [missing]
++  .config/x11only/conf                         [missing]
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 6.
+$ echo $?
+1
+==> PASS: R4 audit reports + .Xmodmap [missing]
+==> PASS: R4 audit exit 1 (findings)
+PASS R4
+======================================================================
+
+======================================================================
+## R5 headless -- behaves like wayland for x11-tagged rels
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=  DISPLAY=         (headless)
+$ /tmp/opencode/fx-repo/link-files.bash --dry-run 
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+$ echo $?
+0
+==> PASS: R5 headless dry-run lists .zshrc
+==> PASS: R5 headless dry-run does NOT list .Xmodmap
+==> PASS: R5 headless dry-run does NOT list .xinitrc
+==> PASS: R5 dry-run exit 0
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: headless (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, wayland: .multi, x11: .multi)
++  .zshrc                                       [missing]
+Audit findings: 1.
+$ echo $?
+1
+==> PASS: R5 audit reports .zshrc [missing]
+==> PASS: R5 audit no x11-tagged finding (Xmodmap/xinitrc/x11dirs)
+==> PASS: R5 audit findings count = 1
+==> PASS: R5 audit exit 1 (findings)
+(headless also neglects .multi -- it is tagged wayland+x11 only, never headless;
+ consistent with the neglect predicate: listed AND not-current -> neglected.)
+PASS R5
+======================================================================
+
+======================================================================
+## R6 D1 pattern -- a <pattern> must NOT resurrect a neglected file
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ /tmp/opencode/fx-repo/link-files.bash .\*Xmodmap --dry-run 
+Nothing to do (0 links already correct).
+$ echo $?
+0
+==> PASS: R6 prints "Nothing to do (0 links already correct)."
+==> PASS: R6 exit 0
+$ ls -A /tmp/opencode/fx-home 
+
+$ echo $?
+0
+==> PASS: R6 fx-home empty after pattern run (nothing created)
+(The .*Xmodmap pattern matches the rel, but collect-time neglect filtering already
+ dropped it from $merged -- the filter is absolute, no pattern override (D1).)
+PASS R6
+======================================================================
+
+======================================================================
+## R7 empty-context regression -- deleted link-context.txt must not wipe the list
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ rm /tmp/opencode/fx-repo/link-context.txt
+$ echo $?
+0
+$ /tmp/opencode/fx-repo/link-files.bash --dry-run 
++  .Xmodmap                                     [linux]
++  .xinitrc                                     [linux]
++  .config/x11app/settings                      [common]
++  .config/x11only/conf                         [common]
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+$ echo $?
+0
+==> PASS: R7 dry-run STILL lists .zshrc
+==> PASS: R7 dry-run STILL lists .Xmodmap
+==> PASS: R7 dry-run lists all 6 recipe rels
+==> PASS: R7 dry-run exit 0 (guard holds, no wipeout)
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: wayland
++  .Xmodmap                                     [missing]
++  .xinitrc                                     [missing]
++  .config/x11app/settings                      [missing]
++  .config/x11only/conf                         [missing]
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 6.
+$ echo $?
+1
+==> PASS: R7 audit reports .Xmodmap [missing]
+==> PASS: R7 audit reports .zshrc [missing]
+==> PASS: R7 audit exit 1 (findings)
+(link-context.txt gone -> empty CTX_TMP -> empty NEG_RELS -> the [ -s "$NEG_RELS" ]
+ guard makes the filter a no-op; without it the NR==FNR idiom would empty the list.)
+PASS R7
+======================================================================
+
+======================================================================
+## R8 stale-deleted -- dangling repo symlink reported on BOTH sessions
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ ln -s /tmp/opencode/fx-repo/linux/.Xmodmap /tmp/opencode/fx-home/.Xmodmap
+$ echo $?
+0
+$ rm /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ /tmp/opencode/fx-repo/link-files.bash --dry-run 
+-  .Xmodmap                                     stale link
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+$ echo $?
+0
+==> PASS: R8 wayland dry-run shows - .Xmodmap stale link
+==> PASS: R8 wayland dry-run exit 0
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
+-  .Xmodmap                                     stale link
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 3.
+$ echo $?
+1
+==> PASS: R8 wayland audit reports - .Xmodmap stale link
+==> PASS: R8 wayland audit exit 1
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=  DISPLAY=:0        (x11)
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: x11 (neglecting: wayland: .multi)
+-  .Xmodmap                                     stale link
++  .xinitrc                                     [missing]
++  .config/x11app/settings                      [missing]
++  .config/x11only/conf                         [missing]
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 6.
+$ echo $?
+1
+==> PASS: R8 x11 audit ALSO reports - .Xmodmap stale link
+==> PASS: R8 x11 audit exit 1
+(context line "x11: .Xmodmap" stays in link-context.txt; the repo file is gone.
+ find_stale detects the dangling repo-pointing symlink via $desired/$mdirs regardless
+ of the neglect filter -- accepted, context-independent (plan R8, learnings task-3 line 14).)
+PASS R8
+======================================================================
+
+======================================================================
+## R9 mixed-dir -- .config/x11app: neglected settings + NEW newfile
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+#  + SUBSTITUTION (task-5 learning): the plan probe .newnormal is INVALID --
+#    top-level rels are never refresh-scanned, $HOME is never a scan dir
+#    (learnings task-2 line 9). Added a neutral repo dir common/.config/neutral/probe
+#    (untagged) so wayland has a scanned dir; the normal-capture confirmation
+#    uses a NEW file inside it (.config/neutral/newprobe).
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/neutral
+$ echo $?
+0
+$ printf 'p=1\n' > /tmp/opencode/fx-repo/common/.config/neutral/probe
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ mkdir -p /tmp/opencode/fx-home/.config/x11app
+$ echo $?
+0
+$ printf 'n1=1\n' > /tmp/opencode/fx-home/.config/x11app/newfile
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-home/.config/neutral
+$ echo $?
+0
+$ printf 'p2=1\n' > /tmp/opencode/fx-home/.config/neutral/newprobe
+$ echo $?
+0
+$ /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run 
++  .config/neutral/newprobe [refresh] -> common
+
+   refresh: move 1 new file(s) into common/linux and symlink them back
+$ echo $?
+0
+==> PASS: R9 wayland refresh captures neutral probe (normal capture works)
+==> PASS: R9 wayland refresh does NOT capture newfile
+==> PASS: R9 wayland refresh exit 0
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
++  .config/neutral/probe                        [missing]
++  .multi                                       [missing]
++  .zshrc                                       [missing]
++  .config/neutral/newprobe                     [unlinked]
+Audit findings: 4.
+$ echo $?
+1
+==> PASS: R9 wayland audit does NOT report newfile
+==> PASS: R9 wayland audit reports neutral probe [unlinked]
+==> PASS: R9 wayland audit exit 1
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=  DISPLAY=:0        (x11)
+$ /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run 
++  .config/neutral/newprobe [refresh] -> common
++  .config/x11app/newfile [refresh] -> common
+
+   refresh: move 2 new file(s) into common/linux and symlink them back
+$ echo $?
+0
+==> PASS: R9 x11 refresh DOES capture newfile -> common
+==> PASS: R9 x11 refresh exit 0
+PASS R9
+======================================================================
+
+======================================================================
+## R10 all-neglected-dir -- .config/x11only new2 invisible on wayland, captured on x11
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ mkdir -p /tmp/opencode/fx-home/.config/x11only
+$ echo $?
+0
+$ printf 'n2=1\n' > /tmp/opencode/fx-home/.config/x11only/new2
+$ echo $?
+0
+$ /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run 
+Nothing to refresh.
+$ echo $?
+0
+==> PASS: R10 wayland refresh does NOT capture new2
+==> PASS: R10 wayland refresh exit 0 ("Nothing to refresh." -- no scan dirs on wayland)
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 2.
+$ echo $?
+1
+==> PASS: R10 wayland audit does NOT report new2
+==> PASS: R10 wayland audit exit 1 (.zshrc/.multi missing)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=  DISPLAY=:0        (x11)
+$ /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run 
++  .config/x11only/new2 [refresh] -> common
+
+   refresh: move 1 new file(s) into common/linux and symlink them back
+$ echo $?
+0
+==> PASS: R10 x11 refresh DOES capture new2 -> common
+==> PASS: R10 x11 refresh exit 0
+PASS R10
+======================================================================
+
+======================================================================
+## R11 multi-context -- .multi (wayland+x11) reported [missing] on BOTH sessions
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 2.
+$ echo $?
+1
+==> PASS: R11 wayland audit reports .multi [missing] (never neglected)
+==> PASS: R11 wayland audit exit 1
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=  DISPLAY=:0        (x11)
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: x11 (neglecting: wayland: .multi)
++  .Xmodmap                                     [missing]
++  .xinitrc                                     [missing]
++  .config/x11app/settings                      [missing]
++  .config/x11only/conf                         [missing]
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 6.
+$ echo $?
+1
+==> PASS: R11 x11 audit reports .multi [missing]
+==> PASS: R11 x11 audit exit 1
+PASS R11
+======================================================================
+
+======================================================================
+## R12 diff -- real-file conflict on .zshrc (non-neglected), wayland
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ printf 'z=2\n' > /tmp/opencode/fx-home/.zshrc
+$ echo $?
+0
+$ /tmp/opencode/fx-repo/link-files.bash --diff --dry-run 
++  .multi                                       [common]
+!  .zshrc                                       [common] existing file, will be backed up
+   diff -- /tmp/opencode/fx-home/.zshrc /tmp/opencode/fx-repo/common/.zshrc
+--- /tmp/opencode/fx-home/.zshrc	2026-08-15 18:57:13.432967242 +0300
++++ /tmp/opencode/fx-repo/common/.zshrc	2026-08-15 18:57:13.412965459 +0300
+@@ -1 +1 @@
+-z=2
++z=1
+
+   common + linux  ->  /tmp/opencode/fx-home
+   1 conflict(s) skipped -- re-run with --force
+$ echo $?
+0
+==> PASS: R12 output shows the .zshrc diff header
+==> PASS: R12 diff shows -z=2 (home side)
+==> PASS: R12 diff shows +z=1 (repo side)
+==> PASS: R12 diff does NOT mention .Xmodmap
+==> PASS: R12 exit 0 (dry-run)
+PASS R12
+======================================================================
+
+======================================================================
+## R13 audit summary -- wayland all-correct, clean summary WITHOUT neglected suffix
+### fixture rebuild -- recipe (plan Verification strategy lines 74-103)
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ echo $?
+0
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ echo $?
+0
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ echo $?
+0
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ echo $?
+0
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ echo $?
+0
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ echo $?
+0
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ echo $?
+0
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ echo $?
+0
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ echo $?
+0
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo init -q
+$ echo $?
+0
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <ms@DESKTOP-55RSJSA.>) not allowed
+$ echo $?
+128
+   (fake repo git-init + link-context.txt committed -- refresh check-ignore needs the repo;
+    R7 deletes link-context.txt, rebuilds restore it)
+env: HOME=/tmp/opencode/fx-home  WAYLAND_DISPLAY=wayland-0  DISPLAY=   (wayland)
+$ /tmp/opencode/fx-repo/link-files.bash --yes 
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+
+-> ln -s .multi
+-> ln -s .zshrc
+$ echo $?
+0
+==> PASS: R13 link --yes exit 0 (links .multi + .zshrc)
+$ /tmp/opencode/fx-repo/link-files.bash --audit 
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
+Audit clean (2 links correct).
+$ echo $?
+0
+==> PASS: R13 audit prints Audit clean (2 links correct).
+==> PASS: R13 clean summary has NO ", M neglected" suffix
+==> PASS: R13 audit exit 0 (clean)
+(wayland-visible rels are exactly .multi + .zshrc -- the x11 rels are never linked
+ because collect() filters them out; the header still shows the neglecting list,
+ the clean summary does not.)
+PASS R13
+======================================================================
+
+======================================================================
+## SWEEP SUMMARY
+Rows passed: 13   Rows failed: 0   (13 required)
+======================================================================

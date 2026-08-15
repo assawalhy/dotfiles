@@ -1,0 +1,156 @@
+================================================================================
+F2 CODE-QUALITY GATE — link-context-filter feature
+Reviewer: F2 | HEAD = eadf053 | Reviewed: 2026-08-15
+================================================================================
+
+VERDICT: APPROVE
+
+Feature delta: git diff 01c9304..HEAD -- link-files.bash (34+/33-)
+Commits reviewed: e61e3bb (collect-time filter), af7670f (refresh skip),
+                  5572084 (audit cleanup + neglected() deletion),
+                  eadf053 (docs: README, link-context.txt, print_help)
+
+--------------------------------------------------------------------------------
+MUST-DO 1: bash -n ..................................... PASS
+--------------------------------------------------------------------------------
+  bash -n link-files.bash                 -> clean (repo working-tree copy)
+  bash -n /tmp/opencode/fx-repo/link-files.bash (fixture copy) -> clean
+  bash 3.2 construct scan (whole file + diff added-lines):
+    declare -A / readarray / mapfile / ${v,,} / globstar -> ZERO occurrences
+    (only a header COMMENT at line 11 names those constructs; no code).
+  All added constructs are bash 3.2-safe: mktemp, grep -Fxq, [ -s ], awk.
+
+--------------------------------------------------------------------------------
+MUST-DO 2: awk POSIX compliance ........................ PASS
+--------------------------------------------------------------------------------
+  Two awk blocks added, both run IDENTICALLY under gawk 5.2.1 AND mawk 1.3.4:
+
+  (a) NEG_RELS builder (collect, ~:214-219):
+        awk -v sctx="$(session_context)" '
+          { ctx = $0; sub(/: .*/, "", ctx)
+            rel = $0; sub(/^[^:]*: /, "", rel)
+            if (ctx == sctx) cur[rel] = 1
+            seen[rel] = 1 }
+          END { for (r in seen) if (!(r in cur)) print r }' "$CTX_TMP"
+      POSIX-only: sub(), assoc arrays, END, in. No asort, no length(array),
+      no gsub side effects, no gensub/match(3-arg). Splits at FIRST ": ",
+      matching the deleted bash neglected() ${line%%: *}/${line#*: }.
+      Live equivalence on fixture context file:
+        wayland -> {.Xmodmap, .xinitrc, .config/x11app/settings,
+                    .config/x11only/conf} (4)  — identical mawk+gawk
+        x11     -> {}  (.multi listed for x11 too -> never neglected) ✓
+
+  (b) merged filter (collect, ~:221-222):
+        awk -F'\t' 'NR==FNR{neg[$0]=1;next} !($2 in neg)' \
+          "$NEG_RELS" "$merged" > "$merged.tmp" && mv "$merged.tmp" "$merged"
+      -F'\t' present. NR==FNR idiom present. $2 = rel column (merged lines
+      are "root\trel"). POSIX-only. mawk+gawk agree (wayland -> .zshrc/.multi
+      kept, 4 x11 rels dropped).
+  [ -s "$NEG_RELS" ] guard present and CORRECT: with a 0-byte NEG_RELS the
+  filter awk is never invoked. Guard is mandatory — a bare NR==FNR with a
+  0-record first file consumes every $merged line (demonstrated in isolation:
+  empty neg file -> total wipeout, both awks); the -s guard is exactly what
+  prevents that. No-op on empty case confirmed live (R7b: all 6 rels listed
+  with link-context.txt deleted).
+  Defensive note (non-blocking): if the awk were to fail, the `&&` keeps mv
+  skipped and set -e does not trip (failing command is non-final in the &&
+  list) — merged degrades to pattern-filtered content; merged.tmp covered by
+  the trap. Acceptable.
+
+--------------------------------------------------------------------------------
+MUST-DO 3: lingering `neglected` references ............. PASS
+--------------------------------------------------------------------------------
+  grep -n 'neglected' link-files.bash -> 3 matches, ALL prose/comment:
+    :73  "files neglected for the current session context"   -- print_help()
+    :78  "neglected for the current session context"         -- print_help()
+    :468 "# neglected for this session -> never captured..." -- refresh_scan
+  ZERO function definitions (neglected() deleted in 5572084) and ZERO calls
+  (all 5 call sites removed in 5572084).
+  The 2 print_help() matches are USAGE here-doc text added by the docs commit
+  eadf053 — plan-mandated print_help() docs, an allowed diff region — NOT
+  lingering code. Per review instruction, comment-text presence is not a
+  finding; the requirement (function/callers gone) is met.
+  (Learnings note "0 added lines contain 'neglected'" was recorded at task-3
+  time, before the task-4 docs commit added the print_help prose.)
+
+--------------------------------------------------------------------------------
+MUST-DO 4: diff confined to expected regions ............ PASS
+--------------------------------------------------------------------------------
+  git diff 01c9304..HEAD -- link-files.bash = 11 hunks, each mapped:
+    1. print_help() OPTIONS --refresh/--audit text   (eadf053)   [allowed]
+    2. collect() trap line + "$NEG_RELS"             (e61e3bb)   [allowed]
+    3. collect() comment (filter intent)             (e61e3bb)   [allowed]
+    4. collect() NEG_RELS builder + guarded filter   (e61e3bb)   [allowed]
+    5. refresh_scan() skip (comment + grep -Fxq)     (af7670f)   [allowed]
+    6. audit() doc comment                           (5572084)   [allowed]
+    7. neglected() deletion                          (5572084)   [allowed]
+    8. audit() local decl + 5 loop cleanups + summary(5572084)   [allowed]
+    9. main: read_contexts moved before collect, audit-path call removed
+       (e61e3bb)                                                  [allowed]
+  NOTHING ELSE: no new flags, session_context() untouched, picker/classify/
+  find_stale/apply/list_root/refresh_apply untouched. Per-commit show:
+  e61e3bb = trap+collect comment+NEG_RELS block+main move (4 hunks);
+  af7670f = 1 hunk; 5572084 = 6 hunks; eadf053 = OPTIONS text only.
+  Files touched across the feature: link-files.bash, link-context.txt,
+  README.md — the plan's allowed set.
+
+--------------------------------------------------------------------------------
+MUST-DO 5: R7 regression (no-op when nothing neglected)  PASS
+--------------------------------------------------------------------------------
+  Fixture rebuilt per plan recipe (lines 74-103, git init + commit).
+  HOME=/tmp/opencode/fx-home only. Env wayland: WAYLAND_DISPLAY=wayland-0
+  DISPLAY=.
+  (a) link-context.txt PRESENT -> --dry-run --yes lists exactly:
+        + .multi [common] / + .zshrc [common]
+      x11 files (.Xmodmap, .xinitrc, settings, conf) ABSENT.      ✓
+  (b) link-context.txt DELETED -> --dry-run --yes lists all 6 rels
+      (.Xmodmap, .xinitrc, settings, conf, .multi, .zshrc).       ✓
+  Both confirmed live. Empty-neglect no-op holds (guard path).
+
+--------------------------------------------------------------------------------
+MUST-DO 6: audit header from raw CTX_TMP ................ PASS
+--------------------------------------------------------------------------------
+  audit() header loop (:585-588) iterates "$CTX_TMP" directly (NOT NEG_RELS);
+  header logic untouched by the diff (pre-existing block). Live:
+    wayland: "audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc,
+              x11: .config/x11app/settings, x11: .config/x11only/conf,
+              x11: .multi)"   -- 5 CTX_TMP lines with ctx != wayland
+    x11:     "audit context: x11 (neglecting: wayland: .multi)"
+  Findings lines filter correctly: wayland audit reports only .multi + .zshrc.
+  "Audit clean (%d links correct)." summary: suppressed counter removed.
+
+--------------------------------------------------------------------------------
+ADDITIONAL OBSERVATIONS (non-blocking)
+--------------------------------------------------------------------------------
+  - refresh_scan skip (grep -Fxq "$rel" "$NEG_RELS"): literal, full-line
+    match; NEG_RELS holds bare relpaths (ctx stripped by builder). Empty
+    NEG_RELS -> grep exit 1 -> no skip (no-op preserved). NEG_RELS always
+    initialized (collect runs before refresh_scan in --refresh and --audit).
+    Double coverage: scan-dir list comes from the filtered $merged, plus the
+    per-candidate grep for neglected FILES inside non-neglected dirs.
+  - x11 session NEG_RELS is empty in the fixture (.multi listed for x11 too)
+    -> every rel listed on x11; matches the plan's multi-context rule.
+  - The wayland header quirk (x11: .multi named in "neglecting:" while .multi
+    is NOT actually filtered) is pre-existing header-from-CTX_TMP behavior,
+    unchanged by this diff, accepted by plan/inherited wisdom.
+  - The isolated empty-first-file NR==FNR wipeout is unreachable in the
+    script thanks to the -s guard (verified in (b) above).
+  - Dirty worktree (pre-existing --diff hunks in link-files.bash/README.md,
+    .omo/drafts, ctx2.txt) is unrelated to this feature and does not affect
+    the reviewed code paths (R7 fixture ran with the working-tree copy and
+    the filter behaved identically to HEAD).
+
+--------------------------------------------------------------------------------
+F2 SUMMARY
+--------------------------------------------------------------------------------
+  bash -n:            PASS
+  bash 3.2 compat:    PASS (no assoc arrays/readarray/${v,,}/globstar)
+  awk POSIX:          PASS (gawk + mawk identical; NR==FNR + -s guard correct)
+  neglected refs:     PASS (0 function defs, 0 calls; 3 prose/comment matches
+                            are plan-mandated docs + verbatim skip comment)
+  diff scope:         PASS (11/11 hunks in allowed regions, nothing else)
+  R7 no-op regression: PASS (with-context: 2 rels; deleted: all 6 rels)
+  audit header:       PASS (raw CTX_TMP; header logic untouched)
+
+VERDICT: APPROVE
+================================================================================

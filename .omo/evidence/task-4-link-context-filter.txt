@@ -1,0 +1,81 @@
+======================================================================
+task-4-link-context-filter evidence
+date: 2026-08-15T14:55:40Z  host: Linux  bash: GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+HEAD before commit: 5572084 (todo 3: link-files: drop redundant neglect checks from --audit)
+======================================================================
+
+Todo 4: docs — link-context.txt header, README.md, print_help().
+Files edited (docs only, no script logic):
+  - link-context.txt: header comment swap, was "Context-neglect list for
+    --audit" -> now "Context-neglect list. Files tagged for a context other
+    than the current session are excluded from linking, listing, --diff,
+    --audit and --refresh." plus "This filter cannot be overridden by a
+    filtering pattern; edit this file to change it." Context lines
+    (x11: .Xmodmap / x11: .xinitrc) untouched.
+  - link-files.bash: print_help() text only. --refresh gained "; skips
+    files neglected for the current session context (wayland/x11/headless)";
+    --audit's "Applies the link-context.txt neglect list for the current
+    session" became "Excludes files neglected for the current session
+    context (wayland/x11/headless), same as linking."
+  - README.md: OPTIONS --refresh/--audit blocks rewritten to match
+    print_help() verbatim; "What gets linked" describes link-context.txt as
+    the session-context filter for every link operation; "--refresh" section
+    gained the skip-neglected sentence; "--audit" section rewritten
+    (filter applied up front for every operation, `audit context: <ctx>
+    (neglecting: ...)` header, stale links reported on any session).
+
+======================================================================
+## 0. Acceptance greps (plan lines 452-458)
+======================================================================
+
+### 0.1 link-context.txt must NOT mention --audit
+$ grep -n 'for --audit' link-context.txt
+(no match, exit 1)  ->  PASS
+
+### 0.2 'neglect' in README.md — only the new wording
+$ grep -n 'neglect' README.md
+68:                  files neglected for the current session context
+73:                  neglected for the current session context
+132:New files whose relpath is neglected for the current session context are
+158:`--audit` prints `audit context: <ctx> (neglecting: ...)` in its header,
+->  PASS: all four are the new todo-4 wording (three sections + OPTIONS).
+
+### 0.3 --help mentions session context for --refresh and --audit
+$ ./link-files.bash --help | grep -A2 -- '--refresh'
+      --refresh   capture new files that appeared inside linked dirs into the
+                  repo (OS overlay first, else common) and symlink them back;
+                  never overwrites repo files; --force has no effect; skips
+$ ./link-files.bash --help | grep -A2 -- '--audit'
+      --audit     read-only link-drift report: repo files lacking a correct
+                  home link (missing/relink/conflict/stale) plus real files
+                  in linked dirs absent from the repo. Excludes files
+->  PASS: both mention session context / neglected files.
+
+======================================================================
+## 1. README <-> --help must not drift
+======================================================================
+
+### 1.1 OPTIONS --refresh/--audit blocks byte-identical
+$ diff <(./link-files.bash --help | sed -n '/--refresh   capture/,/no picker, no prompt/p') \
+       <(sed -n '/--refresh   capture/,/no picker, no prompt/p' README.md)
+(no output, exit 0)  ->  PASS
+
+======================================================================
+## 2. Syntax gate
+======================================================================
+
+### 2.1 bash -n on the REAL repo copy
+$ bash -n /home/ms/myp/dotfiles/link-files.bash
+(no output, exit 0)  ->  PASS
+
+======================================================================
+## 3. Scoping
+======================================================================
+
+- No logic changed: diff of link-files.bash touches ONLY the print_help()
+  heredoc body (the two OPTIONS lines).
+- No commits of evidence/.omo/ctx2.txt: staged set is exactly
+  link-context.txt, README.md, and the print_help hunks of link-files.bash.
+- Pre-existing uncommitted README hunks (--diff/--no-backup/Interactive
+  selection work) and --diff hunks in link-files.bash left unstaged by
+  design (git add -p, hunks selected individually).

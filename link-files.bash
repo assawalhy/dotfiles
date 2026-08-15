@@ -43,12 +43,12 @@ STAMP="$(date +%Y%m%d%H%M%S)"
 
 # --------------------------------------------------------------- cli ---
 
-is_help=; is_force=; is_no_backup=; is_dry=; is_yes=; is_refresh=; is_audit=; filter=; pattern_given=
+is_help=; is_force=; is_no_backup=; is_dry=; is_yes=; is_refresh=; is_audit=; is_diff=; filter=; pattern_given=
 
 print_help() {
 cat <<EOF
 USAGE:
-  $(basename "$0") [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [filtering_pattern]
+  $(basename "$0") [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [--diff] [filtering_pattern]
   $(basename "$0") --force '.*nvim/lua.*'
   $(basename "$0") --refresh --dry-run
   $(basename "$0") --audit
@@ -63,6 +63,8 @@ OPTIONS:
       --no-backup with --force, delete a conflicting real file instead of
                   backing it up to <file>.bak.<timestamp>; refuses to
                   replace a directory; requires --force
+      --diff      show a unified diff between the home file and the repo
+                  file for each conflict/relink candidate before confirming
   -n, --dry-run   show what would happen, then exit without changing anything
   -y, --yes       skip the confirmation prompt
       --refresh   capture new files that appeared inside linked dirs into the
@@ -105,6 +107,7 @@ parse_args() {
       --refresh)    is_refresh=1; continue ;;
       --audit)      is_audit=1;   continue ;;
       --no-backup)  is_no_backup=1; continue ;;
+      --diff)       is_diff=1;      continue ;;
       -r|--reverse)
         printf -- '--reverse was removed: the repo is now the source of truth.\n' >&2
         printf -- 'To adopt a file from $HOME:  mv ~/.foo %s/.foo && %s\n' \
@@ -313,21 +316,31 @@ expand_selection() {
 }
 
 picker() {
-  # Menu: rel \t [<group>] rel, grouped for the numbered fallback.
+  # Menu: rel \t [<group>] rel, grouped for the numbered fallback. Entries
+  # already linked to this repo's source are skipped (classify's criterion).
   menu="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   PICKED_LINKS="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
 
-  awk -F'\t' '
-    { rel = $2
-      if (rel ~ /^\.config\/[^/]+\//) { split(rel, a, "/"); g = a[2] }
-      else if (rel ~ /^bin\//) g = "bin"
-      else if (rel == ".tmux.conf") g = "tmux"
-      else if (rel == ".gitconfig" || rel == ".gitignore_global" || rel ~ /^\.config\/git\//) g = "git"
-      else if (rel == ".bashrc" || rel == ".bash_profile" || rel == ".zshrc" || rel == ".profile" || rel == ".hushlogin" || rel ~ /^\.config\/shell\//) g = "shell"
-      else if (rel == ".Xmodmap" || rel == ".xinitrc") g = "x11"
-      else g = "other"
-      printf "%s\t[%s] %s\n", rel, g, rel
-    }' "$merged" > "$menu"
+  while IFS=$'\t' read -r root rel || [ -n "$rel" ]; do
+    if [ -L "$HOME/$rel" ] && [ "$(readlink "$HOME/$rel")" = "$root/$rel" ]; then
+      continue
+    fi
+    case "$rel" in
+      .config/*/*)        g="${rel#.config/}"; g="${g%%/*}" ;;
+      bin/*)              g=bin ;;
+      .tmux.conf)         g=tmux ;;
+      .gitconfig|.gitignore_global|.config/git/*) g=git ;;
+      .bashrc|.bash_profile|.zshrc|.profile|.hushlogin|.config/shell/*) g=shell ;;
+      .Xmodmap|.xinitrc)  g=x11 ;;
+      *)                  g=other ;;
+    esac
+    printf '%s\t[%s] %s\n' "$rel" "$g" "$rel"
+  done < "$merged" > "$menu"
+
+  if [ ! -s "$menu" ]; then
+    printf 'Nothing to link: every managed file is already linked correctly.\n'
+    exit 0
+  fi
 
   # tty decides fzf-vs-fallback INSIDE the picker; piped stdin, cron/CI and
   # fzf-less machines all take the numbered menu.
@@ -395,7 +408,11 @@ classify() {
         soft_why+=("hard link -> symlink")
       else
         hard_rel+=("$rel"); hard_src+=("$src")
-        hard_why+=("existing file, will be backed up")
+        if [ -n "$is_no_backup" ]; then
+          hard_why+=("existing file, will be deleted (--no-backup)")
+        else
+          hard_why+=("existing file, will be backed up")
+        fi
       fi
     else
       new_rel+=("$rel"); new_src+=("$src")
@@ -630,6 +647,41 @@ tag_of() { # $1 = absolute src -> [common] / [linux] / [macos]
   esac
 }
 
+# --diff: unified diff between the home file and the repo's for every
+# conflict/relink candidate with content on both sides. [ -f ] follows
+# symlinks, so foreign links and relinks compare their target's content.
+show_diff() { # $1 = dst, $2 = src -- colored via delta on a tty when present
+  if [ -t 1 ] && command -v delta >/dev/null 2>&1; then
+    diff -u "$1" "$2" | delta --paging=never || true
+  else
+    diff -u "$1" "$2" || true
+  fi
+}
+
+show_diffs() {
+  local i dst src
+  for ((i = 0; i < ${#hard_rel[@]}; i++)); do
+    dst="$HOME/${hard_rel[$i]}"; src="${hard_src[$i]}"
+    [ -f "$dst" ] && [ -f "$src" ] || continue
+    if cmp -s "$dst" "$src"; then
+      printf '   diff -- %s %s  (identical)\n' "$dst" "$src"
+    else
+      printf '   diff -- %s %s\n' "$dst" "$src"
+      show_diff "$dst" "$src"
+    fi
+  done
+  for ((i = 0; i < ${#soft_rel[@]}; i++)); do
+    dst="$HOME/${soft_rel[$i]}"; src="${soft_src[$i]}"
+    [ -f "$dst" ] && [ -f "$src" ] || continue
+    if cmp -s "$dst" "$src"; then
+      printf '   diff -- %s %s  (identical)\n' "$dst" "$src"
+    else
+      printf '   diff -- %s %s\n' "$dst" "$src"
+      show_diff "$dst" "$src"
+    fi
+  done
+}
+
 preview() {
   local i
 
@@ -647,6 +699,9 @@ preview() {
       "$([ -n "$is_force" ] && echo '~' || echo '!')" \
       "${hard_rel[$i]}" "$(tag_of "${hard_src[$i]}")" "${hard_why[$i]}"
   done
+  if [ -n "$is_diff" ]; then
+    show_diffs
+  fi
 }
 
 confirm() {

@@ -1,185 +1,197 @@
 {
   "schema_version": 2,
-  "active_work_id": "link-refresh-audit-f3c78fcb",
+  "active_work_id": "link-context-filter-12b5ac47",
   "works": {
-    "link-refresh-audit-f3c78fcb": {
-      "work_id": "link-refresh-audit-f3c78fcb",
-      "active_plan": "/home/ms/myp/dotfiles/.omo/plans/link-refresh-audit.md",
-      "plan_name": "link-refresh-audit",
+    "link-context-filter-12b5ac47": {
+      "work_id": "link-context-filter-12b5ac47",
+      "active_plan": "/home/ms/myp/dotfiles/.omo/plans/link-context-filter.md",
+      "plan_name": "link-context-filter",
       "status": "completed",
-      "started_at": "2026-08-14T20:59:35.679Z",
-      "updated_at": "2026-08-14T21:52:42.802Z",
+      "started_at": "2026-08-15T14:27:49.901Z",
+      "updated_at": "2026-08-15T16:10:36.789Z",
       "session_ids": [
-        "opencode:ses_00ddf4af8ffeZnpdT6J6zlib6H",
-        "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4",
-        "opencode:ses_ffdc7fed8ffe7GKbpHAXP332XT",
-        "opencode:ses_ffdc7987cffe3pkTb18HtMPAcf",
-        "opencode:ses_ffdc772bdffeNGgGNmlZkuFPju"
+        "opencode:ses_ffc6bdd6effep5ybAjjMc0xEZf"
       ],
       "session_origins": {
-        "opencode:ses_00ddf4af8ffeZnpdT6J6zlib6H": "direct",
-        "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4": "appended",
-        "opencode:ses_ffdc7fed8ffe7GKbpHAXP332XT": "appended",
-        "opencode:ses_ffdc7987cffe3pkTb18HtMPAcf": "appended",
-        "opencode:ses_ffdc772bdffeNGgGNmlZkuFPju": "appended"
+        "opencode:ses_ffc6bdd6effep5ybAjjMc0xEZf": "direct"
       },
       "agent": "atlas",
       "task_sessions": {
         "todo:1": {
           "task_key": "todo:1",
           "task_label": "1",
-          "task_title": "`link-files.bash`: add `--refresh` — capture new files that appeared inside linked dirs into the repo and symlink them back",
-          "session_id": "opencode:ses_ffdebb52cffep36gE3b6h4fhO6",
+          "task_title": "**R1 wayland+missing**: rebuild fixture fresh (recipe below); fx-home has no links. Wayland env: `WAYLAND_DISPLAY=wayland-0 DISPLAY=`. Run `HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --dry-run --yes` -> MUST NOT contain .Xmodmap/.xinitrc/.config/x11app/settings/.config/x11only/conf; MUST contain .zshrc (and .multi). Then `--audit; echo $?` -> exit 1, reports `.zshrc` `[missing]`, NOT the x11 rels.",
+          "session_id": "opencode:ses_ff9d4fa17ffegK9mhJNmdl3RIm",
           "agent": "Sisyphus-Junior",
           "category": "unspecified-high",
-          "updated_at": "2026-08-14T21:13:24.020Z",
-          "started_at": "2026-08-14T21:11:26.238Z",
+          "started_at": "2026-08-15T14:33:01.172Z",
+          "ended_at": "2026-08-15T16:09:11.626Z",
+          "elapsed_ms": 5770454,
           "status": "completed",
-          "ended_at": "2026-08-14T21:13:24.020Z",
-          "elapsed_ms": 117782
+          "updated_at": "2026-08-15T16:09:11.626Z"
         },
         "todo:2": {
           "task_key": "todo:2",
           "task_label": "2",
-          "task_title": "`link-files.bash` + `link-context.txt`: add `--audit` — read-only link-drift report with session-context neglect",
-          "session_id": "opencode:ses_ffde010adffef9vh0XmR42QNAH",
+          "task_title": "`link-files.bash`: make `--refresh` respect the context filter",
+          "session_id": "opencode:ses_ffa2bc616ffeezPykQGW1ZS7vQ",
           "agent": "Sisyphus-Junior",
           "category": "unspecified-high",
-          "updated_at": "2026-08-14T21:26:02.781Z",
-          "started_at": "2026-08-14T21:23:21.619Z",
+          "updated_at": "2026-08-15T14:49:36.741Z",
+          "started_at": "2026-08-15T14:48:58.457Z",
           "status": "completed",
-          "ended_at": "2026-08-14T21:26:02.781Z",
-          "elapsed_ms": 161162
+          "ended_at": "2026-08-15T14:49:36.741Z",
+          "elapsed_ms": 38284
         },
         "todo:3": {
           "task_key": "todo:3",
           "task_label": "3",
-          "task_title": "`link-files.bash`: add `--no-backup` — skip `.bak.$STAMP` creation under `--force`",
-          "session_id": "opencode:ses_ffdd46583ffel94U7kWILGBah0",
+          "task_title": "`link-files.bash`: clean up `--audit` and delete `neglected()`",
+          "session_id": "opencode:ses_ffa2bc616ffeezPykQGW1ZS7vQ",
           "agent": "Sisyphus-Junior",
           "category": "unspecified-high",
-          "updated_at": "2026-08-14T21:32:15.837Z",
-          "started_at": "2026-08-14T21:31:39.328Z",
+          "updated_at": "2026-08-15T14:53:29.687Z",
+          "started_at": "2026-08-15T14:52:57.566Z",
           "status": "completed",
-          "ended_at": "2026-08-14T21:32:15.837Z",
-          "elapsed_ms": 36509
+          "ended_at": "2026-08-15T14:53:29.687Z",
+          "elapsed_ms": 32121
         },
         "todo:4": {
           "task_key": "todo:4",
           "task_label": "4",
-          "task_title": "`README.md`: document `--refresh`, `--audit` and `--no-backup`",
-          "session_id": "opencode:ses_ffdcee6f1ffefAHlDNQW5MCdZH",
+          "task_title": "Docs: `link-context.txt`, README.md, `print_help()`",
+          "session_id": "opencode:ses_ffa2bc616ffeezPykQGW1ZS7vQ",
           "agent": "Sisyphus-Junior",
-          "started_at": "2026-08-14T21:35:58.762Z",
+          "category": "writing",
+          "updated_at": "2026-08-15T14:58:12.828Z",
+          "started_at": "2026-08-15T14:57:45.858Z",
           "status": "completed",
-          "updated_at": "2026-08-14T21:39:24.878Z",
-          "ended_at": "2026-08-14T21:39:24.878Z",
-          "elapsed_ms": 206116
+          "ended_at": "2026-08-15T14:58:12.828Z",
+          "elapsed_ms": 26970
+        },
+        "todo:5": {
+          "task_key": "todo:5",
+          "task_label": "5",
+          "task_title": "Full env-matrix QA sweep + evidence",
+          "session_id": "opencode:ses_ff9f08c27ffedgmAIIP380Spwb",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "started_at": "2026-08-15T15:34:16.242Z",
+          "status": "completed",
+          "updated_at": "2026-08-15T15:59:17.378Z",
+          "ended_at": "2026-08-15T15:59:17.378Z",
+          "elapsed_ms": 1501136
         },
         "final-wave:f1": {
           "task_key": "final-wave:f1",
           "task_label": "F1",
-          "task_title": "Plan compliance audit - check every todo: all 4 done with evidence files present. Re-run the acceptance greps/commands per todo against the committed state (fixture commands from each todo's QA). `bash -n link-files.bash` clean. `--help` shows all three flags.",
-          "session_id": "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4",
+          "task_title": "Plan compliance audit — every todo's acceptance criteria met; evidence files exist at `.omo/evidence/task-{1..5}-link-context-filter.txt`; no Must-NOT-have violated (no pattern override, no flag additions, `$desired` still neglect-unfiltered, no committed test suite).",
+          "session_id": "opencode:ses_ff9d99075ffe5X7aqwoKv5WrBY",
           "agent": "Sisyphus-Junior",
           "category": "unspecified-high",
-          "started_at": "2026-08-14T21:48:05.938Z",
+          "updated_at": "2026-08-15T16:09:47.800Z",
+          "started_at": "2026-08-15T16:01:36.034Z",
           "status": "completed",
-          "updated_at": "2026-08-14T21:51:45.227Z",
-          "ended_at": "2026-08-14T21:51:45.227Z",
-          "elapsed_ms": 219289
+          "ended_at": "2026-08-15T16:09:47.800Z",
+          "elapsed_ms": 491766
         }
       },
-      "ended_at": "2026-08-14T21:52:42.802Z",
-      "elapsed_ms": 3187123
+      "ended_at": "2026-08-15T16:10:36.789Z",
+      "elapsed_ms": 6166888
     }
   },
-  "active_plan": "/home/ms/myp/dotfiles/.omo/plans/link-refresh-audit.md",
-  "started_at": "2026-08-14T20:59:35.679Z",
+  "active_plan": "/home/ms/myp/dotfiles/.omo/plans/link-context-filter.md",
+  "started_at": "2026-08-15T14:27:49.901Z",
   "status": "completed",
-  "updated_at": "2026-08-14T21:52:42.802Z",
+  "updated_at": "2026-08-15T16:10:36.789Z",
   "session_ids": [
-    "opencode:ses_00ddf4af8ffeZnpdT6J6zlib6H",
-    "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4",
-    "opencode:ses_ffdc7fed8ffe7GKbpHAXP332XT",
-    "opencode:ses_ffdc7987cffe3pkTb18HtMPAcf",
-    "opencode:ses_ffdc772bdffeNGgGNmlZkuFPju"
+    "opencode:ses_ffc6bdd6effep5ybAjjMc0xEZf"
   ],
   "session_origins": {
-    "opencode:ses_00ddf4af8ffeZnpdT6J6zlib6H": "direct",
-    "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4": "appended",
-    "opencode:ses_ffdc7fed8ffe7GKbpHAXP332XT": "appended",
-    "opencode:ses_ffdc7987cffe3pkTb18HtMPAcf": "appended",
-    "opencode:ses_ffdc772bdffeNGgGNmlZkuFPju": "appended"
+    "opencode:ses_ffc6bdd6effep5ybAjjMc0xEZf": "direct"
   },
-  "plan_name": "link-refresh-audit",
+  "plan_name": "link-context-filter",
   "task_sessions": {
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "`link-files.bash`: add `--refresh` — capture new files that appeared inside linked dirs into the repo and symlink them back",
-      "session_id": "opencode:ses_ffdebb52cffep36gE3b6h4fhO6",
+      "task_title": "**R1 wayland+missing**: rebuild fixture fresh (recipe below); fx-home has no links. Wayland env: `WAYLAND_DISPLAY=wayland-0 DISPLAY=`. Run `HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --dry-run --yes` -> MUST NOT contain .Xmodmap/.xinitrc/.config/x11app/settings/.config/x11only/conf; MUST contain .zshrc (and .multi). Then `--audit; echo $?` -> exit 1, reports `.zshrc` `[missing]`, NOT the x11 rels.",
+      "session_id": "opencode:ses_ff9d4fa17ffegK9mhJNmdl3RIm",
       "agent": "Sisyphus-Junior",
       "category": "unspecified-high",
-      "updated_at": "2026-08-14T21:13:24.020Z",
-      "started_at": "2026-08-14T21:11:26.238Z",
+      "started_at": "2026-08-15T14:33:01.172Z",
+      "ended_at": "2026-08-15T16:09:11.626Z",
+      "elapsed_ms": 5770454,
       "status": "completed",
-      "ended_at": "2026-08-14T21:13:24.020Z",
-      "elapsed_ms": 117782
+      "updated_at": "2026-08-15T16:09:11.626Z"
     },
     "todo:2": {
       "task_key": "todo:2",
       "task_label": "2",
-      "task_title": "`link-files.bash` + `link-context.txt`: add `--audit` — read-only link-drift report with session-context neglect",
-      "session_id": "opencode:ses_ffde010adffef9vh0XmR42QNAH",
+      "task_title": "`link-files.bash`: make `--refresh` respect the context filter",
+      "session_id": "opencode:ses_ffa2bc616ffeezPykQGW1ZS7vQ",
       "agent": "Sisyphus-Junior",
       "category": "unspecified-high",
-      "updated_at": "2026-08-14T21:26:02.781Z",
-      "started_at": "2026-08-14T21:23:21.619Z",
+      "updated_at": "2026-08-15T14:49:36.741Z",
+      "started_at": "2026-08-15T14:48:58.457Z",
       "status": "completed",
-      "ended_at": "2026-08-14T21:26:02.781Z",
-      "elapsed_ms": 161162
+      "ended_at": "2026-08-15T14:49:36.741Z",
+      "elapsed_ms": 38284
     },
     "todo:3": {
       "task_key": "todo:3",
       "task_label": "3",
-      "task_title": "`link-files.bash`: add `--no-backup` — skip `.bak.$STAMP` creation under `--force`",
-      "session_id": "opencode:ses_ffdd46583ffel94U7kWILGBah0",
+      "task_title": "`link-files.bash`: clean up `--audit` and delete `neglected()`",
+      "session_id": "opencode:ses_ffa2bc616ffeezPykQGW1ZS7vQ",
       "agent": "Sisyphus-Junior",
       "category": "unspecified-high",
-      "updated_at": "2026-08-14T21:32:15.837Z",
-      "started_at": "2026-08-14T21:31:39.328Z",
+      "updated_at": "2026-08-15T14:53:29.687Z",
+      "started_at": "2026-08-15T14:52:57.566Z",
       "status": "completed",
-      "ended_at": "2026-08-14T21:32:15.837Z",
-      "elapsed_ms": 36509
+      "ended_at": "2026-08-15T14:53:29.687Z",
+      "elapsed_ms": 32121
     },
     "todo:4": {
       "task_key": "todo:4",
       "task_label": "4",
-      "task_title": "`README.md`: document `--refresh`, `--audit` and `--no-backup`",
-      "session_id": "opencode:ses_ffdcee6f1ffefAHlDNQW5MCdZH",
+      "task_title": "Docs: `link-context.txt`, README.md, `print_help()`",
+      "session_id": "opencode:ses_ffa2bc616ffeezPykQGW1ZS7vQ",
       "agent": "Sisyphus-Junior",
-      "started_at": "2026-08-14T21:35:58.762Z",
+      "category": "writing",
+      "updated_at": "2026-08-15T14:58:12.828Z",
+      "started_at": "2026-08-15T14:57:45.858Z",
       "status": "completed",
-      "updated_at": "2026-08-14T21:39:24.878Z",
-      "ended_at": "2026-08-14T21:39:24.878Z",
-      "elapsed_ms": 206116
+      "ended_at": "2026-08-15T14:58:12.828Z",
+      "elapsed_ms": 26970
+    },
+    "todo:5": {
+      "task_key": "todo:5",
+      "task_label": "5",
+      "task_title": "Full env-matrix QA sweep + evidence",
+      "session_id": "opencode:ses_ff9f08c27ffedgmAIIP380Spwb",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "started_at": "2026-08-15T15:34:16.242Z",
+      "status": "completed",
+      "updated_at": "2026-08-15T15:59:17.378Z",
+      "ended_at": "2026-08-15T15:59:17.378Z",
+      "elapsed_ms": 1501136
     },
     "final-wave:f1": {
       "task_key": "final-wave:f1",
       "task_label": "F1",
-      "task_title": "Plan compliance audit - check every todo: all 4 done with evidence files present. Re-run the acceptance greps/commands per todo against the committed state (fixture commands from each todo's QA). `bash -n link-files.bash` clean. `--help` shows all three flags.",
-      "session_id": "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4",
+      "task_title": "Plan compliance audit — every todo's acceptance criteria met; evidence files exist at `.omo/evidence/task-{1..5}-link-context-filter.txt`; no Must-NOT-have violated (no pattern override, no flag additions, `$desired` still neglect-unfiltered, no committed test suite).",
+      "session_id": "opencode:ses_ff9d99075ffe5X7aqwoKv5WrBY",
       "agent": "Sisyphus-Junior",
       "category": "unspecified-high",
-      "started_at": "2026-08-14T21:48:05.938Z",
+      "updated_at": "2026-08-15T16:09:47.800Z",
+      "started_at": "2026-08-15T16:01:36.034Z",
       "status": "completed",
-      "updated_at": "2026-08-14T21:51:45.227Z",
-      "ended_at": "2026-08-14T21:51:45.227Z",
-      "elapsed_ms": 219289
+      "ended_at": "2026-08-15T16:09:47.800Z",
+      "elapsed_ms": 491766
     }
   },
   "agent": "atlas",
-  "ended_at": "2026-08-14T21:52:42.802Z",
-  "elapsed_ms": 3187123
+  "ended_at": "2026-08-15T16:10:36.789Z",
+  "elapsed_ms": 6166888
 }

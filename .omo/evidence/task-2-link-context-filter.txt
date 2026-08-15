@@ -1,0 +1,174 @@
+======================================================================
+task-2-link-context-filter evidence
+date: 2026-08-15T14:48:14Z  host: Linux  bash: GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+HEAD before commit: e61e3bb (todo 1: link-files: filter the link set by session context at collect time)
+======================================================================
+
+Todo 2: make --refresh respect the context filter.
+Changes to link-files.bash (only file edited):
+  - refresh_scan(): added the per-candidate neglect skip IMMEDIATELY AFTER
+    `rel="${f#$HOME/}"` and BEFORE the `$desired` check:
+        # neglected for this session -> never captured (link-context.txt)
+        if grep -Fxq "$rel" "$NEG_RELS"; then continue; fi
+    (grep inside an `if` is exempt from set -e; identical shape to the
+    $desired check. grep -Fxq against $NEG_RELS = the refresh-side of the
+    same predicate that collect() used to build NEG_RELS -- the single parser,
+    Metis #3. neglected() is NOT called and NOT deleted -- that is todo 3.)
+  - Unchanged: mirror-root rule, $desired in-repo check, git check-ignore
+    logic, collect() filter (todo 1), scan-dir list derivation from the
+    now-filtered $merged (intended per D2).
+
+======================================================================
+## 0. Syntax gates
+======================================================================
+
+### 0.1 bash -n on the REAL repo copy
+$ bash -n /home/ms/myp/dotfiles/link-files.bash
+(no output, exit 0)
+
+### 0.2 bash -n on the fixture copy (edited script copied in at build)
+$ bash -n /tmp/opencode/fx-repo/link-files.bash
+FIXTURE SYNTAX OK
+
+======================================================================
+## 1. Fixture build (plan recipe lines 74-103; link-context.txt committed)
+======================================================================
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt \
+     /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# ... (recipe header) ...
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ git -C /tmp/opencode/fx-repo init -q
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+CRITICAL: fake repo git init'd (check-ignore needs a repo) and link-context.txt
+committed (R7-style rebuilds restore it).
+
+======================================================================
+## 2. QA rows (fixture script, HOME=/tmp/opencode/fx-home)
+======================================================================
+
+### R9 mixed-dir: .config/x11app has neglected `settings` + NEW newfile
+Setup (parent dir must exist for refresh to scan it):
+$ mkdir -p /tmp/opencode/fx-home/.config/x11app
+$ printf 'n=1\n' > /tmp/opencode/fx-home/.config/x11app/newfile
+
+#### R9 wayland --refresh --dry-run
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run
+Nothing to refresh.
+$ echo $?
+0
+ASSERT: newfile NOT listed. On wayland, settings is neglected -> dropped from
+        $merged by todo 1 -> dir .config/x11app not in the scan-dir list
+        (D2 intended) -> newfile invisible to refresh.
+==> PASS
+
+#### R9 x11 --refresh --dry-run
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY= DISPLAY=:0 /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run
++  .config/x11app/newfile [refresh] -> common
+
+   refresh: move 1 new file(s) into common/linux and symlink them back
+
+$ echo $?
+0
+ASSERT: on x11, settings is current -> dir scanned -> newfile is not itself
+        neglected (NEG_RELS on x11 = {.multi}) -> captured as
+        `+ ... [refresh] -> common` (mirror-root: no linux/.config/x11app
+        overlay -> common).
+==> PASS
+
+### R10 all-neglected-dir: .config/x11only (only `conf`, neglected) + NEW new2
+Setup:
+$ mkdir -p /tmp/opencode/fx-home/.config/x11only
+$ printf 'n2=1\n' > /tmp/opencode/fx-home/.config/x11only/new2
+
+#### R10 wayland --refresh --dry-run
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run
+Nothing to refresh.
+$ echo $?
+0
+ASSERT: new2 NOT listed. .config/x11only/conf neglected on wayland -> the
+        whole dir is not scanned (D2 intended).
+==> PASS
+
+#### R10 wayland --audit (direction (b) candidates come from refresh_scan)
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --audit
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 2.
+$ echo $?
+1
+ASSERT: new2 absent from audit (rfr list empty; no .config/x11only mention).
+        The .multi/.zshrc [missing] + exit 1 are the expected wayland
+        repo-side findings (nothing to do with new2).
+==> PASS
+
+#### R10 x11 --refresh --dry-run
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY= DISPLAY=:0 /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run
++  .config/x11app/newfile [refresh] -> common
++  .config/x11only/new2 [refresh] -> common
+
+   refresh: move 2 new file(s) into common/linux and symlink them back
+
+$ echo $?
+0
+ASSERT: on x11, new2 IS captured (`+ .config/x11only/new2 [refresh] -> common`).
+        (newfile still present from R9 setup -- also listed.)
+==> PASS
+
+### normal-capture confirmation (no regression from the skip)
+#### probe A (plan's suggested .newnormal at $HOME top level)
+$ printf 'n3=1\n' > /tmp/opencode/fx-home/.newnormal
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run
+Nothing to refresh.
+FINDING: .newnormal is a TOP-LEVEL rel; refresh_scan derives its scan-dir list
+from merged rels containing a `/` and explicitly never scans $HOME itself
+("Top-level rels (parent is $HOME itself) are skipped -- $HOME is never
+scanned"). This is pre-existing refresh design, NOT a regression from the
+neglect skip (verified: the dir-list awk at the bottom of refresh_scan is
+untouched). A top-level file was never refresh-capturable.
+
+#### probe B (proper normal-capture probe: new file inside a wayland-scanned dir)
+Fixture extended with a neutral (non-neglected) repo dir .config/misc/keep so
+wayland has a scanned dir (all recipe dirs are x11-neglected on wayland):
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/misc
+$ printf 'k=1\n' > /tmp/opencode/fx-repo/common/.config/misc/keep
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm add-misc
+$ mkdir -p /tmp/opencode/fx-home/.config/misc
+$ printf 'n4=1\n' > /tmp/opencode/fx-home/.config/misc/newfile
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --refresh --dry-run
++  .config/misc/newfile [refresh] -> common
+
+   refresh: move 1 new file(s) into common/linux and symlink them back
+
+$ echo $?
+0
+ASSERT: normal capture works on wayland: a new file inside a scanned (non-
+        neglected) dir is captured as before -> the skip does not break
+        regular refresh.
+==> PASS
+
+======================================================================
+## 3. Summary
+======================================================================
+Required rows (MUST DO): R9 (wayland+x11) PASS, R10 (wayland refresh + wayland
+audit + x11) PASS, normal-capture probe PASS
+bash -n:                   real + fixture both OK
+Files modified:            link-files.bash (this feature) + this evidence file
+==> ALL PASS

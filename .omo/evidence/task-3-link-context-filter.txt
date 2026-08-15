@@ -1,0 +1,173 @@
+======================================================================
+task-3-link-context-filter evidence
+date: 2026-08-15T14:52:00Z  host: Linux  bash: GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+HEAD before commit: af7670f (todo 2: link-files: skip neglected rels in --refresh)
+======================================================================
+
+Todo 3: clean up --audit and delete neglected().
+Changes to link-files.bash (only file edited):
+  - audit(): deleted the `neglected "$rel"` + `suppressed` increments in ALL
+    FIVE loops (stale/new/soft/hard/rfr) -- dead since todo 1 (repo-side
+    arrays come from the neglect-filtered $merged) and todo 2 (rfr candidates
+    are filtered by refresh_scan).
+  - audit(): deleted the `suppressed=0` counter from the local decl and the
+    `, %d neglected` suffix from the clean summary -- it is now
+    `Audit clean (%d links correct).`; `Audit findings: %d.` kept.
+  - KEPT unchanged: the `audit context: <sctx> (neglecting: ...)` header
+    (including the accepted multi-context quirk), the exit-code contract,
+    the pattern filter per loop, and all output for non-neglected rels.
+  - Deleted neglected() and its doc comment entirely (last callers gone).
+  - Rewrote the audit() doc comment: neglect filtering now happens upstream
+    (collect() drops neglect-listed rels from $merged; refresh_scan() skips
+    neglect-listed candidates); audit only reports.
+  - Comment-only: reworded the todo-1 collect() comment's
+    "neglected-but-linked files" to "filtered-out-but-linked files" so the
+    todo-3 grep acceptance (`grep -n 'neglected'` -> no CODE references) is
+    clean. The single remaining 'neglected' occurrence in the file is the
+    plan-mandated verbatim todo-2 comment at refresh_scan
+    ("# neglected for this session -> never captured (link-context.txt)").
+    Zero code references / zero callers to the deleted function.
+
+======================================================================
+## 0. Syntax + reference gates
+======================================================================
+
+### 0.1 bash -n on the REAL repo copy
+$ bash -n /home/ms/myp/dotfiles/link-files.bash
+(no output, exit 0)
+
+### 0.2 bash -n on the fixture copy (edited script copied in at build)
+$ bash -n /tmp/opencode/fx-repo/link-files.bash
+FIXTURE SYNTAX OK
+
+### 0.3 grep -n 'neglected' (plan acceptance: function deleted, no callers)
+only remaining occurrence in the file:
+    466: # neglected for this session -> never captured (link-context.txt)
+(plan-mandated verbatim comment from todo 2; no `neglected` in any added
+diff line -- `git diff | grep -c '^+.*neglected'` = 0)
+==> PASS
+
+======================================================================
+## 1. Fixture build (plan recipe lines 74-103; git init'd; link-context.txt committed)
+======================================================================
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt \
+     /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# ... (recipe header) ...
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ git -C /tmp/opencode/fx-repo init -q
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+
+======================================================================
+## 2. QA rows (fixture script, HOME=/tmp/opencode/fx-home)
+======================================================================
+
+### R13 wayland all-correct
+Setup: link every wayland-visible rel with --yes (x11 rels are collect-filtered):
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --yes
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+
+-> ln -s .multi
+-> ln -s .zshrc
+exit 0
+fx-home now: .multi -> repo/common/.multi, .zshrc -> repo/common/.zshrc (symlinks)
+
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --audit
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
+Audit clean (2 links correct).
+$ echo $?
+0
+ASSERT: `Audit clean (2 links correct).` with NO `, M neglected` suffix, exit 0.
+        Header intact (including the accepted `x11: .multi` multi-context quirk).
+==> PASS
+
+### R1 wayland+missing (fixture rebuilt fresh)
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --audit
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 2.
+$ echo $?
+1
+ASSERT: .zshrc and .multi reported [missing]; .Xmodmap/.xinitrc/x11 config files
+        NOT mentioned; exit 1.
+==> PASS
+
+### R11 multi-context (.multi listed wayland+x11 -> never neglected)
+Same fresh state as R1; .multi absent from fx-home.
+
+#### R11 wayland (see R1 output above): `+ .multi [missing]`, exit 1
+#### R11 x11:
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY= DISPLAY=:0 /tmp/opencode/fx-repo/link-files.bash --audit
+audit context: x11 (neglecting: wayland: .multi)
++  .Xmodmap                                     [missing]
++  .xinitrc                                     [missing]
++  .config/x11app/settings                      [missing]
++  .config/x11only/conf                         [missing]
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 6.
+$ echo $?
+1
+ASSERT: .multi reported `+ [missing]` on BOTH wayland (R1) and x11 -- never
+        neglected despite the `wayland: .multi` line (x11 also lists it).
+==> PASS
+
+### R8 stale-deleted (context line stays; repo file deleted; home symlink kept)
+Setup (fixture rebuilt fresh):
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY= DISPLAY=:0 /tmp/opencode/fx-repo/link-files.bash --yes   # link EVERYTHING on x11 so .Xmodmap symlink exists
+link exit 0
+$ ls -la /tmp/opencode/fx-home/.Xmodmap
+lrwxrwxrwx ... /tmp/opencode/fx-home/.Xmodmap -> /tmp/opencode/fx-repo/linux/.Xmodmap
+$ rm /tmp/opencode/fx-repo/linux/.Xmodmap    # context line in link-context.txt stays
+
+#### R8 wayland --audit
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --audit
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
+-  .Xmodmap                                     stale link
+Audit findings: 1.
+$ echo $?
+1
+ASSERT: `- .Xmodmap stale link` reported on wayland even though .Xmodmap is
+        neglect-listed -- accepted: a dangling pointer (deleted repo target)
+        is context-independent, so it is reported on every session. exit 1.
+==> PASS
+
+#### R8 x11 --audit
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY= DISPLAY=:0 /tmp/opencode/fx-repo/link-files.bash --audit
+audit context: x11 (neglecting: wayland: .multi)
+-  .Xmodmap                                     stale link
+Audit findings: 1.
+$ echo $?
+1
+ASSERT: SAME `- .Xmodmap stale link` on x11, exit 1 (context-independent).
+==> PASS
+
+======================================================================
+## 3. Summary
+======================================================================
+Required rows (MUST DO): R13 PASS, R1 PASS, R8 (wayland + x11) PASS, R11 (wayland + x11) PASS
+Header check:               `audit context: <sctx> (neglecting: ...)` prints on all runs
+grep gate:                  only plan-mandated todo-2 comment; 0 code references; 0 added lines
+bash -n:                    real + fixture both OK
+Files modified:             link-files.bash (this feature) + this evidence file
+==> ALL PASS

@@ -45,10 +45,11 @@ will do, and asks before touching anything.
 
 ```
 USAGE:
-  link-files.bash [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [filtering_pattern]
+  link-files.bash [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [--diff] [filtering_pattern]
   link-files.bash --force '.*nvim/lua.*'
   link-files.bash --refresh --dry-run
   link-files.bash --audit
+  link-files.bash --diff --dry-run
 
 OPTIONS:
   -h, --help      show this message and exit
@@ -57,6 +58,8 @@ OPTIONS:
       --no-backup with --force, delete a conflicting real file instead of
                   backing it up to <file>.bak.<timestamp>; refuses to
                   replace a directory; requires --force
+      --diff      show a unified diff between the home file and the repo
+                  file for each conflict/relink candidate before confirming
   -n, --dry-run   show what would happen, then exit without changing anything
   -y, --yes       skip the confirmation prompt
       --refresh   capture new files that appeared inside linked dirs into the
@@ -82,8 +85,9 @@ link-files.bash --force         # also resolve conflicts
 
 ### Interactive selection
 
-Run bare, `link-files.bash` opens an interactive picker over every linkable
-file, each tagged with a `[group]` label (git, shell, tmux, x11, bin, other).
+Run bare, `link-files.bash` opens an interactive picker over the linkable
+files that still need linking — anything already linked correctly is left out —
+each tagged with a `[group]` label (git, shell, tmux, x11, bin, other).
 Type to filter, `TAB` toggles a file, `CTRL-A` selects all current matches and
 `CTRL-D` clears the selection. Marks survive when you clear the query, so you
 can build a set across several searches. fzf 0.48 and newer starts with everything selected;
@@ -173,6 +177,13 @@ Every candidate path falls into one of these:
 Real files are never deleted. Under `--force` they are moved to
 `<file>.bak.<timestamp>` first, unless `--no-backup` is given, which deletes
 the real file instead (and refuses directory conflicts).
+
+Add `--diff` to see what you would lose before deciding: it prints a unified
+diff of the home file against the repo's for every conflict/relink candidate
+that has content on both sides (foreign symlinks are dereferenced), right
+before the confirmation prompt. Identical files are marked `(identical)`.
+On a terminal the diff is rendered colored through `delta` when it is
+installed; otherwise (or when output is piped) plain `diff -u` is used.
 
 Old hard links from the previous scheme are detected by inode, so the migration
 to symlinks needs no flags and creates no backups — the content is identical by

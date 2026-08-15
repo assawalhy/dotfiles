@@ -1,0 +1,168 @@
+======================================================================
+F1 - Plan compliance audit — link-context-filter.md
+reviewer: F1 | date: 2026-08-15 | HEAD: eadf053
+Plan: .omo/plans/link-context-filter.md (458 lines, checkbox line 439)
+======================================================================
+
+VERDICT: APPROVE
+
+All 5 todos' acceptance criteria met; all 5 evidence files exist and are
+substantive; no Must-NOT-have violated. Commit strategy followed exactly.
+
+----------------------------------------------------------------------
+## Commit strategy verification (plan lines 444-450)
+----------------------------------------------------------------------
+git log --oneline -5 (newest first):
+  eadf053 docs: document session-context filtering for all link operations
+  5572084 link-files: drop redundant neglect checks from --audit
+  af7670f link-files: skip neglected rels in --refresh
+  e61e3bb link-files: filter the link set by session context at collect time
+  01c9304 arch-scripts: remove arch-scripts bins (pre-plan base)
+- 4 commits, exact plan-mandated messages, in order 1->4; HEAD = eadf053.
+- File confinement (git diff --name-status 01c9304..HEAD):
+  M link-files.bash, M link-context.txt, M README.md  (nothing else).
+- Per-commit stats: e61e3bb=link-files.bash only (20+/2-);
+  af7670f=link-files.bash only (2+); 5572084=link-files.bash only (6+/27-);
+  eadf053=README.md+link-context.txt+link-files.bash print_help (docs only).
+- Evidence files NOT committed: git status shows all 5 under
+  .omo/evidence/ as untracked (??). Correct per commit strategy line 445.
+- Dirty worktree respected: pre-existing --diff/--no-backup hunks remain
+  uncommitted (M README.md, M link-files.bash outside the 4 commits).
+
+----------------------------------------------------------------------
+## Todo-by-todo acceptance criteria
+----------------------------------------------------------------------
+### Todo 1 — collect-time filter: ALL PASS
+- bash -n real + fixture: evidence task-1 lines 24-30 (SYNTAX OK both).
+- R1 wayland+missing (.zshrc present, no .Xmodmap/.xinitrc): task-1:82-92.
+- R7 empty-context (guard): task-1:94-111 (all 6 rels listed, exit 0).
+- R4 x11+missing (+ .Xmodmap listed): task-1:113-128.
+- R2 wayland+correct symlink (not stale-removed): task-1:130-144.
+- R6 D1 pattern (no override): task-1:146-159 ("Nothing to do", exit 0).
+- Guard + tab present in code: link-files.bash:220 `if [ -s "$NEG_RELS" ]`,
+  :221 `awk -F'\t' 'NR==FNR{neg[$0]=1;next} !($2 in neg)'`.
+- NEG_RELS in collect trap: link-files.bash:176.
+- read_contexts moved (main, after read_ignores, before collect; audit-path
+  call deleted): git diff 01c9304..HEAD hunks at main() (+read_contexts /
+  -read_contexts under `if [ -n "$is_audit" ]`).
+- $desired built BEFORE the filter: link-files.bash:198 (desired) < :220-221
+  (filter); $mdirs at :205 also pre-filter. Order = merged->desired->filter.
+
+### Todo 2 — refresh_scan neglect skip: ALL PASS
+- Skip present at exact plan position: link-files.bash:468-469 — after
+  `rel="${f#$HOME/}"`, before the $desired check (:471); verbatim comment
+  line 468 `# neglected for this session -> never captured (link-context.txt)`.
+- R9 mixed-dir: task-2:71-93 (wayland NOT capture newfile; x11 captures).
+- R10 all-neglected-dir: task-2:100-133 (wayland invisible; x11 captures).
+- bash -n: task-2:26-31.
+- .newnormal probe documented as INVALID (top-level rels never refresh-
+  scanned, pre-existing design) and substituted with a neutral-dir probe
+  (task-2:135-165) — substitution recorded in evidence + learnings; not a
+  deviation, probe would have asserted a pre-existing non-regression.
+
+### Todo 3 — audit cleanup + neglected() deletion: ALL PASS
+- grep 'neglected' link-files.bash: exactly 3 matches —
+  :73, :78 print_help text (todo-4-mandated wording: --refresh/--audit help
+  "neglected for the current session context") and :468 the todo-2 verbatim
+  comment. ZERO code references to the deleted function. (The todo-3 grep
+  gate vs todo-2 comment / todo-4 help-text contradiction is the documented
+  plan-internal conflict; resolution function/callers deleted + comment/help
+  text kept is correct as instructed.)
+- 'suppressed': 0 matches (verified).
+- neglected() definition deleted: git diff hunk @@ -537,25 +560,8 shows the
+  full function + doc comment removed; read_contexts() body untouched
+  (context lines `> "$CTX_TMP" 2>/dev/null || :` preserved).
+- audit() local decl loses suppressed=0; all five loops cleaned (hunks
+  @@ -576,28 +582,24 and @@ -606,13 +608,12).
+- R13 no `, M neglected` suffix: task-3:94-101 (`Audit clean (2 links
+  correct).`, exit 0); also task-5:1391-1398.
+- R1, R8 (wayland+x11), R11 (wayland+x11): task-3:103-163, task-5 R1/R8/R11.
+- Header kept: `audit context: <sctx> (neglecting: ...)` on every run.
+- bash -n: task-3:36-41.
+
+### Todo 4 — docs: ALL PASS
+- grep -n 'for --audit' link-context.txt: no match (exit 1) — verified.
+- README neglect wording: 'neglect' at README.md:68, :73 (OPTIONS),
+  :132 (--refresh section), :158 (--audit section); "What gets linked"
+  sentence at :104-107 describes the all-operations filter ("excluded from
+  linking, listing, --diff, --refresh and the audit report") — verified by
+  direct read of README.md.
+- --help mentions session context for --refresh (:73) and --audit (:78) —
+  verified by grep of link-files.bash help text; evidence task-4:44-52.
+- README <-> --help byte-identical: evidence task-4:59-61 (diff exit 0).
+- bash -n: task-4:68-69.
+
+### Todo 5 — full QA sweep: ALL PASS
+- `grep -c '^PASS R' .omo/evidence/task-5-link-context-filter.txt` = 13
+  (R1..R13, lines 140..1402). >= 13 criterion met.
+- FAIL lines: 0.
+- Sweep summary: line 1407 `Rows passed: 13   Rows failed: 0   (13 required)`.
+- Every row records env vars, exact invocation, full output, `echo $?`
+  (exit codes asserted per assertion). 1408-line transcript — substantive.
+- Rows R1-R13 all asserted on exact absence/presence + exit codes.
+
+----------------------------------------------------------------------
+## Evidence files (glob .omo/evidence/task-*-link-context-filter.txt)
+----------------------------------------------------------------------
+All 5 exist: task-1 (183 lines), task-2 (174), task-3 (173), task-4 (81),
+task-5 (1408). Each contains commands, outputs, and exit codes — none are
+stubs. Each notes date/host/bash version and HEAD before commit.
+
+----------------------------------------------------------------------
+## Must-NOT-have compliance (plan lines 47-63)
+----------------------------------------------------------------------
+- [PASS] NO pattern override (D1): R6 — wayland `.*Xmodmap` -> "Nothing to
+  do (0 links already correct).", exit 0, fx-home empty (task-1:146-159,
+  task-5 R6).
+- [PASS] NO new CLI flags: print_help diff (hunk @@ -67,13 +67,15) rewrites
+  only the --refresh/--audit description lines; USAGE line and all other
+  OPTIONS lines unchanged. No new context values (wayland/x11/headless only).
+- [PASS] NO session_context() detection changes: definition untouched in the
+  diff (only the deleted neglected() doc comment referenced the function;
+  new collect() awk calls it — call site, not logic).
+- [PASS] NO setup-os changes: diff --name-only confined to link-files.bash /
+  README.md / link-context.txt.
+- [PASS] Neglect predicate semantics preserved: listed AND not-current ->
+  neglected (R1); multi-context -> never neglected (R11: .multi reported on
+  both wayland and x11); missing link-context.txt -> empty neglect, not an
+  error (R7).
+- [PASS] $desired/$mdirs order untouched beyond the added filter step;
+  $desired remains neglect-unfiltered (link-files.bash:198 before :220-221;
+  R2 proves find_stale keeps the correctly-linked neglected file).
+- [PASS] NO committed test suite: 4 commits touch only the 3 allowed files;
+  evidence files untracked.
+- [PASS] Empty-NEG_RELS no-op: R7 (link-context.txt deleted -> dry-run lists
+  all 6 rels, exit 0; audit exit 1 with findings).
+- [PASS] bash 3.2 / POSIX-awk: new awk blocks (link-files.bash:214-222) use
+  only POSIX constructs (sub(), arrays, END, NR==FNR, `in`, -F'\t'); scan of
+  added lines finds no readarray/mapfile/globstar/${v,,}/declare -A/gawk-
+  only features. New bash code uses mktemp/awk/grep -Fxq — all 3.2-safe.
+
+----------------------------------------------------------------------
+## Observations (non-blocking)
+----------------------------------------------------------------------
+- Task-5 fixture `git commit -qm init` failed with "Author identity unknown"
+  (exit 128) on every rebuild because the sandbox git has no user identity.
+  NOT a compliance failure: the plan's CRITICAL requirement is that the fake
+  repo be `git init`'d (for `git check-ignore`), and init succeeded; the
+  index was populated (git ls-files lists all files), so check-ignore and
+  the refresh/audit paths behaved correctly. Evidence documents this
+  transparently at each row. (If identity were configured, the -qm commit
+  would be a no-op success; behavior identical.)
+- R12 exercised --diff via the pre-existing uncommitted --diff hunks in the
+  working-tree fixture copy (documented task-5:6-9). Consistent with the
+  dirty_worktree context; the diff output proved the collect-time filter
+  excludes .Xmodmap from --diff as required.
+- Evidence task-3 cites the comment at "~466"; actual line is 468 — pure
+  line-drift from earlier hunks, same content.
+
+----------------------------------------------------------------------
+## Findings summary
+- 0 blocking issues.
+- 0 acceptance-criteria failures across todos 1-5.
+- Commit messages, order, scope, and evidence-vs-commit split all match the
+  plan's Commit strategy exactly.
+======================================================================
+VERDICT: APPROVE — plan fully executed; proceed to F2/F3/F4 and surface
+results for the user's explicit okay.
+======================================================================

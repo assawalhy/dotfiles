@@ -1,0 +1,192 @@
+F4 Scope Fidelity Review
+========================
+Feature: link-context-filter
+HEAD: eadf053
+Repo: /home/ms/myp/dotfiles
+Reviewer: F4
+Date: 2026-08-15
+
+VERDICT: APPROVE
+
+All four scope-fidelity checks PASS. Diff scope, per-commit scope (4/4),
+dirty_worktree residue, and no-unexpected-files are all clean. Plan F4
+(link-context-filter.md:442) and Commit strategy (:444-450) verified against
+the actual git state.
+
+------------------------------------------------------------------
+CHECK 1: Diff scope (base 01c9304..HEAD) — PASS
+------------------------------------------------------------------
+Base determination:
+  $ git rev-parse e61e3bb^
+  01c9304a5fc7ad0b42c108eb03a12d506c83712f
+  $ git log --oneline -10
+  eadf053 docs: document session-context filtering for all link operations
+  5572084 link-files: drop redundant neglect checks from --audit
+  af7670f link-files: skip neglected rels in --refresh
+  e61e3bb link-files: filter the link set by session context at collect time
+  01c9304 arch-scripts: remove arch-scripts bins
+  ... (earlier commits unrelated)
+
+  => e61e3bb's parent IS 01c9304; commit order matches the plan exactly
+     (e61e3bb -> af7670f -> 5572084 -> eadf053, one commit per todo, no
+     evidence commits).
+
+  $ git diff --name-status 01c9304..HEAD
+  M       README.md
+  M       link-context.txt
+  M       link-files.bash
+
+  => Exactly the three allowed committed paths. Evidence/plans/drafts are
+     NOT in the commit range (untracked workspace artifacts, see check 4).
+
+------------------------------------------------------------------
+CHECK 2: Per-commit scope — PASS (4/4)
+------------------------------------------------------------------
+  $ git show --name-status --stat e61e3bb
+  M       link-files.bash
+  link-files.bash | 22 ++++++++++++++++++++--        (20 insertions, 2 deletions)
+  => link-files.bash ONLY, 20+/2-  — matches spec (collect-time filter).
+
+  $ git show --name-status --stat af7670f
+  M       link-files.bash
+  link-files.bash | 2 ++                              (2 insertions)
+  => link-files.bash ONLY, 2+ — matches spec (refresh_scan skip).
+
+  $ git show --name-status --stat 5572084
+  M       link-files.bash
+  link-files.bash | 33 ++++++-------------------------  (6 insertions, 27 deletions)
+  => link-files.bash ONLY, 6+/27- — matches spec (neglect-check removal).
+
+  $ git show --name-status --stat eadf053
+  M       README.md
+  M       link-context.txt
+  M       link-files.bash
+  README.md        | 35 ++++++++++++++++++-------------
+  link-context.txt |  6 +++++-
+  link-files.bash  | 12 +++++++-----
+  => README + link-context.txt + link-files.bash — matches spec (docs).
+  eadf053's link-files.bash hunk verified to touch ONLY the print_help
+  OPTIONS region (--refresh/--audit help text); no code changes.
+
+  No .omo/ paths in any of the 4 commits:
+  $ for c in e61e3bb af7670f 5572084 eadf053; do git show --name-only --format='' $c | grep -c '\.omo/'; done
+  0 0 0 0
+  => No evidence/plans/drafts committed anywhere. Correct per commit
+     strategy (".omo/plans/ and .omo/drafts/ are NOT tracked -> commit
+     nothing extra").
+
+  Committed link-files.bash hunks = the allowed regions ONLY:
+  $ git diff 01c9304..HEAD -- link-files.bash | grep -c '^+.*diff\|^-.*diff\|diff --'
+  2
+  Both hits are benign: the `diff --git` header itself, and one comment
+  line mentioning "diff" as a mode ("for every mode
+  (link/list/diff/refresh/audit)"). No is_diff/USAGE [--diff]/--diff
+  OPTIONS/show_diff/no-backup code in the committed diff.
+  Spot-check of the committed hunks confirmed all allowed regions:
+    1. print_help OPTIONS --refresh text ("skips files neglected ...")
+    2. print_help OPTIONS --audit text ("Excludes files neglected ...")
+    3. collect trap (adds $NEG_RELS to the rm list)
+    4. collect comment (filter runs at collect time, every mode)
+    5. NEG_RELS builder + guarded filter (awk session_context, merged filter)
+    6. refresh_scan skip (grep -Fxq "$rel" "$NEG_RELS" -> continue)
+    7. audit doc comment (neglect filtering happens upstream)
+    8. neglected() deletion (whole function removed)
+    9. audit local decl (suppressed= removed) + 5 loop cleanups
+       (stale/new_rel/soft_rel/hard_rel/rfr_rel neglected checks dropped)
+       + summary ("Audit clean (%d links correct)" — suppressed gone)
+   10. main read_contexts move (now after read_ignores, before collect;
+       removed from the is_audit branch)
+
+------------------------------------------------------------------
+CHECK 3: dirty_worktree respected (pre-existing --diff/--no-backup) — PASS
+------------------------------------------------------------------
+  $ git status --short
+   M .omo/boulder.json
+   M README.md
+   M link-files.bash
+  ?? .omo/drafts/audit-stale-prune.md
+  ?? .omo/drafts/link-context-filter.md
+  ?? .omo/evidence/f1-plan-compliance.txt
+  ?? .omo/evidence/f2-code-quality.txt
+  ?? .omo/evidence/task-1-link-context-filter.txt
+  ?? .omo/evidence/task-2-link-context-filter.txt
+  ?? .omo/evidence/task-3-link-context-filter.txt
+  ?? .omo/evidence/task-4-link-context-filter.txt
+  ?? .omo/evidence/task-5-link-context-filter.txt
+  ?? .omo/notepads/link-context-filter/
+  ?? .omo/plans/audit-stale-prune.md
+  ?? .omo/plans/link-context-filter.md
+  ?? ctx2.txt
+
+  => M README.md and M link-files.bash are STILL unstaged residue — the
+     4 commits did NOT absorb the pre-existing --diff/--no-backup hunks.
+
+  Unstaged residue intact:
+  $ git diff -- link-files.bash | grep -c 'is_diff\|USAGE \[--diff\]\|--diff\|show_diff\|no-backup'
+  15
+  $ git diff -- README.md | grep -c 'diff\|no-backup'
+  11
+  Sample unstaged link-files.bash hunks present:
+    +is_help=; is_force=; is_no_backup=; is_dry=; is_yes=; is_refresh=; is_audit=; is_diff=; filter=; pattern_given=
+    +  $(basename "$0") [...] [--audit] [--diff] [filtering_pattern]
+    +      --diff      show a unified diff between the home file and the repo
+    +        if [ -n "$is_no_backup" ]; then ...
+    +show_diff() { # $1 = dst, $2 = src ...
+    +  if [ -n "$is_diff" ]; then show_diffs ...
+  Sample unstaged README.md hunks present:
+    +  link-files.bash [--help] [...] [--audit] [--diff] [filtering_pattern]
+    +  link-files.bash --diff --dry-run
+    +      --diff      show a unified diff between the home file and the repo
+    +Add `--diff` to see what you would lose before deciding: ...
+
+  => is_diff var, USAGE [--diff], --diff OPTIONS block, classify no-backup,
+     show_diff/show_diffs/preview all still live in the working tree as
+     uncommitted work — intact and separate from the feature commits.
+
+  No staged-but-uncommitted leftover:
+  $ git diff --cached --stat
+  (empty)
+  => Nothing staged; no half-staged hunks, no reset-and-forgot residue.
+
+------------------------------------------------------------------
+CHECK 4: No unexpected files — PASS
+------------------------------------------------------------------
+  All entries in git status --short fall into the allowed classes:
+    - M .omo/boulder.json   — pre-existing; last commit touching it is
+      7f0046c "add .omo/ files", BEFORE the feature base 01c9304. Not part
+      of the 4 commits. (observation, not a finding)
+    - M README.md, M link-files.bash — pre-existing unstaged --diff work.
+    - ?? .omo/plans/*, ?? .omo/drafts/* — UNTRACKED workspace artifacts,
+      correctly NOT committed (commit strategy: "if they are tracked, commit
+      only the plan/draft files, never evidence"; they are not tracked, so
+      committing nothing extra is correct).
+    - ?? .omo/evidence/* — UNTRACKED, correctly not committed.
+    - ?? .omo/notepads/link-context-filter/ — untracked workspace notepad.
+    - ?? ctx2.txt — untracked scratch file; git log --all shows NO commit
+      ever added it (git ls-files --error-unmatch: not tracked). Pre-existing
+      workspace artifact. (observation, not a finding)
+  No commit contains .omo/ files (verified check 2). No stray commits to
+  unrelated files.
+
+------------------------------------------------------------------
+OBSERVATIONS (non-blocking)
+------------------------------------------------------------------
+- eadf053's committed README prose mentions `--diff` as one of the
+  operations the context filter applies to ("excluded from linking, listing,
+  --diff, --refresh and the audit report"). This is documentation wording
+  consistent with the working-tree behavior (where --diff already exists),
+  NOT a --diff feature hunk — no code/OPTIONS-block changes for --diff are
+  committed. No action needed.
+- .omo/boulder.json (M) and ctx2.txt (??) predate the feature and were not
+  part of the 4 commits; left as workspace residue.
+
+------------------------------------------------------------------
+SUMMARY
+------------------------------------------------------------------
+  Diff scope (base 01c9304..HEAD):      PASS — exactly M README.md, M link-context.txt, M link-files.bash
+  Per-commit scope:                     PASS (4/4) — each commit only its intended files with expected +/- counts
+  dirty_worktree residue intact:        PASS — --diff/--no-backup hunks untouched in working tree; git diff --cached empty
+  No committed evidence/plans/drafts:   PASS — zero .omo/ paths across all 4 commits
+  No unexpected files:                  PASS — boulder.json/ctx2.txt pre-existing, noted as observations
+
+VERDICT: APPROVE

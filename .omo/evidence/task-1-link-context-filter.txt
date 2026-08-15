@@ -1,0 +1,183 @@
+======================================================================
+task-1-link-context-filter evidence
+date: 2026-08-15T14:31:54Z  host: Linux  bash: GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+HEAD before commit: 01c9304
+======================================================================
+
+Todo 1: apply the session-context filter at collect time.
+Changes to link-files.bash (only file edited):
+  - main(): read_contexts now called right after read_ignores, BEFORE collect;
+    the audit-path read_contexts call deleted (single call site).
+  - collect(): after $mdirs is built, added the guarded NEG_RELS block --
+    awk builds the neglected-rel set from CTX_TMP for the current session
+    context, then `[ -s "$NEG_RELS" ]`-guarded awk -F'\t' drops those rels
+    from $merged. $desired keeps the neglect-unfiltered rels.
+  - collect trap: added "$NEG_RELS".
+  - collect() comment: updated to state the neglect filter runs at collect
+    time on top of the existing pattern filter.
+No other files modified (evidence file excepted).
+
+======================================================================
+## 0. Syntax gates
+======================================================================
+
+### 0.1 bash -n on the REAL repo copy
+$ bash -n /home/ms/myp/dotfiles/link-files.bash && echo "SYNTAX OK"
+SYNTAX OK
+
+### 0.2 bash -n on the fixture copy (after copying the edited script in)
+$ bash -n /tmp/opencode/fx-repo/link-files.bash && echo "FIXTURE SYNTAX OK"
+FIXTURE SYNTAX OK
+
+======================================================================
+## 1. Fixture build (recipe per plan, Verification strategy lines 74-103)
+======================================================================
+$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
+$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
+$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt \
+     /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
+$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
+$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
+$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
+$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
+$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
+$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
+$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
+$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
+# Context-neglect list. Files tagged for a context other than the current
+# session are excluded from linking, listing, --diff, --audit and --refresh.
+# Each line: <context>: <relpath>
+# Contexts: wayland, x11, headless. A relpath may appear on multiple
+# lines (relevant in several contexts). Comments/blank lines on their own
+# line. No globs. Relpath is relative to common/, linux/ or macos/.
+x11: .Xmodmap
+x11: .xinitrc
+x11: .config/x11app/settings
+x11: .config/x11only/conf
+wayland: .multi
+x11: .multi
+EOF
+$ git -C /tmp/opencode/fx-repo init -q
+$ git -C /tmp/opencode/fx-repo add -A && git -C /tmp/opencode/fx-repo commit -qm init
+CRITICAL: fake repo is git init'd, so check-ignore / refresh / audit paths behave.
+
+fixture tree (non-git):
+/tmp/opencode/fx-repo/.gitignore
+/tmp/opencode/fx-repo/common/.config/x11app/settings
+/tmp/opencode/fx-repo/common/.config/x11only/conf
+/tmp/opencode/fx-repo/common/.multi
+/tmp/opencode/fx-repo/common/.zshrc
+/tmp/opencode/fx-repo/link-context.txt
+/tmp/opencode/fx-repo/link-files.bash
+/tmp/opencode/fx-repo/link-ignore.txt
+/tmp/opencode/fx-repo/linux/.Xmodmap
+/tmp/opencode/fx-repo/linux/.xinitrc
+
+======================================================================
+## 2. QA rows (all invocations run the FIXTURE script with HOME=/tmp/opencode/fx-home)
+======================================================================
+
+### R1 wayland+missing (no .Xmodmap/.xinitrc in fx-home)
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --dry-run
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+
+$ echo $?
+0
+ASSERT: .zshrc listed, .multi listed (multi-context, never neglected),
+        .Xmodmap/.xinitrc/.config/x11app/settings/.config/x11only/conf ABSENT.
+==> PASS
+
+### R7 empty-context regression (link-context.txt deleted -> guard must hold)
+$ rm /tmp/opencode/fx-repo/link-context.txt
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --dry-run
++  .Xmodmap                                     [linux]
++  .xinitrc                                     [linux]
++  .config/x11app/settings                      [common]
++  .config/x11only/conf                         [common]
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+
+$ echo $?
+0
+ASSERT: link-context.txt gone -> empty NEG_RELS -> `[ -s "$NEG_RELS" ]` guard
+        makes the filter a no-op; .zshrc AND .Xmodmap BOTH listed, exit 0.
+        (Without the guard the NR==FNR idiom would have wiped the whole list.)
+==> PASS
+
+### R4 x11+missing (fixture rebuilt after R7's rm)
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY= DISPLAY=:0 /tmp/opencode/fx-repo/link-files.bash --dry-run
++  .Xmodmap                                     [linux]
++  .xinitrc                                     [linux]
++  .config/x11app/settings                      [common]
++  .config/x11only/conf                         [common]
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+
+$ echo $?
+0
+ASSERT: on an x11 session the x11-tagged rels appear exactly as before
+        (+ .Xmodmap IS listed).
+==> PASS
+
+### R2 wayland+correct symlink (find_stale must NOT remove it)
+$ ln -s /tmp/opencode/fx-repo/linux/.Xmodmap /tmp/opencode/fx-home/.Xmodmap
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --dry-run
++  .multi                                       [common]
++  .zshrc                                       [common]
+
+   common + linux  ->  /tmp/opencode/fx-home
+
+$ echo $?
+0
+ASSERT: .Xmodmap absent from the list AND no `-`/`*`/`!` line for it -- the
+        correct symlink is not proposed for removal. Works because $desired
+        kept the neglect-unfiltered rels, so find_stale classifies it as
+        already-correct, not stale.
+==> PASS
+
+### R6 D1 pattern (a <pattern> must NOT resurrect a neglected file)
+(fixture rebuilt after R2's symlink)
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash '.*Xmodmap' --dry-run
+Nothing to do (0 links already correct).
+$ echo $?
+0
+$ find /tmp/opencode/fx-home -name '.Xmodmap' ; ls -la /tmp/opencode/fx-home
+total 8
+drwxr-xr-x 2 ms ms 4096 Aug 15 17:31 .
+drwxr-xr-x 4 ms ms 4096 Aug 15 17:31 ..
+ASSERT: wayland + '.*Xmodmap' matches the neglected rel, but the collect-time
+        filter dropped it from $merged first -> "Nothing to do" (script's
+        equivalent of "Nothing to link"), exit 0, nothing created in fx-home.
+==> PASS
+
+### R1-audit bonus (moved read_contexts call still feeds --audit; todo-3 cleanup not done yet)
+$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --audit
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
++  .multi                                       [missing]
++  .zshrc                                       [missing]
+Audit findings: 2.
+$ echo $?
+1
+ASSERT: repo-side arrays come from the now-filtered $merged -> .zshrc and
+        .multi (multi-context) reported [missing], NO x11-tagged line, exit 1.
+        The moved call produces CTX_TMP for both collect() and audit().
+        (Header still lists "x11: .multi" -- the accepted pre-existing
+        multi-context header quirk; .multi itself is never neglected.)
+==> PASS
+
+======================================================================
+## 3. Summary
+======================================================================
+Required rows (MUST DO): R1 PASS, R2 PASS, R4 PASS, R6 PASS, R7 PASS
+Bonus:                     R1-audit PASS
+bash -n:                   real + fixture both OK
+Files modified:            link-files.bash (this feature) + this evidence file
+==> ALL PASS (6/6)
