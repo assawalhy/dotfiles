@@ -171,9 +171,8 @@ list_root() {
 collect() {
   merged="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   desired="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
-  mdirs="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   IGN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
-  trap 'rm -f "$merged" "$desired" "$mdirs" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
+  trap 'rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
 
   # Ignore set, built once for all list_root calls: strip any leading ./ and
   # trailing / so entries compare cleanly against the lister's relpaths.
@@ -196,15 +195,6 @@ collect() {
         '!seen[$2]++ && (all == 1 || $2 ~ pat)' > "$merged"
 
   awk -F'\t' -v h="$HOME" '{ print h "/" $2 }' "$merged" | sort -u > "$desired"
-
-  # Directories to scan for stale links. Derived from *every* root, not just
-  # the active one, so that switching a $HOME between Linux and macOS -- or
-  # moving a file from common/ into an overlay -- prunes the links that the
-  # other platform left behind (e.g. ~/bin/arch-scripts/* on macOS).
-  { list_root "$COMMON"; list_root "$REPO/linux"; list_root "$REPO/macos"; } \
-    | awk -F'\t' -v h="$HOME" \
-        '{ p = h "/" $2; sub(/\/[^\/]*$/, "", p); print p }' \
-    | sort -u > "$mdirs"
 
   # Session-context filter (link-context.txt): rels listed for a context other
   # than the current session are dropped from $merged, on top of the pattern
@@ -362,12 +352,6 @@ picker() {
   # find_stale, confirm, apply) runs on the choice alone.
   awk -F'\t' 'NR==FNR { p[$0] = 1; next } $2 in p' "$PICKED_LINKS" "$merged" \
     > "$merged.tmp" && mv "$merged.tmp" "$merged"
-
-  # Rebuild $mdirs from the parents of the picked relpaths, so stale-link
-  # removal stays inside the choice. Top-level files map to $HOME itself,
-  # matching the formula used in collect().
-  awk -v h="$HOME" '{ p = h "/" $0; sub(/\/[^\/]*$/, "", p); print p }' \
-    "$PICKED_LINKS" | sort -u > "$mdirs"
 }
 
 # ---------------------------------------------------------- classify ---
@@ -378,6 +362,7 @@ new_rel=();  new_src=()
 soft_rel=(); soft_src=(); soft_why=()   # resolvable without --force
 hard_rel=(); hard_src=(); hard_why=()   # needs --force
 stale=()
+ignored=()
 
 classify() {
   local root rel src dst cur
@@ -420,25 +405,40 @@ classify() {
   done < "$merged"
 }
 
-# Symlinks in a managed directory that point into this repo but are no longer
+# Symlinks anywhere in $HOME that point into this repo but are no longer
 # wanted (source deleted, or moved between overlays leaving a broken link).
+# One single-pass `find -lname` scan (GNU and BSD/macOS find both support
+# it): -lname glob-matches the symlink's TARGET string against "$REPO/*", so
+# only repo-pointing links are ever readlinked -- measured ~2s on a 60GB /
+# 1.47M-file home vs 18.8s for the old per-dir readlink loop. $REPO must not
+# contain glob characters (escape them if that ever changes).
+# Three-way classification for links not in $desired:
+#   target gone ([ ! -e ] follows the link)      -> stale (dangling)
+#   target exists + rel matches link-ignore.txt  -> ignored (reported by
+#                                                   --audit/--fix in later
+#                                                   todos)
+#   target exists + not ignored (other-OS-overlay
+#   leftover, or a manually-made link)           -> stale
 # Only ever touches links whose target is under $REPO, so unrelated symlinks
 # in $HOME are never at risk.
 find_stale() {
-  local d l t rel
-  while IFS= read -r d || [ -n "$d" ]; do
-    [ -d "$d" ] || continue
-    while IFS= read -r l || [ -n "$l" ]; do
-      t="$(readlink "$l")"
-      case "$t" in "$REPO"/*) ;; *) continue ;; esac
-      # `grep ... && continue` would abort the script under `set -e`
-      if grep -Fxq "$l" "$desired"; then continue; fi
-      rel="${l#$HOME/}"
-      # RHS of =~ must stay unquoted: bash 3.2 matches a quoted RHS literally
-      [[ $rel =~ $filter ]] || continue
+  local l t rel
+  while IFS= read -r l || [ -n "$l" ]; do
+    t="$(readlink "$l")"
+    case "$t" in "$REPO"/*) ;; *) continue ;; esac
+    # `grep && continue` would abort the script under `set -e`
+    if grep -Fxq "$l" "$desired"; then continue; fi
+    rel="${l#$HOME/}"
+    # RHS of =~ must stay unquoted: bash 3.2 matches a quoted RHS literally
+    [[ $rel =~ $filter ]] || continue
+    if [ ! -e "$l" ]; then
       stale+=("$l")
-    done < <(find "$d" -maxdepth 1 -type l)
-  done < "$mdirs"
+    elif awk -v rel="$rel" 'rel == $0 || index(rel, $0 "/") == 1 { found = 1 } END { exit !found }' "$IGN_TMP"; then
+      ignored+=("$l")
+    else
+      stale+=("$l")
+    fi
+  done < <(find "$HOME" -type l -lname "$REPO/*" 2>/dev/null)
 }
 
 # ---------------------------------------------------------- refresh ---

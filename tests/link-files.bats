@@ -191,6 +191,23 @@ setup() {
   assert_link .config/shell/os.sh "$FIX_REPO/linux/.config/shell/os.sh"
 }
 
+@test "overlay- macos leftover on linux is stale, reported and pruned" {
+  fixture_new ov_leftover
+  stub_uname Darwin
+  run_link --yes
+  [ "$status" -eq 0 ]
+  assert_link .hushlogin "$FIX_REPO/macos/.hushlogin"
+  stub_uname Linux
+  run_link --audit
+  [ "$status" -eq 1 ]
+  output_has_finding .hushlogin
+  [[ "$output" == *"-  .hushlogin"* ]]
+  [[ "$output" == *"stale link"* ]]
+  run_link --yes
+  [ "$status" -eq 0 ]
+  assert_no_link .hushlogin
+}
+
 # ============================================================ context- ===
 
 @test "context- session detection: wayland, x11, headless" {
@@ -301,14 +318,31 @@ setup() {
   assert_link .config/foobar "$FIX_REPO/common/.config/foobar"  # exact-match only
 }
 
-@test "ignore- entry ADDED while still linked is reported as a stale link today" {
+@test "ignore- entry ADDED while still linked is not reported stale (Todo 3: i [ignored])" {
   fixture_new ig_added
   run_link --yes
   [ "$status" -eq 0 ]
   printf '.zshrc\n' >> "$FIX_REPO/link-ignore.txt"
+  # Three-way classification moves the live link out of `stale` into
+  # `ignored`; the audit has no report line for it yet. Todo 3 upgrades this
+  # to a positive `i  .zshrc  [ignored]` assertion (and exit 1).
+  run_link --audit
+  [ "$status" -eq 0 ]
+  output_not_has_finding .zshrc
+  run_link --yes
+  [ "$status" -eq 0 ]
+  assert_link .zshrc "$FIX_REPO/common/.zshrc"
+}
+
+@test "ignore- ignored but dangling link is still reported stale ([ ! -e ] wins)" {
+  fixture_new ig_dangling
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf '.zshrc\n' >> "$FIX_REPO/link-ignore.txt"
+  rm "$FIX_REPO/common/.zshrc"
   run_link --audit
   [ "$status" -eq 1 ]
-  [[ "$output" == *"-  .zshrc"* ]]
+  output_has_finding .zshrc
   [[ "$output" == *"stale link"* ]]
 }
 
@@ -325,6 +359,74 @@ setup() {
   [ "$status" -eq 1 ]
   output_has_finding bin/.github
   [[ "$output" == *"[missing]"* ]]
+}
+
+# ============================================================== stale- ===
+
+@test "stale- dangling link in a still-existing dir is reported (exit 1)" {
+  fixture_new st_dangling
+  run_link --yes
+  [ "$status" -eq 0 ]
+  rm "$FIX_REPO/common/.zshrc"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  output_has_finding .zshrc
+  [[ "$output" == *"stale link"* ]]
+}
+
+@test "stale- dangling links in a fully-deleted dir are reported and pruned" {
+  fixture_new st_deleted
+  run_link --yes
+  [ "$status" -eq 0 ]
+  rm -rf "$FIX_REPO/common/.config"   # whole dir gone from the repo
+  run_link --audit
+  [ "$status" -eq 1 ]
+  output_has_finding .config/mpv/mpv.conf
+  output_has_finding .config/nvim/init.lua
+  [[ "$output" == *"stale link"* ]]
+  run_link --yes
+  [ "$status" -eq 0 ]
+  assert_no_link .config/mpv/mpv.conf
+  assert_no_link .config/nvim/init.lua
+  run_link --audit
+  [ "$status" -eq 0 ]
+}
+
+@test "stale- a pattern narrows the stale report" {
+  fixture_new st_pattern
+  printf 'gone\n' > "$FIX_REPO/common/.gone"
+  printf 'keep\n' > "$FIX_REPO/common/.keep"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  rm "$FIX_REPO/common/.gone" "$FIX_REPO/common/.keep"
+  run_link --audit '.*gone.*'
+  [ "$status" -eq 1 ]
+  output_has_finding .gone
+  output_not_has_finding .keep
+}
+
+@test "stale- a foreign symlink is never reported as stale or removed" {
+  fixture_new st_foreign
+  mkhome_link .zshrc /etc/passwd
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"-  .zshrc"* ]]
+  run_link --yes
+  [ "$status" -eq 0 ]
+  [ -L "$FIX_HOME/.zshrc" ]
+  [ "$(readlink "$FIX_HOME/.zshrc")" = "/etc/passwd" ]
+}
+
+@test "stale- a relative symlink is never reported as stale" {
+  fixture_new st_relative
+  mkhome_link .zshrc ../repo/common/.zshrc
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"-  .zshrc"* ]]
+  run_link --yes
+  [ "$status" -eq 0 ]
+  [ -L "$FIX_HOME/.zshrc" ]
+  [ "$(readlink "$FIX_HOME/.zshrc")" = "../repo/common/.zshrc" ]
 }
 
 # ============================================================ refresh- ===
@@ -615,14 +717,15 @@ setup() {
 @test "guard- a dir symlink resolving inside the repo is refused" {
   fixture_new gr_guard
   # ~/.config -> <repo>/common/.config, so the parent dir of the .config rels
-  # resolves inside the repo. A full run would remove it as stale first, so
-  # narrow via the fallback menu to nested-only picks (mpv.conf, init.lua) --
-  # those are same-inode "relink" candidates whose parent is still the link.
-  ln -s "$FIX_REPO/common/.config" "$FIX_HOME/.config"
+  # resolves inside the repo. Use a RELATIVE target: an absolute repo target
+  # is now caught by find_stale's -lname scan and removed as stale before
+  # apply runs, so the guard is only reachable when the stale scan skips the
+  # link (relative targets don't match -lname "$REPO/*").
+  ln -s "../repo/common/.config" "$FIX_HOME/.config"
   run_link_stdin $'2-3\ny\n'
   [ "$status" -eq 1 ]
   [[ "$output" == *"refusing"* ]]
   [[ "$output" == *"resolves inside the repo"* ]]
   [ -L "$FIX_HOME/.config" ]
-  [ "$(readlink "$FIX_HOME/.config")" = "$FIX_REPO/common/.config" ]
+  [ "$(readlink "$FIX_HOME/.config")" = "../repo/common/.config" ]
 }
