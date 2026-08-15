@@ -168,7 +168,7 @@ collect() {
   desired="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   mdirs="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   IGN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
-  trap 'rm -f "$merged" "$desired" "$mdirs" "$IGN_TMP" "$CTX_TMP" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
+  trap 'rm -f "$merged" "$desired" "$mdirs" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
 
   # Ignore set, built once for all list_root calls: strip any leading ./ and
   # trailing / so entries compare cleanly against the lister's relpaths.
@@ -181,6 +181,8 @@ collect() {
   # --refresh (and --audit) keep the overlay set complete instead of applying
   # the pattern here: the pattern narrows their candidates later, but their
   # linked-dir discovery and in-repo exclusion need every repo relpath.
+  # The session-context neglect filter below runs at collect time, on top of
+  # the pattern filter, for every mode (link/list/diff/refresh/audit).
   all_flag=0
   [ -n "$is_refresh" ] && all_flag=1
   [ -n "$is_audit" ] && all_flag=1
@@ -198,6 +200,22 @@ collect() {
     | awk -F'\t' -v h="$HOME" \
         '{ p = h "/" $2; sub(/\/[^\/]*$/, "", p); print p }' \
     | sort -u > "$mdirs"
+
+  # Session-context filter (link-context.txt): rels listed for a context other
+  # than the current session are dropped from $merged, on top of the pattern
+  # filter above. $desired keeps the neglect-unfiltered rels so find_stale and
+  # refresh_scan still recognize neglected-but-linked files as wanted.
+  NEG_RELS="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  awk -v sctx="$(session_context)" '
+    { ctx = $0; sub(/: .*/, "", ctx)
+      rel = $0; sub(/^[^:]*: /, "", rel)
+      if (ctx == sctx) cur[rel] = 1
+      seen[rel] = 1 }
+    END { for (r in seen) if (!(r in cur)) print r }' "$CTX_TMP" > "$NEG_RELS"
+  if [ -s "$NEG_RELS" ]; then
+    awk -F'\t' 'NR==FNR{neg[$0]=1;next} !($2 in neg)' "$NEG_RELS" "$merged" \
+      > "$merged.tmp" && mv "$merged.tmp" "$merged"
+  fi
 }
 
 # ------------------------------------------------------------ picker ---
@@ -754,6 +772,7 @@ apply() {
 
 parse_args "$@"
 read_ignores
+read_contexts
 collect
 # The picker chooses which repo files to link out; capture/report modes
 # (--refresh, --audit) never open it.
@@ -770,7 +789,6 @@ fi
 classify
 find_stale
 if [ -n "$is_audit" ]; then
-  read_contexts
   refresh_scan
   audit
   exit 0
