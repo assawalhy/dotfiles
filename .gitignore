@@ -2,3 +2,14 @@
 common/.config/nvim/mini-init.vim
 __pycache__/
 *.pyc
+.omo/*
+!.omo/rules/
+!.omo/rules/**
+!.omo/plans/
+!.omo/plans/**
+!.omo/evidence/
+!.omo/evidence/**
+!.omo/drafts/
+!.omo/drafts/**
+!.omo/notepads/
+!.omo/notepads/**
