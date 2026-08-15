@@ -204,7 +204,7 @@ collect() {
   # Session-context filter (link-context.txt): rels listed for a context other
   # than the current session are dropped from $merged, on top of the pattern
   # filter above. $desired keeps the neglect-unfiltered rels so find_stale and
-  # refresh_scan still recognize neglected-but-linked files as wanted.
+  # refresh_scan still recognize filtered-out-but-linked files as wanted.
   NEG_RELS="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   awk -v sctx="$(session_context)" '
     { ctx = $0; sub(/: .*/, "", ctx)
@@ -532,8 +532,9 @@ refresh_apply() {
 # --audit: read-only link-drift report. Direction (a) = repo files lacking a
 # correct home link (classify/find_stale); direction (b) = real files inside
 # linked dirs absent from the repo (refresh_scan's candidates, not applied).
-# Lines whose rel is neglected for the current session context are dropped;
-# nothing is written, no picker, no prompt. Exit 0 = clean, 1 = findings.
+# Neglect filtering happens upstream -- collect() drops neglect-listed rels from
+# $merged, refresh_scan() skips neglect-listed candidates -- so audit itself only
+# reports; nothing is written, no picker, no prompt. Exit 0 = clean, 1 = findings.
 
 # Session context for the neglect list. Order matters: Xwayland sets DISPLAY
 # too, so WAYLAND_DISPLAY is checked first.
@@ -557,25 +558,8 @@ read_contexts() {
     > "$CTX_TMP" 2>/dev/null || :
 }
 
-# relpath R is neglected iff the context file lists it for a context other
-# than the current session's (>=1 line "<ctx>: R" exists AND session_context()
-# is not among those <ctx> values). Unlisted R is never neglected.
-neglected() {
-  local rel="$1" sctx line ctx r found=0 current=0
-  [ -f "$CTX_TMP" ] || return 1
-  sctx="$(session_context)"
-  while IFS= read -r line || [ -n "$line" ]; do
-    ctx="${line%%: *}"
-    r="${line#*: }"
-    [ "$r" = "$rel" ] || continue
-    found=1
-    [ "$ctx" = "$sctx" ] && current=1
-  done < "$CTX_TMP"
-  [ "$found" = 1 ] && [ "$current" = 0 ]
-}
-
 audit() {
-  local sctx i rel line ctx neglects=() neglect_str='' findings=0 suppressed=0
+  local sctx i rel line ctx neglects=() neglect_str='' findings=0
   sctx="$(session_context)"
 
   # header neglect list: context-file lines naming a session other than ours
@@ -596,28 +580,24 @@ audit() {
   # direction (a): stale links, then repo files missing/relink/conflict
   for ((i = 0; i < ${#stale[@]}; i++)); do
     rel="${stale[$i]#$HOME/}"
-    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
     [[ $rel =~ $filter ]] || continue
     printf -- '-  %-44s %s\n' "$rel" 'stale link'
     findings=$((findings + 1))
   done
   for ((i = 0; i < ${#new_rel[@]}; i++)); do
     rel="${new_rel[$i]}"
-    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
     [[ $rel =~ $filter ]] || continue
     printf -- '+  %-44s %s\n' "$rel" '[missing]'
     findings=$((findings + 1))
   done
   for ((i = 0; i < ${#soft_rel[@]}; i++)); do
     rel="${soft_rel[$i]}"
-    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
     [[ $rel =~ $filter ]] || continue
     printf -- '*  %-44s %s\n' "$rel" '[relink]'
     findings=$((findings + 1))
   done
   for ((i = 0; i < ${#hard_rel[@]}; i++)); do
     rel="${hard_rel[$i]}"
-    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
     [[ $rel =~ $filter ]] || continue
     printf -- '!  %-44s %s\n' "$rel" '[conflict]'
     findings=$((findings + 1))
@@ -626,13 +606,12 @@ audit() {
   # the pattern inside refresh_scan, so no `=~` re-check here)
   for ((i = 0; i < ${#rfr_rel[@]}; i++)); do
     rel="${rfr_rel[$i]}"
-    if neglected "$rel"; then suppressed=$((suppressed + 1)); continue; fi
     printf -- '+  %-44s %s\n' "$rel" '[unlinked]'
     findings=$((findings + 1))
   done
 
   if [ "$findings" -eq 0 ]; then
-    printf 'Audit clean (%d links correct, %d neglected).\n' "$n_same" "$suppressed"
+    printf 'Audit clean (%d links correct).\n' "$n_same"
     exit 0
   fi
   printf 'Audit findings: %d.\n' "$findings"
