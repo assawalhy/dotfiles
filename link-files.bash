@@ -67,13 +67,15 @@ OPTIONS:
   -y, --yes       skip the confirmation prompt
       --refresh   capture new files that appeared inside linked dirs into the
                   repo (OS overlay first, else common) and symlink them back;
-                  never overwrites repo files; --force has no effect
+                  never overwrites repo files; --force has no effect; skips
+                  files neglected for the current session context
+                  (wayland/x11/headless)
       --audit     read-only link-drift report: repo files lacking a correct
                   home link (missing/relink/conflict/stale) plus real files
-                  in linked dirs absent from the repo. Applies the
-                  link-context.txt neglect list for the current session
-                  (wayland/x11/headless). Exit 0 = clean, 1 = findings;
-                  never writes, no picker, no prompt
+                  in linked dirs absent from the repo. Excludes files
+                  neglected for the current session context
+                  (wayland/x11/headless), same as linking. Exit 0 = clean,
+                  1 = findings; never writes, no picker, no prompt
   <pattern>       extended regex; only paths matching it are considered
 
 INTERACTIVE SELECTION:

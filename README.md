@@ -61,13 +61,15 @@ OPTIONS:
   -y, --yes       skip the confirmation prompt
       --refresh   capture new files that appeared inside linked dirs into the
                   repo (OS overlay first, else common) and symlink them back;
-                  never overwrites repo files; --force has no effect
+                  never overwrites repo files; --force has no effect; skips
+                  files neglected for the current session context
+                  (wayland/x11/headless)
       --audit     read-only link-drift report: repo files lacking a correct
                   home link (missing/relink/conflict/stale) plus real files
-                  in linked dirs absent from the repo. Applies the
-                  link-context.txt neglect list for the current session
-                  (wayland/x11/headless). Exit 0 = clean, 1 = findings;
-                  never writes, no picker, no prompt
+                  in linked dirs absent from the repo. Excludes files
+                  neglected for the current session context
+                  (wayland/x11/headless), same as linking. Exit 0 = clean,
+                  1 = findings; never writes, no picker, no prompt
   <pattern>       extended regex; only paths matching it are considered
 ```
 
@@ -97,10 +99,10 @@ listing is a bash script now.
 
 Everything committed under `common/` and the active OS directory — **there is
 no include list**. `link-ignore.txt` is the exception list: paths named there
-are committed but not linked. `link-context.txt` is the session neglect list
-for `--audit`: a relpath named there for a context other than the current
-session (like `x11: .Xmodmap` under wayland) is skipped by the link-drift
-report.
+are committed but not linked. `link-context.txt` is the session-context filter
+for every link operation: a relpath tagged for another context (like
+`x11: .Xmodmap` under wayland) is excluded from linking, listing, `--diff`,
+`--refresh` and the audit report.
 
 Adopting a new dotfile is therefore just a move:
 
@@ -123,6 +125,9 @@ the OS overlay when that path exists there and in `common/` otherwise, and is
 symlinked back so the live file keeps working.
 
 `--refresh` never overwrites a repo file, and `--force` has no effect on it.
+New files whose relpath is neglected for the current session context are
+skipped, so an x11-only config directory is not scanned for captures while on
+a Wayland session.
 Like every other mode it previews what it will capture and then asks for the 🔥
 confirmation before moving anything. `--dry-run` shows the preview and stops,
 `--yes` skips the prompt, and a `<pattern>` narrows the scan.
@@ -143,10 +148,14 @@ nothing. Exit 0 means the links are clean, exit 1 that there are findings.
 
 Some files only belong to particular desktop sessions. `link-context.txt`
 lists those, per session context: a line like `x11: .Xmodmap` marks `.Xmodmap`
-as x11-only, so `--audit` neglects it on every other session and reports it
-when the session is x11. The context is detected from the environment (wayland,
-x11, or headless), so `.Xmodmap` is skipped on a Wayland session and reported
-on an X11 one.
+as x11-only. The filter is applied up front for every operation, so on a
+Wayland session `.Xmodmap` is excluded from linking, listing, `--diff`,
+`--refresh` and this report alike, and reported only on an X11 session.
+`--audit` prints `audit context: <ctx> (neglecting: ...)` in its header,
+naming the contexts it excluded. The context is detected from the environment
+(wayland, x11, or headless). Stale links to repo files that were deleted are
+reported on any session — they are dangling pointers, independent of the
+session context.
 
 ### Conflicts
 
