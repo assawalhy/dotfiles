@@ -1,7 +1,0 @@
-#!/bin/sh
-
-java \
-  -jar ~/.local/jars/checkstyle/checkstyle-10.1-all.jar \
-  com.puppycrawl.tools.checkstyle.Main \
-  -c ~/.local/jars/checkstyle/google_checks.xml \
-  "$@"

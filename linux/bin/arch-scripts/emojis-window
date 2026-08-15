@@ -1,7 +1,0 @@
-#!/bin/bash
-
-# source of emojis: https://gist.githubusercontent.com/bfeldman89/fb25ddb63bdaa6de6ab7ac946acde96f/raw/8ae0f61016c5e5afb882a092de992e162ff4a907/emojis.csv
-# it is relative to the script file
-my_dir="$(dirname "$(which "$0")")"
-
-rofi -dmenu -i -l 10 < "$my_dir"/emojis.txt | cut -d',' -f1 -z | xsel -ib

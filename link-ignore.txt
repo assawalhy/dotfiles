@@ -9,3 +9,4 @@
 
 # repo tooling for the bin/ scripts, not a dotfile
 bin/.github
+.config/ranger/plugins/ranger_devicons/

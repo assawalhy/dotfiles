@@ -1,7 +1,0 @@
-#!/bin/bash
-
-# show posture notification every 20 minutes
-while true; do
-  sleep $((20 * 60))
-  zenity --info --title "استرح" --text "خذ قسطا من الراحة" --timeout=10
-done
