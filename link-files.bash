@@ -446,6 +446,8 @@ refresh_scan() {
     # find -type f skips symlinks and never descends into symlinked subdirs
     while IFS= read -r f || [ -n "$f" ]; do
       rel="${f#$HOME/}"
+      # neglected for this session -> never captured (link-context.txt)
+      if grep -Fxq "$rel" "$NEG_RELS"; then continue; fi
       # already in the repo (managed or conflict) -> skip silently
       if grep -Fxq "$f" "$desired"; then continue; fi
       # link-ignore.txt, exact or under a directory entry (list_root:130-137)
