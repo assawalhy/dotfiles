@@ -363,6 +363,8 @@ soft_rel=(); soft_src=(); soft_why=()   # resolvable without --force
 hard_rel=(); hard_src=(); hard_why=()   # needs --force
 stale=()
 ignored=()
+neglinked_rel=()
+neglinked_ctx=()
 
 classify() {
   local root rel src dst cur
@@ -439,6 +441,26 @@ find_stale() {
       stale+=("$l")
     fi
   done < <(find "$HOME" -type l -lname "$REPO/*" 2>/dev/null)
+}
+
+# Links that exist and point into the repo but are neglected for the current
+# session (rel listed in $NEG_RELS): an env-mismatched leftover, e.g. the
+# x11-only .Xmodmap still linked while on wayland. Only symlinks whose target
+# EXISTS are reported here -- a dangling neglected link is a stale link and is
+# reported once by find_stale, never twice. The wanted-contexts label comes
+# from $CTX_TMP's "<ctx>: <rel>" lines, joined with commas (bash 3.2: no
+# associative arrays, so the label is built with awk).
+find_neglinked() {
+  local rel t
+  while IFS= read -r rel || [ -n "$rel" ]; do
+    [[ $rel =~ $filter ]] || continue
+    [ -L "$HOME/$rel" ] || continue
+    [ -e "$HOME/$rel" ] || continue
+    t="$(readlink "$HOME/$rel")"
+    case "$t" in "$REPO"/*) ;; *) continue ;; esac
+    neglinked_rel+=("$rel")
+    neglinked_ctx+=("$(printf '%s' "$(awk -v r="$rel" '$2 == r { sub(/: .*/, "", $0); printf "%s%s", sep, $1; sep="," }' "$CTX_TMP")")")
+  done < "$NEG_RELS"
 }
 
 # ---------------------------------------------------------- refresh ---
@@ -601,6 +623,14 @@ audit() {
     rel="${stale[$i]#$HOME/}"
     [[ $rel =~ $filter ]] || continue
     printf -- '-  %-44s %s\n' "$rel" 'stale link'
+    findings=$((findings + 1))
+  done
+  for ((i=0; i<${#ignored[@]}; i++)); do
+    printf -- 'i  %-44s %s\n' "${ignored[$i]#$HOME/}" '[ignored] linked but listed in link-ignore.txt'
+    findings=$((findings + 1))
+  done
+  for ((i=0; i<${#neglinked_rel[@]}; i++)); do
+    printf -- 'x  %-44s %s\n' "${neglinked_rel[$i]}" "[neglected] wanted on: ${neglinked_ctx[$i]}"
     findings=$((findings + 1))
   done
   for ((i = 0; i < ${#new_rel[@]}; i++)); do
@@ -826,6 +856,7 @@ if [ -n "$is_refresh" ]; then
 fi
 classify
 find_stale
+find_neglinked
 if [ -n "$is_audit" ]; then
   refresh_scan
   audit

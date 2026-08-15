@@ -15,7 +15,7 @@
 #     prompt consumes the next -- so piped runs need 'a'/'n'/'<n>' plus 'y'.
 #     'a' alone links nothing (confirm reads EOF and exits 1).
 #   * an ignore entry ADDED while the file is still linked surfaces in
-#     --audit as `- stale link` (later todos flip this to `i [ignored]`).
+#     --audit as `i [ignored]`.
 #   * an ignore entry REMOVED while the file is unlinked surfaces as
 #     `+ [missing]`.
 #   * --force backs up real files (.bak.<STAMP>); foreign symlinks are only
@@ -265,6 +265,73 @@ setup() {
   output_not_has_finding .Xmodmap
 }
 
+@test "context- neglinked x11 file is reported on wayland, not on x11" {
+  fixture_new ctx_neglink
+  run_link_sess wayland --yes
+  [ "$status" -eq 0 ]
+  mkhome_link .Xmodmap "$FIX_REPO/linux/.Xmodmap"
+  run_link_sess wayland --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x  .Xmodmap"* ]]
+  [[ "$output" == *"[neglected] wanted on: x11"* ]]
+  # the same link on an x11 session is wanted: audit clean for it
+  run_link_sess x11 --yes
+  [ "$status" -eq 0 ]
+  run_link_sess x11 --audit
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"x  .Xmodmap"* ]]
+  [[ "$output" == *"Audit clean"* ]]
+}
+
+@test "context- dangling neglected link is reported once as stale, never x" {
+  fixture_new ctx_dangling
+  run_link_sess wayland --yes
+  [ "$status" -eq 0 ]
+  mkhome_link .Xmodmap "$FIX_REPO/linux/.Xmodmap"
+  rm "$FIX_REPO/linux/.Xmodmap"
+  run_link_sess wayland --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"-  .Xmodmap"* ]]
+  [[ "$output" != *"x  .Xmodmap"* ]]
+  [ "$(grep -cE '^[-x]  \.Xmodmap( |$)' <<< "$output")" -eq 1 ]
+}
+
+@test "context- a real file at a neglected path is never reported" {
+  fixture_new ctx_real
+  run_link_sess wayland --yes
+  [ "$status" -eq 0 ]
+  printf 'MYDATA\n' > "$FIX_HOME/.Xmodmap"
+  run_link_sess wayland --audit
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"x  .Xmodmap"* ]]
+  [[ "$output" != *"!  .Xmodmap"* ]]
+  [[ "$output" == *"Audit clean"* ]]
+}
+
+@test "context- a pattern narrows the neglinked report" {
+  fixture_new ctx_negpattern
+  run_link_sess wayland --yes
+  [ "$status" -eq 0 ]
+  mkhome_link .Xmodmap "$FIX_REPO/linux/.Xmodmap"
+  mkhome_link .xinitrc "$FIX_REPO/linux/.xinitrc"
+  run_link_sess wayland --audit '.*Xmodmap'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x  .Xmodmap"* ]]
+  [[ "$output" != *"x  .xinitrc"* ]]
+}
+
+@test "context- multiple wanted contexts are listed in file order" {
+  fixture_new ctx_multictx
+  printf 'headless: .Xmodmap\n' >> "$FIX_REPO/link-context.txt"
+  run_link_sess wayland --yes
+  [ "$status" -eq 0 ]
+  mkhome_link .Xmodmap "$FIX_REPO/linux/.Xmodmap"
+  run_link_sess wayland --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x  .Xmodmap"* ]]
+  [[ "$output" == *"[neglected] wanted on: x11,headless"* ]]
+}
+
 # ============================================================= ignore- ===
 
 @test "ignore- an ignored entry is not linked" {
@@ -318,20 +385,34 @@ setup() {
   assert_link .config/foobar "$FIX_REPO/common/.config/foobar"  # exact-match only
 }
 
-@test "ignore- entry ADDED while still linked is not reported stale (Todo 3: i [ignored])" {
+@test "ignore- entry ADDED while still linked is reported i [ignored]" {
   fixture_new ig_added
   run_link --yes
   [ "$status" -eq 0 ]
   printf '.zshrc\n' >> "$FIX_REPO/link-ignore.txt"
-  # Three-way classification moves the live link out of `stale` into
-  # `ignored`; the audit has no report line for it yet. Todo 3 upgrades this
-  # to a positive `i  .zshrc  [ignored]` assertion (and exit 1).
   run_link --audit
-  [ "$status" -eq 0 ]
-  output_not_has_finding .zshrc
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"i  .zshrc"* ]]
+  [[ "$output" == *"[ignored] linked but listed in link-ignore.txt"* ]]
   run_link --yes
   [ "$status" -eq 0 ]
   assert_link .zshrc "$FIX_REPO/common/.zshrc"
+}
+
+@test "ignore- entry REMOVED with a correct link is silent" {
+  fixture_new ig_removed_linked
+  mkdir -p "$FIX_REPO/common/bin"
+  printf 'github\n' > "$FIX_REPO/common/bin/.github"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  assert_no_link bin/.github
+  mkhome_link bin/.github "$FIX_REPO/common/bin/.github"
+  grep -v '^bin/.github$' "$FIX_REPO/link-ignore.txt" > "$FIX_REPO/link-ignore.txt.tmp"
+  mv "$FIX_REPO/link-ignore.txt.tmp" "$FIX_REPO/link-ignore.txt"
+  run_link --audit
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Audit clean"* ]]
+  output_not_has_finding bin/.github
 }
 
 @test "ignore- ignored but dangling link is still reported stale ([ ! -e ] wins)" {
@@ -583,6 +664,28 @@ setup() {
   output_has_finding .hushlogin
   [[ "$output" == *"-  .hushlogin"* ]]
   [[ "$output" == *"stale link"* ]]
+}
+
+@test "audit- ignored-but-linked file is reported i [ignored] (exit 1)" {
+  fixture_new au_ignored
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf '.zshrc\n' >> "$FIX_REPO/link-ignore.txt"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"i  .zshrc"* ]]
+  [[ "$output" == *"[ignored] linked but listed in link-ignore.txt"* ]]
+}
+
+@test "audit- session-neglected link is reported x [neglected] (exit 1)" {
+  fixture_new au_neglinked
+  run_link_sess wayland --yes
+  [ "$status" -eq 0 ]
+  mkhome_link .Xmodmap "$FIX_REPO/linux/.Xmodmap"
+  run_link_sess wayland --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x  .Xmodmap"* ]]
+  [[ "$output" == *"[neglected] wanted on: x11"* ]]
 }
 
 @test "audit- new real file inside a linked dir is [unlinked] (exit 1)" {
