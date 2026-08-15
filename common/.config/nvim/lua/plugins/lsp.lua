@@ -31,21 +31,6 @@ return {
         end,
       },
 
-      {
-        'ThePrimeagen/refactoring.nvim',
-        dependencies = {
-          'nvim-lua/plenary.nvim',
-          'nvim-treesitter/nvim-treesitter',
-        },
-        config = function()
-          require('refactoring').setup {}
-          require('telescope').load_extension 'refactoring'
-
-          vim.keymap.set({ 'n', 'x' }, ';rr', require('telescope').extensions.refactoring.refactors,
-            { desc = 'LSP: Refactor (telescope)' })
-        end,
-      },
-
       -- Additional lua configuration!
       'folke/neodev.nvim',
 
