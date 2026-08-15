@@ -6,5 +6,7 @@
 # line. No globs. Relpath is relative to common/, linux/ or macos/.
 # This filter cannot be overridden by a filtering pattern; edit this file
 # to change it.
+# A file that is still linked but neglected for the current session is
+# reported by --audit as `x [neglected]` and removed by --fix.
 x11: .Xmodmap
 x11: .xinitrc

@@ -6,6 +6,8 @@
 # Each entry is a path relative to common/, linux/ or macos/.
 # A directory entry excludes its whole subtree. No globs.
 # Comments and blank lines must be on their own line.
+# An entry added while its file is still linked is reported by --audit as
+# `i [ignored]` and removed by --fix.
 
 # repo tooling for the bin/ scripts, not a dotfile
 bin/.github

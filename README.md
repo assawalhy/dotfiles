@@ -45,11 +45,12 @@ will do, and asks before touching anything.
 
 ```
 USAGE:
-  link-files.bash [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [--diff] [filtering_pattern]
+  link-files.bash [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [--diff] [--fix] [filtering_pattern]
   link-files.bash --force '.*nvim/lua.*'
   link-files.bash --refresh --dry-run
   link-files.bash --audit
   link-files.bash --diff --dry-run
+  link-files.bash --fix --dry-run
 
 OPTIONS:
   -h, --help      show this message and exit
@@ -73,6 +74,10 @@ OPTIONS:
                   neglected for the current session context
                   (wayland/x11/headless), same as linking. Exit 0 = clean,
                   1 = findings; never writes, no picker, no prompt
+      --fix       complete linking: remove stale, ignored and session-neglected
+                  links, link missing files, relink and resolve conflicts
+                  (implies --force); cannot be combined with --audit or
+                  --refresh
   <pattern>       extended regex; only paths matching it are considered
 ```
 
@@ -173,6 +178,8 @@ Every candidate path falls into one of these:
 | `-` | a symlink into this repo that is no longer wanted; will be removed | no |
 | `~` | a conflict being resolved by `--force` | yes |
 | `!` | a conflict — a real file, or a symlink pointing outside this repo | yes |
+| `i` | ignored by `link-ignore.txt` but still linked; removed by `--fix` | no |
+| `x` | neglected for the current session but still linked; removed by `--fix` | no |
 
 Real files are never deleted. Under `--force` they are moved to
 `<file>.bak.<timestamp>` first, unless `--no-backup` is given, which deletes
@@ -191,6 +198,23 @@ definition.
 
 Stale links (`-`) are only ever removed when they point *into this repo*.
 Unrelated symlinks in `$HOME` are left alone.
+
+### Completing the link state (`--fix`)
+
+`--fix` is the write counterpart of `--audit`: it completes linking and
+prunes what should not be linked. It links missing files, relinks
+wrong-source symlinks, resolves conflicts (backing up real files to
+`<file>.bak.<timestamp>`), and removes stale links, links ignored by
+`link-ignore.txt` (reported as `i [ignored]`) and links neglected for
+the current session context (reported as `x [neglected]`). It implies
+`--force`, never opens the picker, and cannot be combined with `--audit`
+or `--refresh`. `--dry-run` previews every change with the same markers
+as a normal run.
+
+```sh
+link-files.bash --fix --dry-run   # preview what would change
+link-files.bash --fix             # complete linking and prune
+```
 
 ## Installing programs
 
