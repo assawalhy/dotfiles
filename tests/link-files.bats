@@ -815,6 +815,131 @@ setup() {
   [[ "$output" == *"--reverse was removed"* ]]
 }
 
+# ================================================================ fix- ===
+
+@test "fix- six-state resolution: missing, wrong-source, conflict, stale, ignored, neglinked" {
+  fixture_new fx_six
+  run_link --yes
+  [ "$status" -eq 0 ]
+  # missing: a repo file with no home link yet
+  printf 'new\n' > "$FIX_REPO/common/.newfile"
+  # wrong-source: ~/.tmux.conf now points at the wrong repo file
+  rm -f "$FIX_HOME/.tmux.conf"
+  mkhome_link .tmux.conf "$FIX_REPO/common/.zshrc"
+  # conflict: a real file at a repo path
+  rm -f "$FIX_HOME/.config/mpv/mpv.conf"
+  printf 'MYDATA\n' > "$FIX_HOME/.config/mpv/mpv.conf"
+  # stale: dangling link, repo file deleted
+  rm "$FIX_REPO/common/.config/nvim/init.lua"
+  # ignored: entry added to link-ignore.txt while still linked
+  printf '.config/shell/os.sh\n' >> "$FIX_REPO/link-ignore.txt"
+  # neglinked: ~/.Xmodmap linked while on wayland
+  mkhome_link .Xmodmap "$FIX_REPO/linux/.Xmodmap"
+
+  run_link_sess wayland --fix --yes
+  [ "$status" -eq 0 ]
+  # missing -> created
+  assert_link .newfile "$FIX_REPO/common/.newfile"
+  # wrong-source -> relinked
+  assert_link .tmux.conf "$FIX_REPO/common/.tmux.conf"
+  # conflict -> backed up and linked
+  assert_link .config/mpv/mpv.conf "$FIX_REPO/common/.config/mpv/mpv.conf"
+  [ -f "$FIX_HOME/.config/mpv/mpv.conf.bak."* ]
+  cmp "$FIX_HOME/.config/mpv/mpv.conf.bak."* <(printf 'MYDATA\n')
+  # stale -> removed
+  assert_no_link .config/nvim/init.lua
+  # ignored -> removed
+  assert_no_link .config/shell/os.sh
+  # neglinked -> removed
+  assert_no_link .Xmodmap
+
+  # re-audit clean
+  run_link_sess wayland --audit
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Audit clean"* ]]
+}
+
+@test "fix- dry-run previews all six markers and changes nothing" {
+  fixture_new fx_dry
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'new\n' > "$FIX_REPO/common/.newfile"
+  rm -f "$FIX_HOME/.tmux.conf"
+  mkhome_link .tmux.conf "$FIX_REPO/common/.zshrc"
+  rm -f "$FIX_HOME/.config/mpv/mpv.conf"
+  printf 'MYDATA\n' > "$FIX_HOME/.config/mpv/mpv.conf"
+  rm "$FIX_REPO/common/.config/nvim/init.lua"
+  printf '.config/shell/os.sh\n' >> "$FIX_REPO/link-ignore.txt"
+  mkhome_link .Xmodmap "$FIX_REPO/linux/.Xmodmap"
+  cp -a "$FIX_HOME" "$BATS_TEST_TMPDIR/home.snap"
+
+  run_link_sess wayland --fix --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"+  .newfile"* ]]              # missing
+  [[ "$output" == *"*  .tmux.conf"* ]]            # wrong-source
+  [[ "$output" == *"~  .config/mpv/mpv.conf"* ]]  # conflict (--fix implies --force)
+  [[ "$output" == *"-  .config/nvim/init.lua"* ]] # stale
+  [[ "$output" == *"i  .config/shell/os.sh"* ]]   # ignored
+  [[ "$output" == *"x  .Xmodmap"* ]]              # neglinked
+  # --no-dereference: the stale fixture link is dangling, plain diff -rq
+  # would fail to stat its missing target
+  run diff -rq --no-dereference "$BATS_TEST_TMPDIR/home.snap" "$FIX_HOME"
+  [ "$status" -eq 0 ]
+}
+
+@test "fix- --fix --audit exits 1 with the exclusivity error" {
+  fixture_new fx_excl_audit
+  run_link --fix --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"error: --fix cannot be combined with --audit or --refresh"* ]]
+}
+
+@test "fix- --fix --refresh exits 1 with the exclusivity error" {
+  fixture_new fx_excl_refresh
+  run_link --fix --refresh
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"error: --fix cannot be combined with --audit or --refresh"* ]]
+}
+
+@test "fix- a pattern narrows the fix to matching paths" {
+  fixture_new fx_pattern
+  run_link --yes
+  [ "$status" -eq 0 ]
+  rm "$FIX_REPO/common/.zshrc" "$FIX_REPO/common/.tmux.conf"
+  run_link --fix --yes '.*zshrc.*'
+  [ "$status" -eq 0 ]
+  assert_no_link .zshrc          # stale, matched -> removed
+  [ -L "$FIX_HOME/.tmux.conf" ]  # stale, not matched -> left dangling
+}
+
+@test "fix- never opens the picker (one stdin line reaches the confirm prompt)" {
+  fixture_new fx_nopicker
+  # if the picker opened it would consume the 'y' and confirm would read EOF
+  # (exit 1, nothing linked); reaching the confirm prompt proves no picker
+  run_link_stdin $'y\n' --fix
+  [ "$status" -eq 0 ]
+  assert_link .zshrc "$FIX_REPO/common/.zshrc"
+  assert_link .tmux.conf "$FIX_REPO/common/.tmux.conf"
+}
+
+@test "fix- --no-backup on a directory conflict still refuses" {
+  fixture_new fx_dir
+  mkdir -p "$FIX_HOME/.config/nvim/init.lua"
+  run_link --fix --no-backup --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot replace a directory"* ]]
+}
+
+@test "fix- implies --force: a real-file conflict is backed up without --force" {
+  fixture_new fx_force
+  printf 'MYDATA\n' > "$FIX_HOME/.zshrc"
+  run_link --fix --yes
+  [ "$status" -eq 0 ]
+  assert_link .zshrc "$FIX_REPO/common/.zshrc"
+  [ -f "$FIX_HOME/.zshrc.bak."* ]
+  cmp "$FIX_HOME/.zshrc.bak."* <(printf 'MYDATA\n')
+}
+
 # ============================================================== guard- ===
 
 @test "guard- a dir symlink resolving inside the repo is refused" {

@@ -43,15 +43,16 @@ STAMP="$(date +%Y%m%d%H%M%S)"
 
 # --------------------------------------------------------------- cli ---
 
-is_help=; is_force=; is_no_backup=; is_dry=; is_yes=; is_refresh=; is_audit=; is_diff=; filter=; pattern_given=
+is_help=; is_force=; is_no_backup=; is_dry=; is_yes=; is_refresh=; is_audit=; is_diff=; is_fix=; filter=; pattern_given=
 
 print_help() {
 cat <<EOF
 USAGE:
-  $(basename "$0") [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [--diff] [filtering_pattern]
+  $(basename "$0") [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [--diff] [--fix] [filtering_pattern]
   $(basename "$0") --force '.*nvim/lua.*'
   $(basename "$0") --refresh --dry-run
   $(basename "$0") --audit
+  $(basename "$0") --fix --dry-run
 
 Symlinks $COMMON and $OSDIR into \$HOME.
 Detected OS: $OS
@@ -78,6 +79,10 @@ OPTIONS:
                   neglected for the current session context
                   (wayland/x11/headless), same as linking. Exit 0 = clean,
                   1 = findings; never writes, no picker, no prompt
+      --fix       complete linking: remove stale, ignored and session-neglected
+                  links, link missing files, relink and resolve conflicts
+                  (implies --force); cannot be combined with --audit or
+                  --refresh
   <pattern>       extended regex; only paths matching it are considered
 
 INTERACTIVE SELECTION:
@@ -94,6 +99,8 @@ MARKERS IN THE PREVIEW:
   ~  conflict resolved via --force (existing file is backed up first)
   !  conflict -- needs --force
   -  stale link into this repo, will be removed
+  i  ignored by link-ignore.txt but still linked; removed by --fix
+  x  neglected for the current session but still linked; removed by --fix
 EOF
 }
 
@@ -106,6 +113,7 @@ parse_args() {
       -y|--yes)     is_yes=1;   continue ;;
       --refresh)    is_refresh=1; continue ;;
       --audit)      is_audit=1;   continue ;;
+      --fix)        is_fix=1; is_force=1; continue ;;
       --no-backup)  is_no_backup=1; continue ;;
       --diff)       is_diff=1;      continue ;;
       -r|--reverse)
@@ -126,6 +134,10 @@ parse_args() {
   if [ -n "$is_help" ]; then print_help; exit 0; fi
   if [ -n "$is_no_backup" ] && [ -z "$is_force" ]; then
     printf 'error: --no-backup requires --force\n' >&2
+    exit 1
+  fi
+  if [ -n "$is_fix" ] && { [ -n "$is_audit" ] || [ -n "$is_refresh" ]; }; then
+    printf 'error: --fix cannot be combined with --audit or --refresh\n' >&2
     exit 1
   fi
   [ -n "$filter" ] || filter='.*'
@@ -718,6 +730,12 @@ preview() {
   for ((i = 0; i < ${#stale[@]}; i++)); do
     printf -- '-  %-44s %s\n' "${stale[$i]#$HOME/}" 'stale link'
   done
+  for ((i=0; i<${#ignored[@]}; i++)); do
+    printf -- 'i  %-44s %s\n' "${ignored[$i]#$HOME/}" '[ignored] linked but listed in link-ignore.txt'
+  done
+  for ((i=0; i<${#neglinked_rel[@]}; i++)); do
+    printf -- 'x  %-44s %s\n' "${neglinked_rel[$i]}" "[neglected] wanted on: ${neglinked_ctx[$i]}"
+  done
   for ((i = 0; i < ${#new_rel[@]}; i++)); do
     printf -- '+  %-44s %s\n' "${new_rel[$i]}" "$(tag_of "${new_src[$i]}")"
   done
@@ -736,7 +754,7 @@ preview() {
 
 confirm() {
   local actionable
-  actionable=$(( ${#stale[@]} + ${#new_rel[@]} + ${#soft_rel[@]} ))
+  actionable=$(( ${#stale[@]} + ${#new_rel[@]} + ${#soft_rel[@]} + ${#ignored[@]} + ${#neglinked_rel[@]} ))
   [ -n "$is_force" ] && actionable=$(( actionable + ${#hard_rel[@]} ))
 
   if [ "$actionable" -eq 0 ]; then
@@ -757,6 +775,13 @@ confirm() {
   [ "$n_same" -gt 0 ] && printf '   (%d link(s) already correct)\n' "$n_same"
   if [ -z "$is_force" ] && [ ${#hard_rel[@]} -gt 0 ]; then
     printf '   %d conflict(s) skipped -- re-run with --force\n' "${#hard_rel[@]}"
+  fi
+  if [ -n "$is_fix" ] && [ ${#hard_rel[@]} -gt 0 ]; then
+    printf '   %d conflict(s) will be resolved (backed up)\n' "${#hard_rel[@]}"
+  fi
+  if [ -n "$is_fix" ]; then
+    [ ${#ignored[@]} -gt 0 ] && printf '   %d ignored link(s) will be removed\n' "${#ignored[@]}"
+    [ ${#neglinked_rel[@]} -gt 0 ] && printf '   %d session-neglected link(s) will be removed\n' "${#neglinked_rel[@]}"
   fi
   echo
 
@@ -820,6 +845,18 @@ apply() {
     printf -- '-> rm %s\n' "${stale[$i]}"
     rm -f "${stale[$i]}"
   done
+  # ignored/neglinked links are pruned only by --fix; a normal run preserves
+  # them (they are still valid links, just unwanted for this session/ignore set)
+  if [ -n "$is_fix" ]; then
+    for ((i=0; i<${#ignored[@]}; i++)); do
+      printf -- '-> rm %s\n' "${ignored[$i]#$HOME/}"
+      rm -f "${ignored[$i]}"
+    done
+    for ((i=0; i<${#neglinked_rel[@]}; i++)); do
+      printf -- '-> rm %s\n' "${neglinked_rel[$i]}"
+      rm -f "$HOME/${neglinked_rel[$i]}"
+    done
+  fi
   for ((i = 0; i < ${#new_rel[@]}; i++)); do
     printf -- '-> ln -s %s\n' "${new_rel[$i]}"
     link_one "${new_src[$i]}" "$HOME/${new_rel[$i]}" 0
@@ -843,9 +880,9 @@ read_ignores
 read_contexts
 collect
 # The picker chooses which repo files to link out; capture/report modes
-# (--refresh, --audit) never open it.
+# (--refresh, --audit) and --fix never open it.
 if [ -z "$is_dry" ] && [ -z "$is_yes" ] && [ -z "$pattern_given" ] \
-  && [ -z "$is_refresh" ] && [ -z "$is_audit" ]; then
+  && [ -z "$is_refresh" ] && [ -z "$is_audit" ] && [ -z "$is_fix" ]; then
   picker
 fi
 if [ -n "$is_refresh" ]; then
@@ -857,6 +894,11 @@ fi
 classify
 find_stale
 find_neglinked
+if [ -n "$is_fix" ]; then
+  confirm
+  apply
+  exit 0
+fi
 if [ -n "$is_audit" ]; then
   refresh_scan
   audit
