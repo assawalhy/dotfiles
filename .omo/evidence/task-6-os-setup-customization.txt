@@ -1,0 +1,42 @@
+=== Task 6: setup/steps/ opencode + claude-code native-installer steps ===
+Date: 2026-08-14T16:41:55+03:00
+
+--- 1. Syntax check (bash -n) ---
+SYNTAX-OK (exit 0)
+
+--- 2. Executable bits (stat) ---
+-rwxr-xr-x setup/steps/61-opencode.sh
+-rwxr-xr-x setup/steps/62-claude-code.sh
+
+--- 3. Rows present under ./setup-os --list ---
+step       opencode (AI coding agent) step     /home/ms/myp/dotfiles/setup/steps/61-opencode.sh
+step       claude code (AI coding agent) step     /home/ms/myp/dotfiles/setup/steps/62-claude-code.sh
+
+--- 4. Manager column of the two rows is 'step' ---
+NOTE: --list (line 335) prints the tab-separated TMP as fixed-width columns:
+  printf '%-10s %-22s %-8s %s' GROUP ID MANAGER PACKAGE
+The ID column overflows 22 chars (desc contains spaces), so parse by
+positional fields instead: GROUP=$1, MANAGER=$(NF-1) (token before path).
+GROUP=step  MANAGER=step  path=/home/ms/myp/dotfiles/setup/steps/61-opencode.sh
+GROUP=step  MANAGER=step  path=/home/ms/myp/dotfiles/setup/steps/62-claude-code.sh
+
+--- 5. Failure-mode proof: --list never runs the installers ---
+Evidence (setup-os source):
+  * resolve_steps() (lines 214-228) reads ONLY the '# os:' and '# desc:' headers
+    via sed - it never sources/executes the step body.
+  * --list branch (lines 333-337): prints 'GROUP ID MANAGER PACKAGE' table then
+    'exit 0' - it never reaches step_done()/picker (line 343-344) nor the
+    install phase, so no curl installer can run.
+  * command -v on this machine (binaries pre-exist from earlier manual installs):
+/home/ms/.bun/bin/opencode
+/home/ms/.local/bin/claude
+  * Therefore the 'curl | bash' installers were NOT executed by --list;
+    binary presence here proves nothing either way - the code path proves it.
+  * (done) hiding: impossible under --list - 'exit 0' at line 337 happens
+    before the step_done() ' (done)' eval at line 344.
+  * --dry-run --priority p1 DEFERRED to final wave: the --priority flag is
+    added by todo 3 (wave 3); PRIORITY column added by todo 2 (wave 2).
+
+--- 6. New files created ---
+setup/steps/61-opencode.sh  169B
+setup/steps/62-claude-code.sh  171B

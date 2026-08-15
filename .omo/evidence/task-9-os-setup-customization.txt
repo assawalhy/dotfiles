@@ -1,0 +1,33 @@
+Task 9 - README: document priority tiers and interactive linking (Sisyphus, 2026-08-14)
+Commit: 92f956c "README: document priority tiers and interactive linking" (only README.md staged)
+
+Acceptance greps (run in repo root):
+$ grep -q -- '--priority' README.md && grep -q -- 'p1' README.md
+PASS (both matched)
+
+$ grep -qi 'starts with everything selected' README.md
+PASS (human phrasing present: "fzf 0.48 and newer starts with everything selected")
+
+$ grep -q 'no longer needs node\|no node' README.md
+PASS ("The linker no longer needs node: the path listing is a bash script now.")
+
+Fence balance:
+$ grep -c '^```' README.md
+12  (even => balanced; no new code fences added, only lines inside existing blocks)
+
+Visual check (read-based):
+- read README.md lines 36-80: "Linking" usage block (USAGE: link-files.bash [--help]
+  [--force] [--dry-run] [--yes] [filtering_pattern]) and the 4 example invocations
+  are byte-identical to the pre-edit file. New "### Interactive selection" section
+  added between the examples and "### What gets linked": [group] labels, type to
+  filter, CTRL-A/CTRL-D/TAB, fzf >=0.48 starts with everything selected, fallback
+  numbered menu with a/n, picker skipped by <pattern>/--dry-run/--yes, no-node note.
+- read README.md lines 118-187: "Installing programs" usage block extended with
+  ./setup-os --priority p1 -y and ./setup-os --priority p1,p2; tier table p1-p4
+  (p1 SSH essentials + agents, p2 dev workstation, p3 GUI, p4 occasional);
+  --priority prose (repeatable, comma-separated, skips picker, beats --all);
+  packages.list example gained `zsh p1` line + prose on bare pN token and p4
+  default; steps bullet documents # prio: header; rustup auto-run note added.
+- No em/en dashes introduced; no other sections (Layout, Conflicts, Caveats,
+  License, What gets linked) touched. markdownlint-cli2 not installed; skipped
+  per plan (informational only).

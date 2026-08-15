@@ -1,0 +1,185 @@
+{
+  "schema_version": 2,
+  "active_work_id": "link-refresh-audit-f3c78fcb",
+  "works": {
+    "link-refresh-audit-f3c78fcb": {
+      "work_id": "link-refresh-audit-f3c78fcb",
+      "active_plan": "/home/ms/myp/dotfiles/.omo/plans/link-refresh-audit.md",
+      "plan_name": "link-refresh-audit",
+      "status": "completed",
+      "started_at": "2026-08-14T20:59:35.679Z",
+      "updated_at": "2026-08-14T21:52:42.802Z",
+      "session_ids": [
+        "opencode:ses_00ddf4af8ffeZnpdT6J6zlib6H",
+        "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4",
+        "opencode:ses_ffdc7fed8ffe7GKbpHAXP332XT",
+        "opencode:ses_ffdc7987cffe3pkTb18HtMPAcf",
+        "opencode:ses_ffdc772bdffeNGgGNmlZkuFPju"
+      ],
+      "session_origins": {
+        "opencode:ses_00ddf4af8ffeZnpdT6J6zlib6H": "direct",
+        "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4": "appended",
+        "opencode:ses_ffdc7fed8ffe7GKbpHAXP332XT": "appended",
+        "opencode:ses_ffdc7987cffe3pkTb18HtMPAcf": "appended",
+        "opencode:ses_ffdc772bdffeNGgGNmlZkuFPju": "appended"
+      },
+      "agent": "atlas",
+      "task_sessions": {
+        "todo:1": {
+          "task_key": "todo:1",
+          "task_label": "1",
+          "task_title": "`link-files.bash`: add `--refresh` — capture new files that appeared inside linked dirs into the repo and symlink them back",
+          "session_id": "opencode:ses_ffdebb52cffep36gE3b6h4fhO6",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-14T21:13:24.020Z",
+          "started_at": "2026-08-14T21:11:26.238Z",
+          "status": "completed",
+          "ended_at": "2026-08-14T21:13:24.020Z",
+          "elapsed_ms": 117782
+        },
+        "todo:2": {
+          "task_key": "todo:2",
+          "task_label": "2",
+          "task_title": "`link-files.bash` + `link-context.txt`: add `--audit` — read-only link-drift report with session-context neglect",
+          "session_id": "opencode:ses_ffde010adffef9vh0XmR42QNAH",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-14T21:26:02.781Z",
+          "started_at": "2026-08-14T21:23:21.619Z",
+          "status": "completed",
+          "ended_at": "2026-08-14T21:26:02.781Z",
+          "elapsed_ms": 161162
+        },
+        "todo:3": {
+          "task_key": "todo:3",
+          "task_label": "3",
+          "task_title": "`link-files.bash`: add `--no-backup` — skip `.bak.$STAMP` creation under `--force`",
+          "session_id": "opencode:ses_ffdd46583ffel94U7kWILGBah0",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-14T21:32:15.837Z",
+          "started_at": "2026-08-14T21:31:39.328Z",
+          "status": "completed",
+          "ended_at": "2026-08-14T21:32:15.837Z",
+          "elapsed_ms": 36509
+        },
+        "todo:4": {
+          "task_key": "todo:4",
+          "task_label": "4",
+          "task_title": "`README.md`: document `--refresh`, `--audit` and `--no-backup`",
+          "session_id": "opencode:ses_ffdcee6f1ffefAHlDNQW5MCdZH",
+          "agent": "Sisyphus-Junior",
+          "started_at": "2026-08-14T21:35:58.762Z",
+          "status": "completed",
+          "updated_at": "2026-08-14T21:39:24.878Z",
+          "ended_at": "2026-08-14T21:39:24.878Z",
+          "elapsed_ms": 206116
+        },
+        "final-wave:f1": {
+          "task_key": "final-wave:f1",
+          "task_label": "F1",
+          "task_title": "Plan compliance audit - check every todo: all 4 done with evidence files present. Re-run the acceptance greps/commands per todo against the committed state (fixture commands from each todo's QA). `bash -n link-files.bash` clean. `--help` shows all three flags.",
+          "session_id": "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "started_at": "2026-08-14T21:48:05.938Z",
+          "status": "completed",
+          "updated_at": "2026-08-14T21:51:45.227Z",
+          "ended_at": "2026-08-14T21:51:45.227Z",
+          "elapsed_ms": 219289
+        }
+      },
+      "ended_at": "2026-08-14T21:52:42.802Z",
+      "elapsed_ms": 3187123
+    }
+  },
+  "active_plan": "/home/ms/myp/dotfiles/.omo/plans/link-refresh-audit.md",
+  "started_at": "2026-08-14T20:59:35.679Z",
+  "status": "completed",
+  "updated_at": "2026-08-14T21:52:42.802Z",
+  "session_ids": [
+    "opencode:ses_00ddf4af8ffeZnpdT6J6zlib6H",
+    "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4",
+    "opencode:ses_ffdc7fed8ffe7GKbpHAXP332XT",
+    "opencode:ses_ffdc7987cffe3pkTb18HtMPAcf",
+    "opencode:ses_ffdc772bdffeNGgGNmlZkuFPju"
+  ],
+  "session_origins": {
+    "opencode:ses_00ddf4af8ffeZnpdT6J6zlib6H": "direct",
+    "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4": "appended",
+    "opencode:ses_ffdc7fed8ffe7GKbpHAXP332XT": "appended",
+    "opencode:ses_ffdc7987cffe3pkTb18HtMPAcf": "appended",
+    "opencode:ses_ffdc772bdffeNGgGNmlZkuFPju": "appended"
+  },
+  "plan_name": "link-refresh-audit",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "`link-files.bash`: add `--refresh` — capture new files that appeared inside linked dirs into the repo and symlink them back",
+      "session_id": "opencode:ses_ffdebb52cffep36gE3b6h4fhO6",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-14T21:13:24.020Z",
+      "started_at": "2026-08-14T21:11:26.238Z",
+      "status": "completed",
+      "ended_at": "2026-08-14T21:13:24.020Z",
+      "elapsed_ms": 117782
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "`link-files.bash` + `link-context.txt`: add `--audit` — read-only link-drift report with session-context neglect",
+      "session_id": "opencode:ses_ffde010adffef9vh0XmR42QNAH",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-14T21:26:02.781Z",
+      "started_at": "2026-08-14T21:23:21.619Z",
+      "status": "completed",
+      "ended_at": "2026-08-14T21:26:02.781Z",
+      "elapsed_ms": 161162
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "`link-files.bash`: add `--no-backup` — skip `.bak.$STAMP` creation under `--force`",
+      "session_id": "opencode:ses_ffdd46583ffel94U7kWILGBah0",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-14T21:32:15.837Z",
+      "started_at": "2026-08-14T21:31:39.328Z",
+      "status": "completed",
+      "ended_at": "2026-08-14T21:32:15.837Z",
+      "elapsed_ms": 36509
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "`README.md`: document `--refresh`, `--audit` and `--no-backup`",
+      "session_id": "opencode:ses_ffdcee6f1ffefAHlDNQW5MCdZH",
+      "agent": "Sisyphus-Junior",
+      "started_at": "2026-08-14T21:35:58.762Z",
+      "status": "completed",
+      "updated_at": "2026-08-14T21:39:24.878Z",
+      "ended_at": "2026-08-14T21:39:24.878Z",
+      "elapsed_ms": 206116
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "Plan compliance audit - check every todo: all 4 done with evidence files present. Re-run the acceptance greps/commands per todo against the committed state (fixture commands from each todo's QA). `bash -n link-files.bash` clean. `--help` shows all three flags.",
+      "session_id": "opencode:ses_ffdc861c9ffeJYUJjd03PViNJ4",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "started_at": "2026-08-14T21:48:05.938Z",
+      "status": "completed",
+      "updated_at": "2026-08-14T21:51:45.227Z",
+      "ended_at": "2026-08-14T21:51:45.227Z",
+      "elapsed_ms": 219289
+    }
+  },
+  "agent": "atlas",
+  "ended_at": "2026-08-14T21:52:42.802Z",
+  "elapsed_ms": 3187123
+}

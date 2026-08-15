@@ -1,0 +1,192 @@
+=====================================================================
+TASK 8 EVIDENCE — link-files.bash interactive picker
+(select/deselect-all shortcuts, fzf + numbered fallback)
+Date: 2026-08-14   Repo: /home/ms/myp/dotfiles
+=====================================================================
+
+Environment:
+  fzf --version                    -> 0.44.1 (debian)   (< 0.48, no start event)
+  command -v tmux                  -> /usr/bin/tmux
+  command -v fzf                   -> /usr/bin/fzf
+  rm -f "" exit code               -> 0 (trap-safe with unset temp vars)
+  Baseline (T7): 69 linkable entries (common + linux overlay).
+
+File modified: link-files.bash ONLY (151 insertions, 3 deletions).
+  - parse_args: pattern_given=1 when a positional pattern is read.
+  - print_help: INTERACTIVE SELECTION paragraph added.
+  - collect(): trap extended with $menu, $PICKED_LINKS, $merged.tmp.
+  - New picker section: fzf_ge (3.2-safe version compare), picker_bind
+    (start:select-all only for fzf >= 0.48), menu_fallback + expand_selection
+    (adapted from setup-os: menu read from file arg so stdin stays free for
+    the selection read; empty = ALL, 'n' = none, 'a' = all, numbers/ranges;
+    /dev/tty prompt guarded with 2>/dev/null >/dev/tty || true for headless),
+    picker (grouped menu via awk, gate `[ -t 0 ] && command -v fzf` INSIDE
+    picker, narrow $merged + rebuild $mdirs from picked relpaths).
+  - main: picker runs only when [ -z is_dry ] && [ -z is_yes ] && [ -z pattern_given ].
+
+---------------------------------------------------------------------
+ACCEPTANCE 1: bash -n
+---------------------------------------------------------------------
+$ bash -n link-files.bash && echo "bash -n OK"
+bash -n OK
+
+---------------------------------------------------------------------
+ACCEPTANCE 2: piped stdin -> numbered fallback, '1 2' + 'y'
+---------------------------------------------------------------------
+$ rm -rf /tmp/opencode/fakehome1; mkdir -p /tmp/opencode/fakehome1
+$ printf '1 2\ny\n' | HOME=/tmp/opencode/fakehome1 ./link-files.bash 2>&1
++  .Xmodmap                                     [linux]
++  .config/git/os.gitconfig                     [linux]
+
+   common + linux  ->  /tmp/opencode/fakehome1
+
+-> ln -s .Xmodmap
+-> ln -s .config/git/os.gitconfig
+rc=0
+$ find /tmp/opencode/fakehome1 -type l | wc -l
+2
+$ find /tmp/opencode/fakehome1 -type l -exec readlink {} \;
+/home/ms/myp/dotfiles/linux/.config/git/os.gitconfig
+/home/ms/myp/dotfiles/linux/.Xmodmap
+PASS: exactly the first two menu entries linked, both into the repo.
+(Note: /dev/tty has no controlling terminal in this runner; the menu
+display write is guarded with `2>/dev/null >/dev/tty || true` so the
+diagnostic is suppressed and the selection read takes the pipe.)
+
+---------------------------------------------------------------------
+ACCEPTANCE 3: 'n' -> Nothing selected, exit 0, no links
+---------------------------------------------------------------------
+$ rm -rf /tmp/opencode/fakehome1; mkdir -p /tmp/opencode/fakehome1
+$ printf 'n\n' | HOME=/tmp/opencode/fakehome1 ./link-files.bash 2>&1
+Nothing selected.
+rc=0
+$ find /tmp/opencode/fakehome1 -type l | wc -l
+0
+PASS.
+
+---------------------------------------------------------------------
+ACCEPTANCE 4: empty answer -> ALL (69 links)
+---------------------------------------------------------------------
+$ rm -rf /tmp/opencode/fakehome2; mkdir -p /tmp/opencode/fakehome2
+$ printf '\ny\n' | HOME=/tmp/opencode/fakehome2 ./link-files.bash >/tmp/opencode/t4.out 2>&1
+rc=0
+$ find /tmp/opencode/fakehome2 -type l | wc -l
+69
+$ find /tmp/opencode/fakehome2 -type l | sed 's#/tmp/opencode/fakehome2/##' | sort | wc -l
+69
+$ find /tmp/opencode/fakehome2 -type l -exec readlink {} \; | grep -v '^/home/ms/myp/dotfiles/' | wc -l
+0
+PASS: all 69 linkable entries, none pointing outside the repo.
+
+---------------------------------------------------------------------
+ACCEPTANCE 5: fzf_ge version probe (bash 3.2-safe, no <<<, no sort -V)
+---------------------------------------------------------------------
+$ printf '#!/bin/sh\necho 0.47.0\n' > /tmp/opencode/fakebin/fzf; chmod +x /tmp/opencode/fakebin/fzf
+$ PATH=/tmp/opencode/fakebin:$PATH bash -c \
+    'source <(sed -n "/^fzf_ge/,/^}/p" link-files.bash); fzf_ge 0.48 || echo OLD'
+OLD
+$ printf '#!/bin/sh\necho 0.48.1\n' > /tmp/opencode/fakebin/fzf; chmod +x /tmp/opencode/fakebin/fzf
+$ PATH=/tmp/opencode/fakebin:$PATH bash -c \
+    'source <(sed -n "/^fzf_ge/,/^}/p" link-files.bash); fzf_ge 0.48 || echo OLD'
+(no output)
+exit 0
+PASS: 0.47.0 < 0.48 -> OLD; 0.48.1 >= 0.48 -> silent, exit 0.
+
+---------------------------------------------------------------------
+SKIP GATES (behavior preserved: no picker on --dry-run/--yes/pattern)
+---------------------------------------------------------------------
+$ HOME=/tmp/opencode/fakehome1 ./link-files.bash --dry-run   # rc=0, 0 links
+$ HOME=/tmp/opencode/fakehome1 ./link-files.bash --yes       # rc=0, 69 links
+$ printf 'y\n' | HOME=/tmp/opencode/fakehome1 ./link-files.bash '.*nvim/lua.*'
+  -> rc=0, 9 links (.config/nvim/lua/plugins/*.lua), "Nothing selected" count 0
+PASS: picker skipped on all three; filtering/confirm unchanged.
+
+---------------------------------------------------------------------
+ACCEPTANCE 6: tmux-driven interactive fzf (real fzf 0.44.1)
+---------------------------------------------------------------------
+$ tmux new-session -d -s t8qa -x 200 -y 50
+$ tmux send-keys -t t8qa "cd /home/ms/myp/dotfiles && HOME=/tmp/opencode/fakehome3 ./link-files.bash" Enter
+Pane after start:
+  link>
+    69/69 (0)
+    TAB toggle · CTRL-A select all matches · CTRL-D deselect all · ENTER link
+  > [x11] .Xmodmap
+    [git] .config/git/os.gitconfig
+    [shell] .config/shell/os.sh
+    [zathura] .config/zathura/zathurarc
+    [shell] .profile
+(menu shows [group] labels as required)
+
+Run 1 (select-all path): send "nvim", C-a, C-u, Enter, then "y" Enter.
+  after "nvim":       link> nvim     13/69 (0)   [nvim] .config/nvim/.stylua.toml
+  after C-a:          link> nvim     13/69 (13)  >>[nvim] .config/nvim/.stylua.toml
+  after C-u:          link>          69/69 (13)  (query cleared, 13 kept)
+  after Enter: preview lists exactly the 13 nvim files
+  after "y" Enter: links created.
+
+$ find /tmp/opencode/fakehome3 -type l | sed 's#/tmp/opencode/fakehome3/##' | sort
+.config/nvim/.stylua.toml
+.config/nvim/init.lua
+.config/nvim/lazy-lock.json
+.config/nvim/lua/plugins/autoformat.lua
+.config/nvim/lua/plugins/cmp.lua
+.config/nvim/lua/plugins/competitest.lua
+.config/nvim/lua/plugins/dap.lua
+.config/nvim/lua/plugins/lsp.lua
+.config/nvim/lua/plugins/neotree.lua
+.config/nvim/lua/plugins/telescope.lua
+.config/nvim/lua/plugins/treesitter.lua
+.config/nvim/lua/plugins/ufo.lua
+.config/nvim/snippets/typescriptreact.snippets
+count: 13 ; non-nvim links: (none)
+PASS: ONLY nvim-related symlinks.
+
+Run 2 (deselect-all path): send "nvim", C-a, C-d, Enter.
+  Result: ONLY .config/nvim/.stylua.toml linked (the highlighted current
+  item); the other 12 matches were deselected by C-d.
+  Verified native fzf 0.44.1 behavior with a standalone probe:
+    $ printf 'a\nb\nc\n' | fzf --multi --bind 'ctrl-a:select-all,ctrl-d:deselect-all'
+      (send C-a, C-d, Enter) -> output: "a"
+  i.e. fzf --multi ALWAYS emits the current item on Enter even when every
+  mark is deselected. C-d deselect-all therefore works (13 -> 1); the
+  remaining link is fzf's native current-item semantics, not a script bug.
+  fakehome4 links: 1
+
+Run 3 (nothing-selected path): send "zzzznotamatch", Enter.
+  Pane: "Nothing selected." ; fakehome6 links: 0 ; rc=0
+PASS.
+
+tty-fallback menu (fzf hidden from PATH via shim /tmp/opencode/shim,
+which symlinks the script's external tools but NOT fzf):
+  $ tmux send-keys "PATH=/tmp/opencode/shim HOME=/tmp/opencode/fakehome5 \
+                    /home/ms/myp/dotfiles/link-files.bash" Enter
+  Pane shows the numbered menu grouped by [group] headers:
+    38) [mpv] .config/mpv/scripts/youtube-quality.lua
+    ---- nvim ----
+    39) [nvim] .config/nvim/.stylua.toml
+    40) [nvim] .config/nvim/init.lua
+    ...
+    ---- ranger ----
+    52) [ranger] .config/ranger/plugins/__init__.py
+    ...
+    ---- git ---- / ---- shell ---- / ---- tmux ---- ...
+  Select "39 40" Enter, then "y" Enter:
+$ find /tmp/opencode/fakehome5 -type l -exec readlink {} \;
+/home/ms/myp/dotfiles/common/.config/nvim/.stylua.toml
+/home/ms/myp/dotfiles/common/.config/nvim/init.lua
+count: 2
+PASS: tty + no-fzf takes the numbered fallback; /dev/tty selection read works.
+
+Cleanup: tmux kill-session -t t8qa (done). All test HOMEs under /tmp/opencode.
+
+---------------------------------------------------------------------
+TEMP-FILE HYGIENE
+---------------------------------------------------------------------
+$ ls /tmp/link-files.* -> (none)
+PASS: trap removes $merged $desired $mdirs $IGN_TMP $menu $PICKED_LINKS
+$merged.tmp on EXIT/INT/TERM/HUP (incl. the picker early-exit path).
+
+---------------------------------------------------------------------
+RESULTS: ALL ACCEPTANCE CRITERIA PASS (1-6).
+Real $HOME untouched. Commit: link-files.bash only.
+=====================================================================

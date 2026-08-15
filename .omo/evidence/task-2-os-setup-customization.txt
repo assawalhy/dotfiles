@@ -1,0 +1,39 @@
+=== task-2-os-setup-customization evidence (2026-08-14) ===
+File modified: setup-os (only)
+
+--- bash -n setup-os ---
+SYNTAX OK
+
+--- A1: --list header shows PRIORITY (cols: GROUP ID PRIORITY MANAGER PACKAGE) ---
+GROUP      ID                     PRIORITY MANAGER  PACKAGE
+terminal   git                    p1     apt      git
+terminal   zsh                    p1     apt      zsh
+
+--- A2: terminal/fzf resolves p1 ---
+terminal   fzf                    p1     apt      fzf
+
+--- A3: gui/obsidian resolves p3 ---
+gui        obsidian               p3     apt      obsidian
+
+--- A4: gui/okular resolves p3 (trailing-comment line) ---
+gui        okular                 p3     apt      okular
+
+--- A5: step rows show # prio: in column 3 ---
+step       paru (AUR helper)      p1     step     /home/ms/myp/dotfiles/setup/steps/02-paru.sh
+step       rust (rustup)          p1     step     /home/ms/myp/dotfiles/setup/steps/10-rustup.sh
+step       oh-my-zsh              p1     step     /home/ms/myp/dotfiles/setup/steps/20-oh-my-zsh.sh
+step       ranger devicons plugin p2     step     /home/ms/myp/dotfiles/setup/steps/30-ranger-devicons.sh
+step       wallpapers (dwt1)      p3     step     /home/ms/myp/dotfiles/setup/steps/40-wallpapers.sh
+step       alacritty colorschemes p3     step     /home/ms/myp/dotfiles/setup/steps/50-alacritty-themes.sh
+step       cht.sh                 p2     step     /home/ms/myp/dotfiles/setup/steps/60-cht-sh.sh
+step       opencode (AI coding agent) p1     step     /home/ms/myp/dotfiles/setup/steps/61-opencode.sh
+step       claude code (AI coding agent) p1     step     /home/ms/myp/dotfiles/setup/steps/62-claude-code.sh
+step       volta (node toolchain manager) p2     step     /home/ms/myp/dotfiles/setup/steps/70-volta.sh
+step       tmux plugin manager    p1     step     /home/ms/myp/dotfiles/setup/steps/80-tpm.sh
+step       pyenv                  p2     step     /home/ms/myp/dotfiles/setup/steps/90-pyenv.sh
+
+--- A6: failure-mode proof (unlabeled -> p4) ---
+# after removing p1 token from the git line:
+terminal   git                    p4     apt      git
+# restored via git checkout; packages.list diff:
+24:git p1

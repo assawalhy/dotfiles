@@ -1,0 +1,131 @@
+=====================================================================
+F3 Real manual QA - 2026-08-15 (reviewer F3, Sisyphus-Junior)
+HEAD fd7a8c5 (T1-T4 committed). Fixture-driven + read-only real-home smoke.
+All fixtures fresh under /tmp/opencode (rm -rf fxN-* per recipe).
+=====================================================================
+
+--- 0. Repo state ---
+HEAD fd7a8c5f2f9d31c5e0e472a1bcdf84d11963f09d
+bash -n link-files.bash -> clean, exit 0
+(Note: concurrent final-wave agents staged .omo/ files between my initial
+status check and the smoke; my gate is before/after identity around MY
+audit run, which held.)
+
+--- 1. FIXTURE QA --refresh (todo 1 recipe) ---
+Fixture: fx1-repo = cp of link-files.bash link-ignore.txt link-context.txt
+.gitignore common linux macos + git init + initial commit (+ skip.me added
+to fixture link-ignore.txt); fx1-home = correct symlink
+.config/nvim/init.lua -> fx1-repo/common/.config/nvim/init.lua, new real
+.config/nvim/newfile.lua, new real .config/nvim/lua/extra.lua, gitignored
+.config/nvim/__pycache__/junk.pyc, ignored .config/nvim/skip.me, new real
+.config/shell/new.sh (linux overlay exists).
+
+$ HOME=/tmp/opencode/fx1-home /tmp/opencode/fx1-repo/link-files.bash --refresh --dry-run; echo $?
+exit=0
++  .config/nvim/newfile.lua [refresh] -> common
++  .config/nvim/lua/extra.lua [refresh] -> common
++  .config/shell/new.sh [refresh] -> linux
+   refresh: move 3 new file(s) into common/linux and symlink them back
+read-only proof: find fx1-repo fx1-home -newer sentinel -> empty.
+
+$ HOME=/tmp/opencode/fx1-home /tmp/opencode/fx1-repo/link-files.bash --refresh --yes; echo $?
+exit=0
+-> mv + ln -s .config/nvim/newfile.lua
+-> mv + ln -s .config/nvim/lua/extra.lua
+-> mv + ln -s .config/shell/new.sh
+fx1-repo/common/.config/nvim/newfile.lua EXISTS; lua/extra.lua EXISTS;
+fx1-repo/linux/.config/shell/new.sh EXISTS (OS overlay mirror wins).
+readlink(home newfile.lua)=fx1-repo/common/.config/nvim/newfile.lua;
+readlink(extra.lua) ok; readlink(new.sh)=fx1-repo/linux/.config/shell/new.sh.
+init.lua symlink untouched. __pycache__/junk.pyc + skip.me still REAL files.
+fx1-repo git status: ?? the 3 captured files (untracked, correct).
+
+$ HOME=... ./link-files.bash --refresh '\.lua$' --dry-run; echo $?
+exit=0  -> lists ONLY the 2 .lua candidates (no new.sh). Read-only.
+(REBUILT fresh home+repo first: previous --yes run had captured the files;
+"Nothing to refresh." on the tainted fixture was CORRECT skip of already-in-repo.)
+
+$ printf 'n\n' | HOME=... ./link-files.bash --refresh; echo $?
+exit=1  -> preview printed, nothing moved (newfile.lua still real file).
+
+--- 2. FIXTURE QA --audit env matrix (todo 2 recipe) ---
+Fixture: fx2-repo committed copy; fx2-home = correct symlink init.lua,
+stale .hushlogin -> deleted repo source (git rm+commit), foreign symlink
+.config/mpv/input.conf -> /etc/passwd (NOT .gitconfig, per T2 gotcha), real
+file conflict .tmux.conf, unlinked new .config/nvim/newfile.lua, REAL
+.Xmodmap. link-context.txt has x11: .Xmodmap + x11: .xinitrc.
+
+1) WAYLAND (Xwayland: WAYLAND_DISPLAY=wayland-0 DISPLAY=:0)
+exit=1
+audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc)
+stale/missing/conflict/unlinked all reported; .Xmodmap/.xinitrc NOT in
+findings (only in the header neglect line). Markers: 2 !, 64 +, 1 -.
+Key lines present: '-  .hushlogin stale link',
+'+  .config/mpv/mpv.conf [missing]', '!  .config/mpv/input.conf [conflict]',
+'!  .tmux.conf [conflict]', '+  .config/nvim/newfile.lua [unlinked]'.
+
+2) X11 (WAYLAND_DISPLAY= DISPLAY=:0)
+exit=1; header 'audit context: x11' (no neglect list); reports
+'+  .xinitrc [missing]' + '!  .Xmodmap [conflict]' (inversion proved).
+
+3) HEADLESS (WAYLAND_DISPLAY= DISPLAY=)
+exit=1; header 'audit context: headless (neglecting: ...)'; .Xmodmap/
+.xinitrc absent from findings.
+
+READ-ONLY PROOF: find fx2-repo fx2-home -newer sentinel -> EMPTY after all
+3 runs; symlink readlinks unchanged; .tmux.conf content intact.
+
+Missing link-context.txt: removed from a fixture copy -> audit still runs,
+reports .Xmodmap/.xinitrc, exit 1, no error.
+Malformed line: appended 'garbage-line-without-colon' -> ignored, audit runs.
+Also appended 'wayland: .tmux.conf': still reported under wayland (M7: listed
+for current session = relevant), suppressed under headless (proves parsing).
+
+CLEAN AUDIT: fresh fx3c-repo + empty fx3c-home, --yes link everything, then
+--audit -> 'Audit clean (69 links correct, 0 neglected).' exit 0.
+
+--- 3. FIXTURE QA --no-backup matrix (todo 3 recipe) ---
+Fixture: fx3-repo committed copy; fx3-home real .config/mpv/mpv.conf.
+
+A) --force --no-backup --yes 'mpv\.conf$': exit=0, '-> rm (no backup)
+/tmp/opencode/fx3-home/.config/mpv/mpv.conf', mpv.conf now symlink ->
+fx3-repo/common/.config/mpv/mpv.conf, find fx3-home -name '*.bak.*' EMPTY.
+
+B) --force --yes 'mpv\.conf$' (no --no-backup): exit=0, 'backup ... -> ...
+mpv.conf.bak.20260815004356', .bak EXISTS with original content.
+
+C) bare --no-backup (no --force): exit=1, stderr 'error: --no-backup
+requires --force', nothing changed (still real file, no bak, no symlink).
+
+D1) real DIRECTORY at repo FILE relpath ($HOME/.config/mpv/mpv.conf as dir
+with inner.txt) --force --no-backup --yes 'mpv\.conf$': exit=1, stderr
+'error: --no-backup cannot replace a directory (...); run --force without
+--no-backup or remove it manually', dir + contents INTACT, no symlink,
+no .bak, no partial apply.
+
+D2 probe (documented T3 behavior): real dir at repo DIR relpath
+(.config/nvim) --force --no-backup --yes '\.config/nvim': exit=0, dir
+SURVIVES, per-file symlinks created inside, real init.lua replaced.
+
+--- 4. REAL-HOME SMOKE (read-only, committed state) ---
+$ git status --short > before; ./link-files.bash --audit; echo $?; git status --short > after
+audit exit=1 (findings exist, expected). stderr empty.
+diff before after -> IDENTICAL (25 lines both: MM .gitignore + staged/untracked
+.omo work + committed). NOTHING modified by the smoke.
+Header: 'audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc)'.
+Markers: 61 '!' [conflict] + 15 '+' [unlinked]. .Xmodmap/.xinitrc NOT in
+findings. 'Audit findings: 76.' tail.
+Conflict count 61 vs plan's ~45: higher but findings are REAL and match known
+live state (this machine accumulates write-and-rename conflicts; the plan
+allows a range, key assertion = findings exist + real conflicts listed).
+Conflicts listed: .gitconfig, .zshrc, .tmux.conf, .bashrc, .bash_profile,
+.config/nvim/init.lua + lazy-lock.json + lua/plugins/*, .config/mpv/*,
+bin/*, bin/arch-scripts/* etc. -- verified on disk: .gitconfig/.zshrc/
+.tmux.conf/.config/nvim/init.lua are REAL files (write-and-rename), matching.
+Unlinked direction-(b): .config/nvim/lua/plugins/kotlin.lua (the KNOWN live
+refresh candidate per T1 notes) + ranger_devicons plugin tree (not in repo).
+__pycache__/ junk correctly excluded (gitignored). No *.bak.* created.
+Spot-check re-run: ./link-files.bash --audit -> exit=1 (bare echo, no pipe).
+
+--- VERDICT ---
+APPROVE

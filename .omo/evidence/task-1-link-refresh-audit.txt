@@ -273,3 +273,53 @@ no forbidden constructs in added lines
 MM .gitignore
  M link-files.bash
 ?? .omo/
+
+==============================================================
+## 6. Dirty-worktree probe result + commit hygiene
+==============================================================
+GOTCHA (probe surfaced a real hazard): a bare 'git commit' swept the PRE-STAGED .gitignore hunks
+  ('.omo/' + '.codegraph/' + '.claude/' adds, part of the pinned MM state) into the first commit.
+  This violates the plan's rule '.gitignore NOT in the diff'. Commit is local/unpushed, so it
+  was rewritten: 'git reset --soft HEAD~1' (index untouched -> MM restored) then a pathspec
+  commit '-- link-files.bash .omo/evidence/task-1-link-refresh-audit.txt'. Lesson: with a
+  pre-staged dirty index, commit by pathspec, never bare.
+
+final commit:
+6b4c3ae link-files: add --refresh to capture new files in linked dirs
+commit 6b4c3aea1d7f6a4ac26e86c3e8744b4590b5fd38
+Author: Assawalhy الصوالحي <muhammadsawalhy@gmail.com>
+Date:   Sat Aug 15 00:10:13 2026 +0300
+
+    link-files: add --refresh to capture new files in linked dirs
+
+committed diff contains ONLY link-files.bash + the evidence file (no .gitignore):
+.omo/evidence/task-1-link-refresh-audit.txt
+link-files.bash
+
+git status --short AFTER the commit (MM .gitignore preserved; .omo/ granular because the
+evidence file is now tracked):
+MM .gitignore
+ M .omo/evidence/task-1-link-refresh-audit.txt
+?? .omo/boulder.json
+?? .omo/drafts/
+
+## 7. Post-commit functional smoke (committed state)
+bash -n: OK
++  .config/nvim/newfile.lua [refresh] -> common
++  .config/nvim/lua/extra.lua [refresh] -> common
++  .config/shell/new.sh [refresh] -> linux
+
+   refresh: move 3 new file(s) into common/linux and symlink them back
+
+-> mv + ln -s .config/nvim/newfile.lua
+-> mv + ln -s .config/nvim/lua/extra.lua
+-> mv + ln -s .config/shell/new.sh
+post-commit refresh --yes exit: 0
+newfile.lua symlinked (OK)
+extra.lua symlinked (OK)
+new.sh symlinked (OK)
+junk.pyc still real (OK)
+skip.me still real (OK)
+?? common/.config/nvim/lua/extra.lua
+?? common/.config/nvim/newfile.lua
+?? linux/.config/shell/new.sh

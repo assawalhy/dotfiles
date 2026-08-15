@@ -1,0 +1,26 @@
+=== Task 5: add # prio: headers to 14 setup/steps/*.sh ===
+== A1: grep -l count over ALL setup/steps/*.sh (16 files present; 61/62 are parallel-worker files NOT part of this task) ==
+16
+
+== A1 (14 scoped files only) ==
+14
+
+== A2: prio distribution (14 scoped files; 61/62 by parallel worker are p1 but NOT included below) ==
+      6 # prio: p1
+      5 # prio: p2
+      3 # prio: p3
+
+== A2b: parallel-worker files (excluded from this task) ==
+# prio: p1
+# prio: p1
+
+== A3: bash -n syntax check all setup/steps/*.sh ==
+bash -n: ALL PASS
+
+== A4: failure-mode proof (every file exactly one # prio:) ==
+(empty: every file has prio exactly once)
+
+== Result ==
+All acceptance criteria passed (A1=14 scoped, A2=6/5/3, A3 pass, A4 empty).
+Committed as 76eeade "setup: tag steps with p1-p4 priorities" (14 files, +14 lines, no deletions).
+Note: awk>tmp&&mv rewrite dropped exec bits; restored via follow-up 6947bde "setup: restore executable bit on step scripts". 61/62 parallel-worker files left untracked & unstaged. setup/packages.list modified by another worker — untouched.

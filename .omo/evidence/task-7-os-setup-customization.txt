@@ -1,0 +1,48 @@
+=== Task 7: link-files.bash bash lister (replace node list-files.mjs) ===
+Date: 2026-08-14T16:42:18+03:00
+Repo: dotfiles on Linux
+
+=== Check 1: bash -n ===
+bash -n OK (exit 0)
+
+=== Check 2: baseline set diff ===
+DIFF EMPTY -- same file set as old node lister
+
+--- new run summary (first 5 lines + last 3) ---
++  .config/git/os.gitconfig                     [linux]
++  .config/shell/os.sh                          [linux]
++  .config/delta/themes.gitconfig               [common]
++  .gitignore_global                            [common]
++  .hushlogin                                   [common]
+...
+   common + linux  ->  /home/ms
+   63 conflict(s) skipped -- re-run with --force
+
+--- line counts: before=73 after=73
+
+=== Check 3: pattern narrowing '.*nvim.*' ===
+non-nvim lines in narrowed output:
+(none -- all marker lines are nvim paths)
+marker-line count: 13
+sample:
+!  .config/nvim/.stylua.toml                    [common] existing file, will be backed up
+!  .config/nvim/init.lua                        [common] existing file, will be backed up
+!  .config/nvim/lazy-lock.json                  [common] existing file, will be backed up
+!  .config/nvim/lua/plugins/autoformat.lua      [common] existing file, will be backed up
+
+=== Check 4: node absent from PATH (failing node stub) ===
+exit status: 0
+set diff vs baseline:
+DIFF EMPTY -- node stub never called
+line count: 73
+
+=== Check 5: symlink warning (QA failure-mode proof) ===
+created: lrwxrwxrwx 1 ms ms 4 Aug 14 16:42 common/bin/zz-test-link -> nvim
+grep stderr for skip symlink:
+skip symlink: bin/zz-test-link
+skip symlink: bin/zz-test-link
+WARNING PRESENT
+--- full stderr (dedup'd) ---
+skip symlink: bin/zz-test-link
+CLEANUP OK: symlink gone (test ! -e passes)
+ls: cannot access 'common/bin/zz-test-link': No such file or directory

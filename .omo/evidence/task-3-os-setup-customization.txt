@@ -1,0 +1,135 @@
+
+====================================================================
+TASK 3: setup-os --priority tier auto-selection
+Date: 2026-08-14
+====================================================================
+
+ACCEPTANCE 1: ./setup-os --list --priority p1  (only PRIORITY==p1 rows)
+GROUP      ID                     PRIORITY MANAGER  PACKAGE
+terminal   git                    p1     apt      git
+terminal   zsh                    p1     apt      zsh
+terminal   tmux                   p1     apt      tmux
+terminal   fzf                    p1     apt      fzf
+terminal   bat                    p1     apt      batcat
+terminal   fd                     p1     apt      fd-find
+extra      gh                     p1     apt      gh
+cargo      fastmod                p1     cargo    fastmod
+cargo      ripgrep                p1     cargo    ripgrep
+cargo      eza                    p1     cargo    eza
+cargo      sd                     p1     cargo    sd
+step       paru (AUR helper)      p1     step     /home/ms/myp/dotfiles/setup/steps/02-paru.sh
+step       rust (rustup)          p1     step     /home/ms/myp/dotfiles/setup/steps/10-rustup.sh
+step       oh-my-zsh              p1     step     /home/ms/myp/dotfiles/setup/steps/20-oh-my-zsh.sh
+step       opencode (AI coding agent) p1     step     /home/ms/myp/dotfiles/setup/steps/61-opencode.sh
+step       claude code (AI coding agent) p1     step     /home/ms/myp/dotfiles/setup/steps/62-claude-code.sh
+step       tmux plugin manager    p1     step     /home/ms/myp/dotfiles/setup/steps/80-tpm.sh
+exit=0
+
+ACCEPTANCE 2: ./setup-os --list --priority p1 --priority p2  (p1 AND p2 rows)
+GROUP      ID                     PRIORITY MANAGER  PACKAGE
+terminal   git                    p1     apt      git
+terminal   zsh                    p1     apt      zsh
+terminal   tmux                   p1     apt      tmux
+terminal   neovim                 p2     apt      neovim
+terminal   ranger                 p2     apt      ranger
+terminal   fzf                    p1     apt      fzf
+terminal   bat                    p1     apt      batcat
+terminal   pipx                   p2     apt      pipx
+terminal   fd                     p1     apt      fd-find
+extra      gh                     p1     apt      gh
+extra      yt-dlp                 p2     apt      yt-dlp
+extra      ffmpeg                 p2     apt      ffmpeg
+extra      pandoc                 p2     apt      pandoc
+dev        docker                 p2     apt      docker
+dev        meld                   p2     apt      meld
+dev        lldb                   p2     apt      lldb
+cargo      fastmod                p1     cargo    fastmod
+cargo      ripgrep                p1     cargo    ripgrep
+cargo      eza                    p1     cargo    eza
+cargo      broot                  p2     cargo    broot
+cargo      rmem                   p2     cargo    rmem
+cargo      sd                     p1     cargo    sd
+pip        git-fame               p2     pip      git-fame
+pip        autopep8               p2     pip      autopep8
+pip        black                  p2     pip      black
+pip        mdtoc                  p2     pip      mdtoc
+step       paru (AUR helper)      p1     step     /home/ms/myp/dotfiles/setup/steps/02-paru.sh
+step       rust (rustup)          p1     step     /home/ms/myp/dotfiles/setup/steps/10-rustup.sh
+step       oh-my-zsh              p1     step     /home/ms/myp/dotfiles/setup/steps/20-oh-my-zsh.sh
+step       ranger devicons plugin p2     step     /home/ms/myp/dotfiles/setup/steps/30-ranger-devicons.sh
+step       cht.sh                 p2     step     /home/ms/myp/dotfiles/setup/steps/60-cht-sh.sh
+step       opencode (AI coding agent) p1     step     /home/ms/myp/dotfiles/setup/steps/61-opencode.sh
+step       claude code (AI coding agent) p1     step     /home/ms/myp/dotfiles/setup/steps/62-claude-code.sh
+step       volta (node toolchain manager) p2     step     /home/ms/myp/dotfiles/setup/steps/70-volta.sh
+step       tmux plugin manager    p1     step     /home/ms/myp/dotfiles/setup/steps/80-tpm.sh
+step       pyenv                  p2     step     /home/ms/myp/dotfiles/setup/steps/90-pyenv.sh
+step       pnpm                   p2     step     /home/ms/myp/dotfiles/setup/steps/95-pnpm.sh
+exit=0
+
+ACCEPTANCE 3: ./setup-os --dry-run --priority p1  (Will install list)
+Will install:
+  [terminal] git                      apt git
+  [terminal] zsh                      apt zsh
+  [terminal] tmux                     apt tmux
+  [terminal] fzf                      apt fzf
+  [terminal] bat                      apt batcat
+  [terminal] fd                       apt fd-find
+  [extra] gh                       apt gh
+  [cargo] fastmod                  cargo fastmod
+  [cargo] ripgrep                  cargo ripgrep
+  [cargo] eza                      cargo eza
+  [cargo] sd                       cargo sd
+  [step] paru (AUR helper)        step /home/ms/myp/dotfiles/setup/steps/02-paru.sh
+  [step] rust (rustup)            step /home/ms/myp/dotfiles/setup/steps/10-rustup.sh
+  [step] oh-my-zsh                step /home/ms/myp/dotfiles/setup/steps/20-oh-my-zsh.sh
+  [step] opencode (AI coding agent) step /home/ms/myp/dotfiles/setup/steps/61-opencode.sh
+  [step] claude code (AI coding agent) step /home/ms/myp/dotfiles/setup/steps/62-claude-code.sh
+  [step] tmux plugin manager      step /home/ms/myp/dotfiles/setup/steps/80-tpm.sh
+
+
+== apt (7) ==
+   [dry-run] sudo apt-get install -y git zsh tmux fzf batcat fd-find gh
+
+== cargo (4) ==
+   [dry-run] cargo install --locked fastmod ripgrep eza sd
+
+== step: paru (AUR helper) ==
+   [dry-run] /home/ms/myp/dotfiles/setup/steps/02-paru.sh
+
+== step: rust (rustup) ==
+   [dry-run] /home/ms/myp/dotfiles/setup/steps/10-rustup.sh
+
+== step: oh-my-zsh ==
+   [dry-run] /home/ms/myp/dotfiles/setup/steps/20-oh-my-zsh.sh
+
+== step: opencode (AI coding agent) ==
+   [dry-run] /home/ms/myp/dotfiles/setup/steps/61-opencode.sh
+
+== step: claude code (AI coding agent) ==
+   [dry-run] /home/ms/myp/dotfiles/setup/steps/62-claude-code.sh
+
+== step: tmux plugin manager ==
+   [dry-run] /home/ms/myp/dotfiles/setup/steps/80-tpm.sh
+
+✨ Done.
+exit=0
+
+ACCEPTANCE 4: ./setup-os --dry-run --priority p9; echo $?  (die + non-zero)
+setup-os: no entries match priority p9
+exit=1
+
+BONUS (plan QA failure mode): ./setup-os --dry-run --priority bogus  (rejected at parse)
+setup-os: invalid priority "bogus"
+exit=1
+
+VERIFICATION (acceptance 3): the 11 p1 PACKAGE ids are exactly
+git zsh tmux fzf bat fd ripgrep eza sd fastmod gh. The Will-install list
+above contains all 11 (bat resolves to batcat, fd to fd-find on apt).
+The 6 extra rows are p1 STEP entries (paru/rustup/oh-my-zsh/opencode/
+claude/tpm). This is per spec: --priority = --all limited to the tier
+(want_all=1 skips the picker AND keeps done entries in the menu), and
+resolve_steps() emits the 5th-field prio from "# prio:" headers. The plan's
+"11" count comes from packages.list tier counts (T1 locked p1=11 packages);
+step entries are a separate count.
+Programmatic id check: ./setup-os --list --priority p1 | awk 'NR>1 && $(NF-1)!="step" {print $2}' | sort
+vs the expected 11 -> P1 PACKAGE IDS MATCH EXACTLY (11/11)

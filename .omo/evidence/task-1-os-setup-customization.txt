@@ -1,0 +1,79 @@
+Task 1 evidence: add a pN priority token to every package line in setup/packages.list
+Date: 2026-08-14
+Repo: /home/ms/myp/dotfiles
+Plan: .omo/plans/os-setup-customization.md (todo 1)
+
+============================================================
+File modified: setup/packages.list ONLY
+- FORMAT comment block (lines 1-20) updated: `[pN]` documented in header,
+  `pN` = priority tier (p1 highest, p4 lowest), unlabeled defaults to p4,
+  mgr list extended to "brew cask pacman aur apt dnf zypper cargo pip".
+- Every package line gained exactly one pN token (p1..p4) as the last
+  whitespace token, BEFORE any trailing # comment. No sections reordered,
+  no ids renamed, no manager overrides changed.
+- Tier counts: p1=11, p2=19, p3=15, p4=6 (51 package lines total).
+
+============================================================
+ACCEPTANCE CHECK 1: comment-stripping token check (must be empty)
+Command:
+  awk '!/^[#[]/ && NF' setup/packages.list | sed 's/#.*//' | awk '{ f=0; for (i=1;i<=NF;i++) if ($i ~ /^p[1-4]$/) f=1; if (!f) print "NO PRIO: " $0 }'
+Output:
+  (empty)
+Result: PASS
+
+ACCEPTANCE CHECK 2: id multiset unchanged (must be empty)
+Command:
+  diff <(awk '!/^[#[]/ && NF {print $1}' setup/packages.list | sort) <(git show HEAD:setup/packages.list | awk '!/^[#[]/ && NF {print $1}' | sort)
+Output:
+  (empty)
+Result: PASS
+
+ACCEPTANCE CHECK 3: ./setup-os --list still runs (no error)
+Command:
+  ./setup-os --list | head
+Output:
+  GROUP      ID                     MANAGER  PACKAGE
+  terminal   git                    apt      git
+  terminal   zsh                    apt      zsh
+  terminal   tmux                   apt      tmux
+  terminal   neovim                 apt      neovim
+  terminal   ranger                 apt      ranger
+  terminal   fzf                    apt      fzf
+  terminal   bat                    apt      batcat
+  terminal   pipx                   apt      pipx
+  terminal   fd                     apt      fd-find
+Result: PASS (exit 0, identical entries)
+
+ACCEPTANCE CHECK 4: QA failure-mode proof (old file MUST print NO PRIO lines)
+Command:
+  git show HEAD:setup/packages.list | awk '!/^[#[]/ && NF' | sed 's/#.*//' | awk '{ f=0; for (i=1;i<=NF;i++) if ($i ~ /^p[1-4]$/) f=1; if (!f) print "NO PRIO: " $0 }'
+Output: 51 "NO PRIO:" lines (git, zsh, tmux, ... mdtoc) - the pre-change file fails the new check.
+Result: PASS (check is strict)
+
+============================================================
+EXTRA CHECK A: resolved --list identical old vs new (setup-os uses $REPO/setup/packages.list)
+Commands:
+  cp setup-os /tmp/opencode/pkgtest/{old,new}/ ; copy old file -> old/setup/packages.list, new file -> new/setup/packages.list
+  ./old/setup-os --list > old-list.txt 2>&1
+  ./new/setup-os --list > new-list.txt 2>&1
+  diff old-list.txt new-list.txt
+Output:
+  (empty)
+Result: PASS - resolver output byte-identical; pN token is ignored by the resolver.
+
+EXTRA CHECK B: tier token counts
+Command:
+  for t in p1 p2 p3 p4; do echo "$t: $(awk '!/^[#[]/ && NF {for (i=1;i<=NF;i++) if ($i=="'$t'") c++} END {print c+0}' setup/packages.list)"; done
+Output:
+  p1: 11
+  p2: 19
+  p3: 15
+  p4: 6
+  total package lines: 51
+Result: PASS
+
+============================================================
+git diff --stat setup/packages.list:
+  setup/packages.list | 107 ++++++++++++++++++++++++++--------------------------
+  1 file changed, 54 insertions(+), 53 deletions(-)
+(All hunks are pN-token additions and FORMAT-doc edits only.)
