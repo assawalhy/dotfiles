@@ -30,6 +30,13 @@ return {
           },
         },
       })
+      -- monkeypatch for jdtls
+      local utils = require('telescope.utils')
+      local orig_is_uri = utils.is_uri
+      utils.is_uri = function(filename)
+        if filename:match('^jdt://') then return false end
+        return orig_is_uri(filename)
+      end
       pcall(require('telescope').load_extension, 'fzf')
       -- NOTE: it is better done by fzf.vim plugin
       vim.keymap.set('n', '<leader>O', require('telescope.builtin').oldfiles, { desc = '[?] Find recently opened files' })
