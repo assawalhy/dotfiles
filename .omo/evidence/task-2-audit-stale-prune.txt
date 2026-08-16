@@ -1,0 +1,110 @@
+=== task 2 (2026-08-15) — find_stale -lname scan + three-way classification ===
+
+--- full suite: bats --tap tests/link-files.bats ---
+1..64
+ok 1 link- creates a new top-level link
+ok 2 link- creates a new nested .config link with parent dirs
+ok 3 link- already-correct links are left alone (Nothing to do)
+ok 4 link- a filtering pattern narrows the link set
+ok 5 classify- old-scheme hard link is relinked to a symlink without --force
+ok 6 classify- wrong-source symlink is relinked
+ok 7 classify- foreign symlink is a conflict, skipped without --force
+ok 8 classify- foreign symlink is replaced by --force (never backed up)
+ok 9 classify- real file conflict is skipped without --force, untouched
+ok 10 classify- --force backs up a real file to .bak.<STAMP> with content preserved
+ok 11 classify- --force --no-backup deletes the real file, no .bak created
+ok 12 classify- --no-backup on a directory conflict refuses (exit 1)
+ok 13 overlay- common+linux collision: the linux overlay wins
+ok 14 overlay- Darwin: the macos overlay wins
+ok 15 overlay- a linux-only file is not linked on Darwin
+ok 16 overlay- OS switch prunes links the other platform left behind
+ok 17 overlay- macos leftover on linux is stale, reported and pruned
+ok 18 context- session detection: wayland, x11, headless
+ok 19 context- x11-only file is not linked on wayland
+ok 20 context- x11-only file is not reported [missing] on wayland
+ok 21 context- x11-only file is linked on an x11 session
+ok 22 context- neglected-but-linked file is preserved by a normal run
+ok 23 context- a pattern cannot resurrect a neglected file
+ok 24 ignore- an ignored entry is not linked
+ok 25 ignore- a directory entry excludes its whole subtree
+ok 26 ignore- comments and blank lines are ignored
+ok 27 ignore- a trailing slash is normalized
+ok 28 ignore- prefix collision: .config/foo does not exclude .config/foobar
+ok 29 ignore- entry ADDED while still linked is not reported stale (Todo 3: i [ignored])
+ok 30 ignore- ignored but dangling link is still reported stale ([ ! -e ] wins)
+ok 31 ignore- entry REMOVED without a home link is reported [missing]
+ok 32 stale- dangling link in a still-existing dir is reported (exit 1)
+ok 33 stale- dangling links in a fully-deleted dir are reported and pruned
+ok 34 stale- a pattern narrows the stale report
+ok 35 stale- a foreign symlink is never reported as stale or removed
+ok 36 stale- a relative symlink is never reported as stale
+ok 37 refresh- new file in a linked dir is captured to common and symlinked back
+ok 38 refresh- overlay-first: captured into the OS overlay when it has the dir
+ok 39 refresh- ignored files are skipped
+ok 40 refresh- gitignored files are skipped
+ok 41 refresh- *.bak.* files are skipped
+ok 42 refresh- .git/* files are skipped
+ok 43 refresh- files neglected for the session are skipped
+ok 44 refresh- an existing repo file is never overwritten
+ok 45 refresh- --dry-run changes nothing
+ok 46 audit- all-correct home is clean (exit 0)
+ok 47 audit- missing links are reported [missing] (exit 1)
+ok 48 audit- wrong-source symlink is reported [relink] (exit 1)
+ok 49 audit- real-file conflict is reported [conflict] (exit 1)
+ok 50 audit- repo-pointing link no longer wanted is a stale link (exit 1)
+ok 51 audit- new real file inside a linked dir is [unlinked] (exit 1)
+ok 52 audit- a pattern narrows the report
+ok 53 audit- the home directory is bit-for-bit unchanged after --audit
+ok 54 picker- fallback menu 'a' (all) then confirm links everything
+ok 55 picker- fallback menu 'n' selects nothing
+ok 56 picker- a single number links just that entry
+ok 57 picker- a range links the selected entries only
+ok 58 picker- nothing to link when every managed file is already linked
+ok 59 cli- unknown option exits 1
+ok 60 cli- --no-backup without --force exits 1
+ok 61 cli- two filtering patterns exits 1
+ok 62 cli- --help shows usage and exits 0
+ok 63 cli- --reverse is removed and exits 1
+ok 64 guard- a dir symlink resolving inside the repo is refused
+
+--- filtered: bats --tap --filter '^(stale|ignore-|overlay-)' ---
+1..18
+ok 1 overlay- common+linux collision: the linux overlay wins
+ok 2 overlay- Darwin: the macos overlay wins
+ok 3 overlay- a linux-only file is not linked on Darwin
+ok 4 overlay- OS switch prunes links the other platform left behind
+ok 5 overlay- macos leftover on linux is stale, reported and pruned
+ok 6 ignore- an ignored entry is not linked
+ok 7 ignore- a directory entry excludes its whole subtree
+ok 8 ignore- comments and blank lines are ignored
+ok 9 ignore- a trailing slash is normalized
+ok 10 ignore- prefix collision: .config/foo does not exclude .config/foobar
+ok 11 ignore- entry ADDED while still linked is not reported stale (Todo 3: i [ignored])
+ok 12 ignore- ignored but dangling link is still reported stale ([ ! -e ] wins)
+ok 13 ignore- entry REMOVED without a home link is reported [missing]
+ok 14 stale- dangling link in a still-existing dir is reported (exit 1)
+ok 15 stale- dangling links in a fully-deleted dir are reported and pruned
+ok 16 stale- a pattern narrows the stale report
+ok 17 stale- a foreign symlink is never reported as stale or removed
+ok 18 stale- a relative symlink is never reported as stale
+
+--- grep -n mdirs link-files.bash (must be empty) ---
+grep exit: 1
+
+--- bash -n ---
+bash -n clean
+
+--- git show --stat HEAD ---
+commit a80d83b3172a7839e305ea7a6e6a52f702da6125
+Author: محمد الصوالحي <ms.2052001@gmail.com>
+Date:   Sat Aug 15 22:26:14 2026 +0300
+
+    link-files: find stale links across all of $HOME (find -lname)
+    
+    Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)
+    
+    Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>
+
+ link-files.bash       |  62 +++++++++++++-------------
+ tests/link-files.bats | 117 +++++++++++++++++++++++++++++++++++++++++++++++---
+ 2 files changed, 141 insertions(+), 38 deletions(-)

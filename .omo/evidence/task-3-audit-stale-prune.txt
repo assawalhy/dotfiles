@@ -1,0 +1,88 @@
+1..72
+ok 1 link- creates a new top-level link
+ok 2 link- creates a new nested .config link with parent dirs
+ok 3 link- already-correct links are left alone (Nothing to do)
+ok 4 link- a filtering pattern narrows the link set
+ok 5 classify- old-scheme hard link is relinked to a symlink without --force
+ok 6 classify- wrong-source symlink is relinked
+ok 7 classify- foreign symlink is a conflict, skipped without --force
+ok 8 classify- foreign symlink is replaced by --force (never backed up)
+ok 9 classify- real file conflict is skipped without --force, untouched
+ok 10 classify- --force backs up a real file to .bak.<STAMP> with content preserved
+ok 11 classify- --force --no-backup deletes the real file, no .bak created
+ok 12 classify- --no-backup on a directory conflict refuses (exit 1)
+ok 13 overlay- common+linux collision: the linux overlay wins
+ok 14 overlay- Darwin: the macos overlay wins
+ok 15 overlay- a linux-only file is not linked on Darwin
+ok 16 overlay- OS switch prunes links the other platform left behind
+ok 17 overlay- macos leftover on linux is stale, reported and pruned
+ok 18 context- session detection: wayland, x11, headless
+ok 19 context- x11-only file is not linked on wayland
+ok 20 context- x11-only file is not reported [missing] on wayland
+ok 21 context- x11-only file is linked on an x11 session
+ok 22 context- neglected-but-linked file is preserved by a normal run
+ok 23 context- a pattern cannot resurrect a neglected file
+ok 24 context- neglinked x11 file is reported on wayland, not on x11
+ok 25 context- dangling neglected link is reported once as stale, never x
+ok 26 context- a real file at a neglected path is never reported
+ok 27 context- a pattern narrows the neglinked report
+ok 28 context- multiple wanted contexts are listed in file order
+ok 29 ignore- an ignored entry is not linked
+ok 30 ignore- a directory entry excludes its whole subtree
+ok 31 ignore- comments and blank lines are ignored
+ok 32 ignore- a trailing slash is normalized
+ok 33 ignore- prefix collision: .config/foo does not exclude .config/foobar
+ok 34 ignore- entry ADDED while still linked is reported i [ignored]
+ok 35 ignore- entry REMOVED with a correct link is silent
+ok 36 ignore- ignored but dangling link is still reported stale ([ ! -e ] wins)
+ok 37 ignore- entry REMOVED without a home link is reported [missing]
+ok 38 stale- dangling link in a still-existing dir is reported (exit 1)
+ok 39 stale- dangling links in a fully-deleted dir are reported and pruned
+ok 40 stale- a pattern narrows the stale report
+ok 41 stale- a foreign symlink is never reported as stale or removed
+ok 42 stale- a relative symlink is never reported as stale
+ok 43 refresh- new file in a linked dir is captured to common and symlinked back
+ok 44 refresh- overlay-first: captured into the OS overlay when it has the dir
+ok 45 refresh- ignored files are skipped
+ok 46 refresh- gitignored files are skipped
+ok 47 refresh- *.bak.* files are skipped
+ok 48 refresh- .git/* files are skipped
+ok 49 refresh- files neglected for the session are skipped
+ok 50 refresh- an existing repo file is never overwritten
+ok 51 refresh- --dry-run changes nothing
+ok 52 audit- all-correct home is clean (exit 0)
+ok 53 audit- missing links are reported [missing] (exit 1)
+ok 54 audit- wrong-source symlink is reported [relink] (exit 1)
+ok 55 audit- real-file conflict is reported [conflict] (exit 1)
+ok 56 audit- repo-pointing link no longer wanted is a stale link (exit 1)
+ok 57 audit- ignored-but-linked file is reported i [ignored] (exit 1)
+ok 58 audit- session-neglected link is reported x [neglected] (exit 1)
+ok 59 audit- new real file inside a linked dir is [unlinked] (exit 1)
+ok 60 audit- a pattern narrows the report
+ok 61 audit- the home directory is bit-for-bit unchanged after --audit
+ok 62 picker- fallback menu 'a' (all) then confirm links everything
+ok 63 picker- fallback menu 'n' selects nothing
+ok 64 picker- a single number links just that entry
+ok 65 picker- a range links the selected entries only
+ok 66 picker- nothing to link when every managed file is already linked
+ok 67 cli- unknown option exits 1
+ok 68 cli- --no-backup without --force exits 1
+ok 69 cli- two filtering patterns exits 1
+ok 70 cli- --help shows usage and exits 0
+ok 71 cli- --reverse is removed and exits 1
+ok 72 guard- a dir symlink resolving inside the repo is refused
+
+=== git show --stat HEAD ===
+commit 5dd410226e447c6376e2cd0b091f2fa632857543
+Author: محمد الصوالحي <ms.2052001@gmail.com>
+Date:   Sat Aug 15 22:33:25 2026 +0300
+
+    link-files: report session-neglected and ignored links in --audit
+    
+    Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)
+    
+    Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>
+
+ link-files.bash       |  31 +++++++++++++
+ tests/link-files.bats | 117 +++++++++++++++++++++++++++++++++++++++++++++++---
+ 2 files changed, 141 insertions(+), 7 deletions(-)
