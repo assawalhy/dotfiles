@@ -7,7 +7,7 @@ return {
     dependencies = {
       'nvim-treesitter/nvim-treesitter-textobjects',
       'windwp/nvim-ts-autotag',
-      -- 'HiPhish/nvim-ts-rainbow2',
+      'HiPhish/nvim-ts-rainbow2',
       {
         'JoosepAlviste/nvim-ts-context-commentstring',
         opts = { enable_autocmd = false },
@@ -71,6 +71,12 @@ return {
         },
       }
 
+      require('nvim-ts-rainbow2').setup {
+        enable = true,
+        extended_mode = true,
+        max_file_lines = 1000,
+      }
+
       local function textobj(query)
         require('nvim-treesitter-textobjects.select').select_textobject(query, 'textobjects')
       end
@@ -105,9 +111,6 @@ return {
 
       -- Folding
       -- NOTE: 'kevinhwang91/nvim-ufo' now handles it
-      -- vim.o.foldmethod = "expr"
-      -- vim.o.foldexpr = "nvim_treesitter#foldexpr()"
-      -- vim.o.foldenable = false
     end,
   },
 

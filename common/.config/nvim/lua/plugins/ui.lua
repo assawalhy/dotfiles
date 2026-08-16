@@ -74,11 +74,11 @@ return {
   {
     'Pocco81/true-zen.nvim',
     keys = {
-      { '<leader>zn', ':TZNarrow<CR>', {} },
-      { '<leader>zf', ':TZFocus<CR>', {} },
-      { '<leader>zm', ':TZMinimalist<CR>', {} },
-      { '<leader>za', ':TZAtaraxis<CR>', {} },
-      { mode = 'v', '<leader>zn', ":'<,'>TZNarrow<CR>", {} },
+      { '<leader>zn', ':TZNarrow<CR>', desc = 'True zen (narrow)' },
+      { '<leader>zf', ':TZFocus<CR>', desc = 'True zen (focus)' },
+      { '<leader>zm', ':TZMinimalist<CR>', desc = 'True zen (minimalist)' },
+      { '<leader>za', ':TZAtaraxis<CR>', desc = 'True zen (ataraxis)' },
+      { mode = 'v', '<leader>zn', ":'<,'>TZNarrow<CR>", desc = 'True zen (narrow selection)' },
     },
   },
 }

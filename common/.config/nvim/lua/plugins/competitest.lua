@@ -119,7 +119,6 @@ return {
   'xeluxee/competitest.nvim',
   dependencies = 'MunifTanjim/nui.nvim',
   opts = {
-    -- output_compare_method = 'exact',
     compile_command = {
       c = { exec = 'gcc', args = { '-DSAWALHY', '-Wall', '$(FNAME)', '-O3', '-o', '$(FNOEXT)' } },
       cpp = { exec = 'g++', args = { '-std=c++23', '-DSAWALHY', '-Wall', '-Wextra', '-fsanitize=address', '-Wconversion', '$(FNAME)', '-o', '$(FNOEXT)' } },

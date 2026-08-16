@@ -72,7 +72,12 @@ return {
 
   {
     'tpope/vim-surround',
-    keys = { { 'ds' }, { 'cs' }, { 'ys' }, { 'S', mode = 'x' } },
+    keys = {
+      { 'ds', desc = 'Delete surround' },
+      { 'cs', desc = 'Change surround' },
+      { 'ys', desc = 'Surround' },
+      { 'S', mode = 'x', desc = 'Surround (visual)' },
+    },
   },
 
   {
@@ -92,7 +97,7 @@ return {
   {
     'junegunn/vim-easy-align',
     keys = {
-      { 'ga', '<Plug>(EasyAlign)', mode = { 'x', 'n' } },
+      { 'ga', '<Plug>(EasyAlign)', mode = { 'x', 'n' }, desc = 'Easy align' },
     },
   },
 
@@ -100,7 +105,7 @@ return {
     'mbbill/undotree',
     cmd = 'UndotreeToggle',
     keys = {
-      { '<leader>u', ':UndotreeToggle<CR>', mode = 'n' },
+      { '<leader>u', ':UndotreeToggle<CR>', mode = 'n', desc = 'Undotree' },
     },
     config = function()
       vim.o.undodir = os.getenv 'HOME' .. '/.vim/undodir'
@@ -111,24 +116,24 @@ return {
     'fedepujol/move.nvim',
     cmd = 'Move',
     keys = {
-      { '<A-j>', ':MoveLine(1)<CR>', mode = 'n', silent = true },
-      { '<A-k>', ':MoveLine(-1)<CR>', mode = 'n', silent = true },
-      { '<A-j>', ':MoveBlock(1)<CR>', mode = 'v', silent = true },
-      { '<A-k>', ':MoveBlock(-1)<CR>', mode = 'v', silent = true },
-      { '<A-l>', ':MoveHChar(1)<CR>', mode = 'n', silent = true },
-      { '<A-h>', ':MoveHChar(-1)<CR>', mode = 'n', silent = true },
-      { '<A-l>', ':MoveHBlock(1)<CR>', mode = 'v', silent = true },
-      { '<A-h>', ':MoveHBlock(-1)<CR>', mode = 'v', silent = true },
+      { '<A-j>', ':MoveLine(1)<CR>', mode = 'n', silent = true, desc = 'Move line down' },
+      { '<A-k>', ':MoveLine(-1)<CR>', mode = 'n', silent = true, desc = 'Move line up' },
+      { '<A-j>', ':MoveBlock(1)<CR>', mode = 'v', silent = true, desc = 'Move selection down' },
+      { '<A-k>', ':MoveBlock(-1)<CR>', mode = 'v', silent = true, desc = 'Move selection up' },
+      { '<A-l>', ':MoveHChar(1)<CR>', mode = 'n', silent = true, desc = 'Move char right' },
+      { '<A-h>', ':MoveHChar(-1)<CR>', mode = 'n', silent = true, desc = 'Move char left' },
+      { '<A-l>', ':MoveHBlock(1)<CR>', mode = 'v', silent = true, desc = 'Move selection right' },
+      { '<A-h>', ':MoveHBlock(-1)<CR>', mode = 'v', silent = true, desc = 'Move selection left' },
     },
   },
 
   {
     'justinmk/vim-sneak',
     keys = {
-      { 'f', '<Plug>Sneak_f' },
-      { 'F', '<Plug>Sneak_F' },
-      { 't', '<Plug>Sneak_t' },
-      { 'T', '<Plug>Sneak_T' },
+      { 'f', '<Plug>Sneak_f', desc = 'Sneak forward' },
+      { 'F', '<Plug>Sneak_F', desc = 'Sneak backward' },
+      { 't', '<Plug>Sneak_t', desc = 'Sneak till forward' },
+      { 'T', '<Plug>Sneak_T', desc = 'Sneak till backward' },
     },
   },
 }

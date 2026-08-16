@@ -56,17 +56,4 @@ return {
       end, { desc = '[/] Fuzzily search in current buffer' })
     end,
   },
-
-  -- {
-  --   'junegunn/fzf.vim',
-  --   dependencies = {
-  --     'junegunn/fzf',
-  --     build = function() vim.fn['fzf#install']() end,
-  --   },
-  --   keys = {
-  --     { '<leader>p', ":Files<CR>",   desc = "[fzf.vim] Files fzf finder" },
-  --     { '<leader>o', ":Buffers<CR>", desc = "[fzf.vim] Opened buffers fzf finder" },
-  --     { '<leader>O', ":History<CR>", desc = "[fzf.vim] v:oldfiles and open buffers" },
-  --   }
-  -- },
 }
