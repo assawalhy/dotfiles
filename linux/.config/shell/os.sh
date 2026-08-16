@@ -42,6 +42,14 @@ _jdk_home() {
 # consumed by the ls aliases in ~/.bash_profile
 _LS_COLOR_FLAG='--color=auto'
 
+# ---------------------------------------------------------- environment
+
+# WSL2 with VcXsrv on Windows to show the GUI
+# export DISPLAY=$(grep -m 1 nameserver /etc/resolv.conf | awk '{print $2}'):0
+if [ -n "$WSL_DISTRO_NAME" ]; then
+  export DISPLAY=$(ip route show | grep 'default via' | awk '{ print $3 }'):0
+fi
+
 # --------------------------------------------------------------- PATH ---
 
 [ -d /snap/bin ]                  && PATH="/snap/bin:$PATH"
