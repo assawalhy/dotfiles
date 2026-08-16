@@ -25,6 +25,7 @@ git p1
 zsh p1
 tmux p1
 neovim p2
+tree-sitter-cli    pacman:tree-sitter p2  # nvim-treesitter needs it to compile parsers
 ranger p2
 fzf p1
 bat                 apt:batcat p1
@@ -60,6 +61,8 @@ okular              !macos                       p3  # KDE document viewer
 feh                 !macos                       p3  # X11 image viewer
 skim                !linux  cask:skim            p3  # macOS PDF viewer, the zathura stand-in
 pngpaste            !linux                       p3  # required by the `pasteimage` alias on macOS
+font-jetbrains-mono-nerd-font cask:font-jetbrains-mono-nerd-font pacman:ttf-jetbrains-mono-nerd apt:- dnf:- p3
+font-fira-code-nerd-font cask:font-fira-code-nerd-font pacman:ttf-firacode-nerd apt:- dnf:- p3
 
 [dev]
 docker              cask:docker                  p2  # cask = Docker Desktop
