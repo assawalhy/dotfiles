@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/razajamil/herdr-plugin-workspace-manager/main/schema.json
+# herdr-plugin-workspace-manager
+# Arranges every new git worktree into this declarative tab/pane layout.
+# This is the plugin config, linked from the dotfiles repo into:
+#   herdr plugin config-dir herdr-plugin-workspace-manager
+# (i.e. ~/.config/herdr/plugins/config/herdr-plugin-workspace-manager/config.yml)
+#
+# Reference (README of the plugin) and editor autocomplete via the modeline
+# above in any YAML-Language-Server editor (nvim yamlls, VS Code, Helix).
+
+# ---------------------------------------------------------------------------
+# layouts: named tab/pane templates.
+#
+#   - The FIRST tab REPLACES the worktree's existing (empty) tab.
+#   - Each later tab is appended to the workspace.
+#   - The first pane of a tab is its root; each later pane splits from the
+#     previous pane of the same tab.
+#
+# pane.split:  vertical (=herdr right, side by side) | horizontal (=down) | right | down
+# pane.size:   40 (fixed cells) | "30%" (percentage) | 0.3 (fraction) -- sizes THIS pane
+# pane.command: runs in YOUR interactive login shell (zshrc/PATH apply).
+#               On exit you're back at a prompt; `persist: false` closes the pane instead.
+# pane.agent:  instead of command -- starts a coding agent (claude, codex,
+#               opencode, ...) via `herdr agent start`, waiting until herdr
+#               reports it ready. Keys: agentName, agentArgs, prompt,
+#               agentTimeoutMs, promptTimeoutMs.
+# env:         environment for the pane process; pane-level wins over layout-level.
+# setup:       one command on the single pane marked `setup: true`, before its
+#               command/agent; `blocking: true` waits for it before later tabs.
+# ---------------------------------------------------------------------------
+
+layouts:
+  # Copy/paste this as the starting point for your own layouts.
+  - id: default
+    env:
+      NODE_ENV: development
+    # setup:
+    #   command: npm install
+    #   blocking: true
+    tabs:
+      - title: agent
+        panes:
+          - title: agent
+            agent: opencode        # or claude, codex, ...
+            agentName: main        # stable alias; unique among live agents
+            # prompt: Read TASK.md and start.
+          - title: shell
+            split: horizontal
+            size: "40%"            # or 40 fixed cells, or 0.3
+      - title: code
+        panes:
+          - title: editor
+            command: nvim
+      - title: git
+        panes:
+          - title: lazygit
+            command: lazygit
+            persist: false           # closing lazygit closes the pane
+
+  # A trimmed layout for small bug-fix branches.
+  - id: hotfix
+    tabs:
+      - title: code
+        panes:
+          - title: editor
+            command: nvim
+          - title: shell
+            split: vertical
+
+# ---------------------------------------------------------------------------
+# workspaces: map a repo to a layout.
+#
+# Applied ONLY to new LINKED WORKTREES -- the repo's own main checkout is never
+# touched. Each entry needs `repo` and/or `path`:
+#   repo: the main checkout path or bare repo name, `~` expanded. RECOMMENDED.
+#   path: prefix-match the worktree checkout path (brittle; herdr's worktrees
+#         dir is configurable).
+# A `repo` match wins over a `path` match.
+#
+# Layout choice per worktree:
+#   layoutMatching: ordered branch-glob rules; first match wins.
+#       worktreePattern: glob on the WHOLE branch name, * = any run of chars,
+#                        ? = one char. e.g. `fix/*` matches `fix/42-login`.
+#   defaultLayout: applied when no rule matches (or no branch, e.g. detached).
+#   With neither, nothing is applied.
+#
+
+workspaces:
+  - repo: ~/myp/dotfiles
+    defaultLayout: default
+    layoutMatching:
+      - title: Hotfix branches
+        worktreePattern: fix/*
+        layout: hotfix
+
+# ---------------------------------------------------------------------------
+
