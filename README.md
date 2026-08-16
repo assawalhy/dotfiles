@@ -108,10 +108,12 @@ listing is a bash script now.
 
 Everything committed under `common/` and the active OS directory — **there is
 no include list**. `link-ignore.txt` is the exception list: paths named there
-are committed but not linked. `link-context.txt` is the session-context filter
-for every link operation: a relpath tagged for another context (like
-`x11: .Xmodmap` under wayland) is excluded from linking, listing, `--diff`,
-`--refresh` and the audit report.
+are committed but not linked. Adding an entry while its file is still linked
+makes `--audit` report it as `i [ignored]`; removing an entry makes the file
+show up as `+ [missing]` until it is linked. `link-context.txt` is the
+session-context filter for every link operation: a relpath tagged for another
+context (like `x11: .Xmodmap` under wayland) is excluded from linking,
+listing, `--diff`, `--refresh` and the audit report.
 
 Adopting a new dotfile is therefore just a move:
 
@@ -152,8 +154,11 @@ link-files.bash --refresh 'extra\.conf$'
 `--audit` is a read-only report of link drift in both directions: repo files
 that are not correctly linked in `$HOME` (missing, pointing at the wrong
 source, a conflict, or stale), and real files inside linked dirs that are
-absent from the repo. It never writes anything, opens no picker, and asks
-nothing. Exit 0 means the links are clean, exit 1 that there are findings.
+absent from the repo. It also reports links that should not be there: files
+still linked but listed in `link-ignore.txt` (`i [ignored]`) and files still
+linked but neglected for the current session context (`x [neglected]`). It
+never writes anything, opens no picker, and asks nothing. Exit 0 means the
+links are clean, exit 1 that there are findings.
 
 Some files only belong to particular desktop sessions. `link-context.txt`
 lists those, per session context: a line like `x11: .Xmodmap` marks `.Xmodmap`
@@ -214,6 +219,15 @@ as a normal run.
 ```sh
 link-files.bash --fix --dry-run   # preview what would change
 link-files.bash --fix             # complete linking and prune
+```
+
+### Testing
+
+The link script has a bats test suite:
+
+```sh
+sudo apt install bats            # or your distro's bats package
+bats --tap tests/link-files.bats
 ```
 
 ## Installing programs
@@ -277,6 +291,8 @@ packages, so you don't have to bootstrap it by hand first.
 
 ## Caveats
 
+- The stale-link scan is a single `find` pass over `$HOME` (roughly two
+  seconds on a 60 GB home), so every run pays that cost once.
 - **Programs that save by write-and-rename replace the symlink with a real
   file.** `git config --global` is the common one: it will turn `~/.gitconfig`
   into a regular file. The next `link-files.bash` reports it as `!`; run with
