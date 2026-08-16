@@ -26,18 +26,12 @@
     conflicted = !vim +Conflicted
 
 [user]
-    email = ms.2052001@gmail.com
-    name = محمد الصوالحي
-    username = ms2052001
-    signingKey = 8A1FDFB97C63E41DA58FAE3593F3C52B7DC6E418
+    email = muhammadsawalhy@gmail.com
+    name = Assawalhy
+    username = assawalhy
 
 [init]
     defaultBranch = main
-
-[commit]
-    # Lazygit says: Feature not available for users using GPG
-    # but I prefer to use these features 
-    gpgsign = false
 
 [pull]
     rebase = true
@@ -52,11 +46,29 @@
 [interactive]
     diffFilter = delta --color-only
 
+
+[core]
+  whitespace = error
+  preloadindex = true
+
+[pager]
+  diff = delta
+  log = delta
+  reflog = delta
+  show = delta
+
+[status]
+  branch = true
+  showStash = true
+  showUntrackedFiles = all
+
 [delta]
-    side-by-side = true
+    side-by-side = false
+    navigate = true  # use n and N to move between diff sections
+    line-numbers = true
 
 [merge]
-    conflictstyle = diff3
+    conflictstyle = zdiff3
 
 [diff]
     colorMoved = default

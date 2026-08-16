@@ -1,0 +1,7 @@
+# Use delta as the diff pager. --paging=never is required: lazygit already
+# provides its own scrolling, and delta would otherwise try to page.
+# delta picks up the [delta] section from ~/.gitconfig (side-by-side, etc.).
+git:
+  paging:
+    colorArg: always
+    pager: delta --dark --paging=never
