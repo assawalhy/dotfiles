@@ -12,7 +12,7 @@ return {
     'neovim/nvim-lspconfig',
     config = function()
       vim.lsp.config('html', { filetypes = { 'html', 'twig', 'hbs' } })
-      for _, server in ipairs({ 'bashls', 'clangd', 'pyright', 'ts_ls', 'eslint', 'intelephense', 'html', 'lua_ls', 'kotlin_language_server' }) do
+      for _, server in ipairs { 'bashls', 'clangd', 'pyright', 'ts_ls', 'eslint', 'intelephense', 'html', 'lua_ls', 'kotlin_language_server' } do
         vim.lsp.enable(server)
       end
     end,

@@ -1,21 +1,25 @@
-local jdtls = require('jdtls')
+local jdtls = require 'jdtls'
 
-local mason_jdtls = vim.fn.stdpath('data') .. '/mason/packages/jdtls/bin/jdtls'
-local jdtls_bin = vim.fn.filereadable(mason_jdtls) == 1 and mason_jdtls or vim.fn.exepath('jdtls')
+local mason_jdtls = vim.fn.stdpath 'data' .. '/mason/packages/jdtls/bin/jdtls'
+local jdtls_bin = vim.fn.filereadable(mason_jdtls) == 1 and mason_jdtls or vim.fn.exepath 'jdtls'
 if jdtls_bin == '' then
   vim.notify('jdtls not found — run :MasonInstall jdtls', vim.log.levels.WARN)
   return
 end
 
 local root = vim.fs.root(0, { '.git', 'mvnw', 'pom.xml', 'gradlew', 'settings.gradle', 'settings.gradle.kts', 'build.gradle', 'build.gradle.kts' })
-if not root then return end
+if not root then
+  return
+end
 
-local workspace = vim.fn.stdpath('cache') .. '/jdtls/workspace/' .. vim.fn.fnamemodify(root, ':t')
+local workspace = vim.fn.stdpath 'cache' .. '/jdtls/workspace/' .. vim.fn.fnamemodify(root, ':t')
 vim.fn.mkdir(workspace, 'p')
 
 local function get_capabilities()
   local ok, blink = pcall(require, 'blink.cmp')
-  if ok then return blink.get_lsp_capabilities() end
+  if ok then
+    return blink.get_lsp_capabilities()
+  end
   local caps = vim.lsp.protocol.make_client_capabilities()
   caps.textDocument.completion.completionItem.snippetSupport = true
   return caps
@@ -39,16 +43,23 @@ local config = {
       eclipse = { downloadSources = true },
       jdt = {
         ls = {
-          vmargs = '-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx1G -Xms100m' .. (os.getenv('LOMBOK_JAR') and (' -javaagent:' .. os.getenv('LOMBOK_JAR')) or ''),
+          vmargs = '-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx1G -Xms100m'
+            .. (os.getenv 'LOMBOK_JAR' and (' -javaagent:' .. os.getenv 'LOMBOK_JAR') or ''),
         },
       },
     },
   },
   on_attach = function(client, bufnr)
-    jdtls.setup_dap({ hotcodereplace = 'auto' })
-    vim.keymap.set('n', '<leader>oi', function() jdtls.organize_imports() end, { buffer = bufnr, desc = 'Java: organize imports' })
-    vim.keymap.set('n', '<leader>ot', function() jdtls.test_class() end, { buffer = bufnr, desc = 'Java: run test class' })
-    vim.keymap.set('n', '<leader>om', function() jdtls.test_nearest_method() end, { buffer = bufnr, desc = 'Java: run nearest test' })
+    jdtls.setup_dap { hotcodereplace = 'auto' }
+    vim.keymap.set('n', '<leader>oi', function()
+      jdtls.organize_imports()
+    end, { buffer = bufnr, desc = 'Java: organize imports' })
+    vim.keymap.set('n', '<leader>ot', function()
+      jdtls.test_class()
+    end, { buffer = bufnr, desc = 'Java: run test class' })
+    vim.keymap.set('n', '<leader>om', function()
+      jdtls.test_nearest_method()
+    end, { buffer = bufnr, desc = 'Java: run nearest test' })
   end,
 }
 

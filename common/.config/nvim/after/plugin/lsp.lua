@@ -14,7 +14,9 @@ vim.diagnostic.config {
 
 local function get_capabilities()
   local ok, blink = pcall(require, 'blink.cmp')
-  if ok then return blink.get_lsp_capabilities() end
+  if ok then
+    return blink.get_lsp_capabilities()
+  end
   local caps = vim.lsp.protocol.make_client_capabilities()
   caps.textDocument.completion.completionItem.snippetSupport = true
   return caps
@@ -26,7 +28,9 @@ vim.api.nvim_create_autocmd('LspAttach', {
   callback = function(args)
     local bufnr = args.buf
     local client = vim.lsp.get_client_by_id(args.data.client_id)
-    if client and client.name == 'copilot' then return end
+    if client and client.name == 'copilot' then
+      return
+    end
 
     vim.keymap.set('n', ';rn', vim.lsp.buf.rename, { buffer = bufnr, desc = 'LSP: [R]e[n]ame' })
     vim.keymap.set('n', ';ac', vim.lsp.buf.code_action, { buffer = bufnr, desc = 'LSP: [A]ction [C]ode' })
@@ -34,10 +38,12 @@ vim.api.nvim_create_autocmd('LspAttach', {
     vim.keymap.set('n', 'gp', vim.lsp.buf.hover, { buffer = bufnr, desc = 'LSP: [P]eek/hover' })
     vim.keymap.set('n', 'gtd', vim.lsp.buf.type_definition, { buffer = bufnr, desc = 'LSP: [G]oto [T]ype [D]efinition' })
     vim.keymap.set('n', 'gr', vim.lsp.buf.references, { buffer = bufnr, desc = 'LSP: [G]oto [R]eferences' })
-    vim.keymap.set('n', '[d', function() vim.diagnostic.jump { count = -1, float = true } end,
-      { buffer = bufnr, desc = 'LSP: Previous [D]iagnostic' })
-    vim.keymap.set('n', ']d', function() vim.diagnostic.jump { count = 1, float = true } end,
-      { buffer = bufnr, desc = 'LSP: Next [D]iagnostic' })
+    vim.keymap.set('n', '[d', function()
+      vim.diagnostic.jump { count = -1, float = true }
+    end, { buffer = bufnr, desc = 'LSP: Previous [D]iagnostic' })
+    vim.keymap.set('n', ']d', function()
+      vim.diagnostic.jump { count = 1, float = true }
+    end, { buffer = bufnr, desc = 'LSP: Next [D]iagnostic' })
   end,
 })
 

@@ -1,19 +1,20 @@
 -- luarocks install luafilesystem luasocket
+
 local base_path = string.format('%s/myp/problem-solving', vim.loop.os_homedir())
 
 local judgesMap = {
-  codeforces = "Codeforces",
-  spoj = "SPOJ",
-  uva = "UVa",
-  virtual = "Virtual Judge",
-  timus = "Timus",
-  euler = "Project Euler",
-  poj = "POJ",
-  meta = "Meta",
-  hackerrank = "HackerRank",
-  dmoj = "DMOJ",
-  cses = "CSES",
-  atcoder = "AtCoder"
+  codeforces = 'Codeforces',
+  spoj = 'SPOJ',
+  uva = 'UVa',
+  virtual = 'Virtual Judge',
+  timus = 'Timus',
+  euler = 'Project Euler',
+  poj = 'POJ',
+  meta = 'Meta',
+  hackerrank = 'HackerRank',
+  dmoj = 'DMOJ',
+  cses = 'CSES',
+  atcoder = 'AtCoder',
 }
 
 local function sanitize(path)
@@ -56,7 +57,7 @@ local function relative_path(task, file_extension)
     contest = trim(string.sub(task.group, hyphen + 3))
   end
 
-  local original_judge = judge            -- Save the original judge name
+  local original_judge = judge -- Save the original judge name
   local lower_judge = string.lower(judge) -- Lowercase the judge name
 
   -- Check if lower_judge contains any key from judgesMap
@@ -103,8 +104,8 @@ local function relative_path(task, file_extension)
     end
   end
 
-  if lower_judge == "acwing" then
-    problem_name = string.match(task.url, "/(%d+)")
+  if lower_judge == 'acwing' then
+    problem_name = string.match(task.url, '/(%d+)')
   end
 
   return sanitize(string.format('%s/%s/%s/%s.%s', judge, contest, problem_name, file_name, file_extension))
@@ -124,12 +125,12 @@ return {
       cpp = { exec = 'g++', args = { '-std=c++23', '-DSAWALHY', '-Wall', '-Wextra', '-fsanitize=address', '-Wconversion', '$(FNAME)', '-o', '$(FNOEXT)' } },
       rust = { exec = 'rustc', args = { '$(FNAME)' } },
       java = { exec = 'javac', args = { '$(FNAME)' } },
-      go = { exec = 'go', args = { 'build', '-o', '$(FNOEXT)', '$(FNAME)' }, },
+      go = { exec = 'go', args = { 'build', '-o', '$(FNOEXT)', '$(FNAME)' } },
     },
 
     run_command = {
       go = { exec = './$(FNOEXT)' },
-      python = { exec = "python3", args = { "$(FNAME)" } },
+      python = { exec = 'python3', args = { '$(FNAME)' } },
     },
 
     template_file = '~/myp/problem-solving/template.$(FEXT)',
@@ -145,12 +146,12 @@ return {
   },
   keys = {
     { 'cpd', ":silent ! g++ -g '%' -o '%:p:r'<CR>", desc = 'Compile cpp file with -g flag' },
-    { 'cpt', ':CompetiTest receive testcases<CR>',  desc = 'Receive test cases' },
-    { 'cpp', ':CompetiTest receive problem<CR>',    desc = 'Receive a problem' },
-    { 'cpc', ':CompetiTest receive contest<CR>',    desc = 'Receive a contest' },
-    { 'cpr', ':CompetiTest run<CR>',                desc = 'Run the current file' },
-    { 'cpR', ':CompetiTest run_no_compile<CR>',     desc = 'Run the current file without compiling' },
-    { 'cpe', ':CompetiTest edit_testcase<CR>',      desc = 'Edit test cases' },
-    { 'cpa', ':CompetiTest add_testcase<CR>',       desc = 'Add new test case' },
-  }
+    { 'cpt', ':CompetiTest receive testcases<CR>', desc = 'Receive test cases' },
+    { 'cpp', ':CompetiTest receive problem<CR>', desc = 'Receive a problem' },
+    { 'cpc', ':CompetiTest receive contest<CR>', desc = 'Receive a contest' },
+    { 'cpr', ':CompetiTest run<CR>', desc = 'Run the current file' },
+    { 'cpR', ':CompetiTest run_no_compile<CR>', desc = 'Run the current file without compiling' },
+    { 'cpe', ':CompetiTest edit_testcase<CR>', desc = 'Edit test cases' },
+    { 'cpa', ':CompetiTest add_testcase<CR>', desc = 'Add new test case' },
+  },
 }

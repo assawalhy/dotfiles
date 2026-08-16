@@ -46,4 +46,4 @@ vim.o.scrolloff = 10
 
 -- End of line and tabs symbols
 vim.o.list = true
-vim.opt.listchars:append "eol:↴"
+vim.opt.listchars:append 'eol:↴'

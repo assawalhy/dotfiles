@@ -4,18 +4,17 @@
 -- NOTE: vim.fn.executable() returns a number, and 0 is truthy in Lua -- it must
 -- be compared against 1, never used as a bare condition.
 function CopyBuffer()
-  if vim.fn.executable('clip') ~= 1 then
+  if vim.fn.executable 'clip' ~= 1 then
     vim.notify("Can't find `clip` -- is ~/bin on your PATH?", vim.log.levels.ERROR)
     return
   end
-  vim.cmd('silent write !clip')
-  print('Buffer is copied')
+  vim.cmd 'silent write !clip'
+  print 'Buffer is copied'
 end
 
-vim.keymap.set('x', ';y', '"+y', { desc = "Copy selection to sys clipboard" })
-vim.keymap.set('n', ';wc', CopyBuffer, { desc = "Copy current buffer to sys clipboard" })
-vim.keymap.set('x', 'gsw', "'<,'> ! awk '{ print length(), $0 } | sort -n | cut -d\\  -f2-'<CR><ESC>",
-  { desc = "Sort selected lines by line width" })
+vim.keymap.set('x', ';y', '"+y', { desc = 'Copy selection to sys clipboard' })
+vim.keymap.set('n', ';wc', CopyBuffer, { desc = 'Copy current buffer to sys clipboard' })
+vim.keymap.set('x', 'gsw', "'<,'> ! awk '{ print length(), $0 } | sort -n | cut -d\\  -f2-'<CR><ESC>", { desc = 'Sort selected lines by line width' })
 
 -- easily move in wrapped lines
 vim.keymap.set('n', 'j', "v:count ? 'j' : 'gj'", { silent = true, expr = true })
@@ -55,8 +54,8 @@ vim.cmd [[
 command! LocalTerm let s:term_dir=expand('%:p:h') | below new | call termopen([&shell], {'cwd': s:term_dir })
 ]]
 
-vim.keymap.set('n', '<space>t', ':LocalTerm<cr>', { desc = 'Open a terminal in the current file\'s directory' })
+vim.keymap.set('n', '<space>t', ':LocalTerm<cr>', { desc = "Open a terminal in the current file's directory" })
 
 -- Comment plugin <C-_> maps
-vim.cmd([[nmap <C-_> gcc]])
-vim.cmd([[xmap <C-_> gc]])
+vim.cmd [[nmap <C-_> gcc]]
+vim.cmd [[xmap <C-_> gc]]

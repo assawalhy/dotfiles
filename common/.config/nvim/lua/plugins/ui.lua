@@ -23,62 +23,62 @@ return {
 
   {
     'akinsho/bufferline.nvim',
-    version = "*",
+    version = '*',
     dependencies = 'nvim-tree/nvim-web-devicons',
     config = function()
-      require("bufferline").setup {
+      require('bufferline').setup {
         options = {
-          diagnostics = "nvim_lsp",
-          separator_style = "slant",
+          diagnostics = 'nvim_lsp',
+          separator_style = 'slant',
           hover = {
             enabled = true,
             delay = 200,
-            reveal = { 'close' }
-          }
-        }
+            reveal = { 'close' },
+          },
+        },
       }
-    end
+    end,
   },
 
   {
     'lukas-reineke/indent-blankline.nvim',
-    main = "ibl",
+    main = 'ibl',
     event = 'BufEnter',
     priority = 1002,
     opts = {
-      indent = { char = "┊" },
+      indent = { char = '┊' },
       scope = {
         show_start = false,
-      }
+      },
     },
   },
 
   {
     'brenoprata10/nvim-highlight-colors',
     config = function()
-      require("nvim-highlight-colors").setup {
+      require('nvim-highlight-colors').setup {
         render = 'background', -- or 'foreground' or 'first_column'
         enable_named_colors = true,
         enable_tailwind = true,
       }
-    end
+    end,
   },
 
   {
-    "folke/todo-comments.nvim",
-    event = "VeryLazy",
-    dependencies = { "nvim-lua/plenary.nvim" },
-    opts = {}
+    'folke/todo-comments.nvim',
+    event = 'VeryLazy',
+    dependencies = { 'nvim-lua/plenary.nvim' },
+    opts = {},
   },
 
   {
     'Pocco81/true-zen.nvim',
     keys = {
-      { '<leader>zn', ':TZNarrow<CR>',     {} },
-      { '<leader>zf', ':TZFocus<CR>',      {} },
+      { '<leader>zn', ':TZNarrow<CR>', {} },
+      { '<leader>zf', ':TZFocus<CR>', {} },
       { '<leader>zm', ':TZMinimalist<CR>', {} },
-      { '<leader>za', ':TZAtaraxis<CR>',   {} },
-      { mode = 'v',   '<leader>zn',        ":'<,'>TZNarrow<CR>", {} },
-    }
+      { '<leader>za', ':TZAtaraxis<CR>', {} },
+      { mode = 'v', '<leader>zn', ":'<,'>TZNarrow<CR>", {} },
+    },
   },
 }

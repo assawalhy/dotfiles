@@ -10,8 +10,8 @@ return {
       -- 'HiPhish/nvim-ts-rainbow2',
       {
         'JoosepAlviste/nvim-ts-context-commentstring',
-        opts = { enable_autocmd = false, }
-      }
+        opts = { enable_autocmd = false },
+      },
     },
     build = ':TSUpdate',
     config = function()
@@ -108,22 +108,40 @@ return {
       -- vim.o.foldmethod = "expr"
       -- vim.o.foldexpr = "nvim_treesitter#foldexpr()"
       -- vim.o.foldenable = false
-    end
+    end,
   },
 
   {
     'Wansmer/treesj',
     opts = { use_default_keymaps = false },
     keys = {
-      { ';s', function() require('treesj').split() end,  desc = 'TreeSJ - Split' },
-      { ';j', function() require('treesj').join() end,   desc = 'TreeSJ - Join' },
-      { ';m', function() require('treesj').toggle() end, desc = 'TreeSJ - Toggle' },
+      {
+        ';s',
+        function()
+          require('treesj').split()
+        end,
+        desc = 'TreeSJ - Split',
+      },
+      {
+        ';j',
+        function()
+          require('treesj').join()
+        end,
+        desc = 'TreeSJ - Join',
+      },
+      {
+        ';m',
+        function()
+          require('treesj').toggle()
+        end,
+        desc = 'TreeSJ - Toggle',
+      },
       {
         ';M',
         function()
-          require('treesj').toggle({ split = { recursive = true } })
+          require('treesj').toggle { split = { recursive = true } }
         end,
-        desc = 'TreeSJ - Toggle recursively'
+        desc = 'TreeSJ - Toggle recursively',
       },
     },
   },

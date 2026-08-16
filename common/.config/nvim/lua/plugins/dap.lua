@@ -44,9 +44,9 @@ return {
               type = 'cppdbg',
               request = 'launch',
               program = function()
-                local file = vim.fn.expand('%:p')
-                local exefile = vim.fn.expand('%:p:r')
-                print("compiling: " .. file)
+                local file = vim.fn.expand '%:p'
+                local exefile = vim.fn.expand '%:p:r'
+                print('compiling: ' .. file)
                 os.execute(string.format([[g++ -g -DSAWALHY "%s" -o "%s"]], file, exefile))
                 return exefile
               end,
@@ -110,7 +110,7 @@ return {
       dap.set_breakpoint(vim.fn.input 'Breakpoint condition: ')
     end, 'Set conditional breakpoint')
     nvmap('<leader>dl', function()
-      require('dap').set_breakpoint(nil, nil, vim.fn.input('Log point message: '))
+      require('dap').set_breakpoint(nil, nil, vim.fn.input 'Log point message: ')
     end, 'Set log point')
 
     nvmap('<leader>dh', dap.run_to_cursor, 'come (h)ere')
@@ -118,7 +118,7 @@ return {
     nvmap('<leader>du', dapui.toggle, 'toggle dap UI')
     nvmap('<leader>de', dapui.eval, 'evaluate under cursor')
     nvmap('<leader>dE', function()
-      dapui.eval(vim.fn.input('Expression: '))
+      dapui.eval(vim.fn.input 'Expression: ')
     end, 'input an expression to evaluate')
 
     dap.listeners.after.event_initialized['dapui_config'] = dapui.open
