@@ -307,6 +307,16 @@ packages, so you don't have to bootstrap it by hand first.
   `pbcopy`/`xclip`/`xsel` directly — it picks the backend at runtime, and tmux
   and nvim both go through it. Linux-only scripts belong in `linux/bin/`.
 
+## Shell profiles
+
+- `.bash_profile`.
+  - contains the aliases and resusable functions like `lae` (list all excluding ...).
+  - contains the PATH changes.
+- `.config/shell/os.sh`.
+  - contains os-specific configs like the homebrew stuff or the WSL things.
+- These configs should only account for the applications and packges that the setup script handles, other packages when installed will add them selfs.
+- These rules should be verified when changes happens to them in the HOME and synced to this repo.
+
 ## License
 
 MIT

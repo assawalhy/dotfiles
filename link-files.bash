@@ -41,6 +41,47 @@ IGNORE_FILE="$REPO/link-ignore.txt"
 CTX_FILE="$REPO/link-context.txt"
 STAMP="$(date +%Y%m%d%H%M%S)"
 
+# ---------------------------------------------------------------- log ---
+#
+# Phase logging + elapsed-time instrumentation. Every slow phase logs a
+# start line and a done line carrying its duration to stderr, so the
+# preview, picker (fzf) and apply output on stdout stay untouched.
+# Timing uses `date +%s%N` (GNU); BSD/macOS date has no %N and falls back
+# to whole seconds, so sub-second phases read 0.000 there.
+T_START=0
+T_LAST=0
+
+now_ns() {
+  local n
+  n="$(date +%s%N 2>/dev/null)"
+  case "$n" in
+    ''|*[!0-9]*) printf '%s000000000\n' "$(date +%s)" ;;
+    *) printf '%s\n' "$n" ;;
+  esac
+}
+
+fmt_dur() { # $1 = elapsed nanoseconds -> "[%7.3fs]" (awk, bash 3.2 has no floats)
+  awk -v d="$1" 'BEGIN { printf "[%7.3fs]", d / 1e9 }'
+}
+
+log_start() { # $1 = label; stamp the phase start and announce it
+  T_LAST="$(now_ns)"
+  printf -- '-> %s ...\n' "$1" >&2
+}
+
+log_done() { # $1 = label; print the phase duration and stamp a new start
+  local now
+  now="$(now_ns)"
+  printf -- '   %s %s\n' "$(fmt_dur $((now - T_LAST)))" "$1" >&2
+  T_LAST="$now"
+}
+
+log_total() { # hooked into collect()'s EXIT trap: whole-run elapsed time
+  local now
+  now="$(now_ns)"
+  printf -- '   %s total elapsed\n' "$(fmt_dur $((now - T_START)))" >&2
+}
+
 # --------------------------------------------------------------- cli ---
 
 is_help=; is_force=; is_no_backup=; is_dry=; is_yes=; is_refresh=; is_audit=; is_diff=; is_fix=; filter=; pattern_given=
@@ -184,7 +225,9 @@ collect() {
   merged="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   desired="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   IGN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
-  trap 'rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
+  # log_total is defined at the top; the EXIT branch also covers the early
+  # exits in picker/confirm so every run reports its total elapsed time.
+  trap 'log_total; rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
 
   # Ignore set, built once for all list_root calls: strip any leading ./ and
   # trailing / so entries compare cleanly against the lister's relpaths.
@@ -875,34 +918,56 @@ apply() {
 
 # -------------------------------------------------------------- main ---
 
+T_START="$(now_ns)"
+
 parse_args "$@"
 read_ignores
 read_contexts
+log_start 'collecting repo files'
 collect
+log_done "collect ($(wc -l < "$merged" | tr -d ' ') files)"
 # The picker chooses which repo files to link out; capture/report modes
 # (--refresh, --audit) and --fix never open it.
 if [ -z "$is_dry" ] && [ -z "$is_yes" ] && [ -z "$pattern_given" ] \
   && [ -z "$is_refresh" ] && [ -z "$is_audit" ] && [ -z "$is_fix" ]; then
+  log_start 'picker'
   picker
+  log_done 'picker'
 fi
 if [ -n "$is_refresh" ]; then
+  log_start 'refresh scan'
   refresh_scan
+  log_done 'refresh scan'
   refresh_confirm
+  log_start 'refresh apply'
   refresh_apply
+  log_done 'refresh apply'
   exit 0
 fi
+log_start 'classify'
 classify
+log_done 'classify'
+log_start 'stale scan'
 find_stale
+log_done 'stale scan'
+log_start 'neglect scan'
 find_neglinked
+log_done 'neglect scan'
 if [ -n "$is_fix" ]; then
   confirm
+  log_start 'apply'
   apply
+  log_done 'apply'
   exit 0
 fi
 if [ -n "$is_audit" ]; then
+  log_start 'refresh scan'
   refresh_scan
+  log_done 'refresh scan'
   audit
   exit 0
 fi
 confirm
+log_start 'apply'
 apply
+log_done 'apply'

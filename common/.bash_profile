@@ -246,19 +246,32 @@ function wpy() {
 # Platform-specific entries (/snap/bin, homebrew, ...) live in
 # ~/.config/shell/os.sh. Only cross-platform, $HOME-relative ones belong here.
 
-export PATH="$HOME/.cargo/bin:$PATH"
-export PATH="$HOME/.volta/bin:$PATH"
-
 # bun
 [ -s "$HOME/.bun/_bun" ] && . "$HOME/.bun/_bun"
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
-export PATH="$PATH:$HOME/.foundry/bin"
-
-# php, composer, ...
-export PATH="$PATH:$HOME/.config/composer/vendor/bin"
-
 # written by the rust/uv installers; absent on a fresh machine
 [ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
+
 export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.opencode/bin:$PATH"
+export PATH="$PATH:$HOME/.config/composer/vendor/bin"
+export PATH="$PATH:$HOME/.foundry/bin"
+export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$PATH:/usr/local/go/bin"
+
+if command -v mise 2>&1 > /dev/null; then
+  eval "$(mise activate zsh)"
+fi
+
+if [ -d "$HOME/.docker" ]; then
+  fpath=($HOME/.docker/completions $fpath)
+  autoload -Uz compinit
+  compinit
+fi
+
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+[[ "$TERM_PROGRAM" == "kiro" ]] && . "$(kiro --locate-shell-integration-path zsh)"
+

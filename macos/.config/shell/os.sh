@@ -71,9 +71,6 @@ _LS_COLOR_FLAG='-G'
 
 # --------------------------------------------------------------- PATH ---
 
-[ -d /usr/local/go/bin ] && PATH="$PATH:/usr/local/go/bin"
-export PATH
-
 # Optional: GNU coreutils without the g- prefix. Left commented on purpose --
 # it silently changes ls/sed/date semantics for every script you run.
 #   for _g in coreutils findutils gnu-sed gawk grep; do
@@ -81,3 +78,22 @@ export PATH
 #       PATH="$HOMEBREW_PREFIX/opt/$_g/libexec/gnubin:$PATH"
 #   done
 #   export PATH
+
+fpath+=("/opt/homebrew/share/zsh/site-functions")
+eval "$(/opt/homebrew/bin/brew shellenv zsh)"
+
+source "$(brew --prefix)/Caskroom/gcloud-cli/latest/google-cloud-sdk/path.zsh.inc"
+source "$(brew --prefix)/Caskroom/gcloud-cli/latest/google-cloud-sdk/completion.zsh.inc"
+
+# Kiro CLI post block. Keep at the bottom of this file.
+[[ -f "${HOME}/Library/Application Support/kiro-cli/shell/zshrc.post.zsh" ]] && builtin source "${HOME}/Library/Application Support/kiro-cli/shell/zshrc.post.zsh"
+
+export VAULT_ADDR_DEV="http://vault.internal.dev.taager.com"
+export VAULT_ADDR_PROD="http://vault.internal.taager.com"
+
+alias vault-prod="export VAULT_ADDR=$VAULT_ADDR_PROD && echo Switched to PRODUCTION Vault: $VAULT_ADDR_PROD"
+alias vault-dev="export VAULT_ADDR=$VAULT_ADDR_DEV && echo Switched to DEVELOPMENT Vault: $VAULT_ADDR_DEV"
+
+alias switch-dev='kubectl config use-context gcp-dev'
+alias switch-prod='kubectl config use-context gcp-prod'
+

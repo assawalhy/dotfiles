@@ -1,7 +1,4 @@
 -- luarocks install luafilesystem luasocket
-local lfs = require("lfs")
-local socket = require("socket.http")
-
 local base_path = string.format('%s/myp/problem-solving', vim.loop.os_homedir())
 
 local judgesMap = {
@@ -29,6 +26,7 @@ end
 
 -- Function to fetch HTML content from a URL
 function fetch_html(url)
+  local socket = require("socket.http")
   local body, code, headers, status = socket.request(url)
   if code == 200 then
     return body
@@ -36,6 +34,7 @@ function fetch_html(url)
 end
 
 local function find_contest_folder(our_base_path, contest_id)
+  local lfs = require("lfs")
   for folder in lfs.dir(our_base_path) do
     if folder:find('^' .. contest_id .. ' %-') then
       return folder
