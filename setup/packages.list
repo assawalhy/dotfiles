@@ -69,6 +69,8 @@ docker              cask:docker                  p2  # cask = Docker Desktop
 meld                cask:meld p2
 lldb                brew:llvm                    p2  # macOS: lldb ships with the Xcode CLT; llvm is newer
 bats                brew:bats-core               p2  # bash test framework; the old brew `bats` formula is deprecated
+maven p2
+gradle p2
 
 [fonts]
 noto-fonts-emoji    cask:font-noto-color-emoji p4
