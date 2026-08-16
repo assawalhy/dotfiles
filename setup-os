@@ -182,7 +182,7 @@ pm_installed() { # pm_installed <mgr> <pkg> -> 0 when present
 
 # ---------------------------------------------------------- resolver ---
 
-# emits: group \t id \t mgr \t pkg   for entries valid on this machine
+# emits: group \t id \t mgr \t pkg \t prio \t check   for entries valid on this machine
 resolve() {
   [ -f "$LIST" ] || die "missing $LIST"
   awk -v os="$OS" -v pm="$PM" -v aur="$AUR" '
@@ -191,18 +191,19 @@ resolve() {
     /^\[/ { group = substr($0, 2, index($0, "]") - 2); next }
     {
       split("", m)            # portable array clear (macOS ships BWK awk)
-      id = $1; skip = 0; prio = ""
+      id = $1; skip = 0; prio = ""; check = ""
       for (i = 2; i <= NF; i++) {
         if ($i == "!" os)  { skip = 1; continue }
         if ($i ~ /^!/)     { continue }
         if ($i ~ /^p[0-9]+$/) { prio = $i; continue }
+        if ($i ~ /^check:/) { check = substr($i, 7); continue }
         p = index($i, ":"); if (!p) continue
         m[substr($i, 1, p - 1)] = substr($i, p + 1)
       }
       if (skip) next
 
       if (group == "cargo" || group == "pip") {
-        print group "\t" id "\t" group "\t" id "\t" (prio ? prio : "p4")
+        print group "\t" id "\t" group "\t" id "\t" (prio ? prio : "p4") "\t" check
         next
       }
 
@@ -221,7 +222,7 @@ resolve() {
       pkg = (mgr in m) ? m[mgr] : id
       if (pkg == "-") next     # explicitly unavailable for this manager
 
-      print group "\t" id "\t" mgr "\t" pkg "\t" (prio ? prio : "p4")
+      print group "\t" id "\t" mgr "\t" pkg "\t" (prio ? prio : "p4") "\t" check
     }' "$LIST"
 }
 
@@ -364,12 +365,17 @@ fi
 
 # Build the menu, dropping what is already present unless --show-installed.
 n_skipped=0
-while IFS=$'\t' read -r group id mgr pkg prio || [ -n "$group" ]; do
+while IFS=$'\t' read -r group id mgr pkg prio check || [ -n "$group" ]; do
   state=''
   if [ "$mgr" = step ]; then
     step_done "$pkg" && state=' (done)'
   else
     pm_installed "$mgr" "$pkg" && state=' (installed)'
+    # fallback: the command exists even though the manager can't see it
+    # (tarball/cargo/snap installs, differently-named packages)
+    if [ -z "$state" ] && [ -n "$check" ] && command -v "$check" >/dev/null 2>&1; then
+      state=' (installed)'
+    fi
   fi
   if [ -n "$state" ] && [ -z "$show_installed" ] && [ -z "$want_all" ]; then
     n_skipped=$((n_skipped + 1))

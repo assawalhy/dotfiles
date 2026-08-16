@@ -318,10 +318,17 @@ name then `Ctrl-A` to select a whole group at once.
   texlive       cask:basictex  pacman:texlive-core
   xclip         !macos                      # X11 only
   megasync      cask:megasync  aur:megasync-bin  pacman:-
+  bat           apt:batcat check:bat p1     # check: hides it when the command exists
   ```
 
   The bare `pN` token sets the priority tier; it goes at the end of the line,
   before any comment. Lines without one default to `p4`.
+
+  A `check:<command>` token marks the entry installed when that command exists
+  on `PATH`, even if the package manager can't see it — tarball installs
+  (`neovim check:nvim`), cargo/snap installs, or packages whose manager name
+  differs from the binary (`bat apt:batcat check:bat`). The manager lookup
+  stays primary; the command check is only a fallback.
 
 - **`setup/steps/*.sh`** — the things that aren't packages (rustup, oh-my-zsh,
   tpm, volta, pnpm, macOS `defaults`, …). One executable file each, with

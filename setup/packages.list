@@ -1,11 +1,13 @@
 # Packages that setup-os can install.
 #
 # FORMAT
-#   <id>  [mgr:name ...] [!macos] [!linux] [pN]
+#   <id>  [mgr:name ...] [check:cmd] [!macos] [!linux] [pN]
 #
 #   <id>        logical name, and the default package name
 #   mgr:name    override the package name for one manager
 #   mgr:-       not available for that manager -- skip it
+#   check:cmd   a command whose existence marks the entry installed, even
+#               when the manager can't see it (tarball/cargo/snap installs)
 #   !macos      not available (or not wanted) on macOS
 #   !linux      not available (or not wanted) on Linux
 #   pN          priority tier (p1 highest, p4 lowest); unlabeled defaults to p4
@@ -24,13 +26,13 @@
 git p1
 zsh p1
 tmux p1
-neovim p2
+neovim check:nvim p2
 tree-sitter-cli    pacman:tree-sitter p2  # nvim-treesitter needs it to compile parsers
 ranger p2
-fzf p1
-bat                 apt:batcat p1
+fzf check:fzf p1
+bat                 apt:batcat check:bat p1
 pipx p2
-fd                  apt:fd-find  dnf:fd-find p1
+fd                  apt:fd-find  dnf:fd-find check:fd p1
 mousepad            !macos                       p3  # GTK editor; macOS has TextEdit
 xsel                !macos                       p3  # X11 clipboard
 xclip               !macos                       p3  # X11 clipboard
@@ -38,23 +40,23 @@ wl-clipboard        !macos                       p3  # Wayland clipboard
 luarocks p4
 
 [extra]
-gh                  pacman:github-cli p1
-git-delta           apt:-  dnf:-                 p2  # not packaged on Debian; see [cargo]
-yt-dlp p2
+gh                  pacman:github-cli check:gh p1
+git-delta           apt:-  dnf:-  check:delta        p2  # not packaged on Debian; see [cargo]
+yt-dlp check:yt-dlp p2
 ffmpeg p2
-pandoc p2
-glow                apt:-                        p2  # was an install-script step; it's a real package now
-gitui               apt:-  dnf:-                 p2  # not in Debian/Ubuntu repos
-lazygit             apt:-                        p2  # not in Debian/Ubuntu repos
+pandoc check:pandoc p2
+glow                apt:-  check:glow            p2  # was an install-script step; it's a real package now
+gitui               apt:-  dnf:-  check:gitui        p2  # not in Debian/Ubuntu repos
+lazygit             apt:-  check:lazygit          p2  # not in Debian/Ubuntu repos
 texlive             cask:basictex  pacman:texlive-core  apt:texlive  dnf:texlive p4
 
 [gui]
 mpv !macos p3
-syncthing p3
-obsidian            cask:obsidian  aur:obsidian p3
-typora              cask:typora  aur:typora p3
+syncthing check:syncthing p3
+obsidian            cask:obsidian  aur:obsidian check:obsidian p3
+typora              cask:typora  aur:typora check:typora p3
 copyq               cask:copyq p3
-megasync            cask:megasync  aur:megasync-bin  pacman:-  apt:-  dnf:- p4
+megasync            cask:megasync  aur:megasync-bin  pacman:-  apt:-  dnf:- check:megasync p4
 zathura             !macos p3
 zathura-pdf-mupdf   !macos p3
 okular              !macos                       p3  # KDE document viewer
@@ -67,10 +69,10 @@ font-fira-code-nerd-font cask:font-fira-code-nerd-font pacman:ttf-firacode-nerd 
 [dev]
 docker              cask:docker                  p2  # cask = Docker Desktop
 meld                cask:meld p2
-lldb                brew:llvm                    p2  # macOS: lldb ships with the Xcode CLT; llvm is newer
+lldb                brew:llvm  check:lldb        p2  # macOS: lldb ships with the Xcode CLT; llvm is newer
 bats                brew:bats-core               p2  # bash test framework; the old brew `bats` formula is deprecated
-maven p2
-gradle p2
+maven check:mvn p2
+gradle check:gradle p2
 
 [fonts]
 noto-fonts-emoji    cask:font-noto-color-emoji p4
@@ -78,15 +80,15 @@ noto-fonts-cjk      cask:font-noto-sans-cjk p4
 libxft-bgra         !macos  aur:libxft-bgra  pacman:-  apt:-  dnf:-   p4  # st emoji crash fix
 
 [cargo]
-fastmod p1
-ripgrep p1
-eza                                              p1  # exa is unmaintained since 2023
-broot                                            p2  # the `br` shell function comes from this crate
-rmem p2
-sd p1
+fastmod check:fastmod p1
+ripgrep check:rg p1
+eza                 check:eza                 p1  # exa is unmaintained since 2023
+broot               check:broot               p2  # the `br` shell function comes from this crate
+rmem check:rmem p2
+sd check:sd p1
 
 [pip]
-git-fame                                         p2  # lines per contributor
-autopep8 p2
-black p2
-mdtoc p2
+git-fame           check:git-fame             p2  # lines per contributor
+autopep8 check:autopep8 p2
+black check:black p2
+mdtoc check:mdtoc p2
