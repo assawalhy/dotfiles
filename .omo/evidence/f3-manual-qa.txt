@@ -1,323 +1,136 @@
 ======================================================================
 VERDICT: APPROVE
-findings: none — all 6 QA rows (R1, R6, R7, R8, interactive picker,
-real-repo read-only --audit) passed every exact-line presence/absence
-assertion and exit-code check on a real tmux terminal session.
+findings: none blocking — all 6 QA items passed with real interactive
+evidence in a live tmux nvim session. One documented deviation: the
+plan's `:LspInfo` command does not exist on this nvim build (0.11+ has
+the builtin `:lsp` command, so nvim-lspconfig's plugin file returns
+early and never defines `:LspInfo`); the equivalent `:checkhealth
+vim.lsp` was used and shows jdtls attached. All other items verified
+exactly as specified.
 ======================================================================
-F3 — Real manual QA for the link-context-filter feature
-date: 2026-08-15T16:08:10Z  host: DESKTOP-55RSJSA  Linux
-bash: GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
-HEAD (committed): eadf053  docs: document session-context filtering for all link operations
-script under test: /home/ms/myp/dotfiles/link-files.bash (real repo, working tree)
-script SHA-256 (real repo working-tree copy): 1fa78165957fcb91a7a3e9bd3f309dbbfe7050e162b4003e2e248ebc2e4102c9
-  (byte-identical to the copy task-5 QA'd — feature stable across todos 1-5 + F-gate)
-fixture script used for rows R1/R6/R7/R8 + picker: /tmp/opencode/fx-repo/link-files.bash
-  (copied from the real repo at fixture build time; REPO resolves from the script's own location)
-env matrix:  wayland = WAYLAND_DISPLAY=wayland-0 DISPLAY=   |   x11 = WAYLAND_DISPLAY= DISPLAY=:0
-fixture runs always HOME=/tmp/opencode/fx-home.  Real-repo row (step 6) uses real HOME, read-only.
-======================================================================
+F3 — Real manual QA for the nvim-config-cleanup-and-java plan
+date: 2026-08-16T10:35:00Z  host: DESKTOP-55RSJSA  Linux
+HEAD (committed): 5c4bf98  test: add nvim headless smoke test
+reviewer: Sisyphus (F3 gate re-run; previous attempt aborted)
+config under test: ~/.config/nvim (live, symlinked to repo common/.config/nvim)
+sample project: /tmp/opencode/java-qa-sample (T11 fixture, outside repo)
+tmux session: f3qa (220x50), nvim booted interactively, all input via send-keys,
+all output via `tmux capture-pane -p`
 
 ======================================================================
-## 0. Gates — syntax (bash -n)
-$ bash -n /tmp/opencode/fx-repo/link-files.bash
-$ echo $?
-0
-$ bash -n /home/ms/myp/dotfiles/link-files.bash
-$ echo $?
-0
-==> PASS: bash -n clean on fixture copy AND real repo copy
-======================================================================
+## 0. Setup
+$ ls /tmp/opencode/java-qa-sample/src/main/java/com/example/Hello.java
+Hello.java   (exists — T11 fixture intact, 16 lines, pom.xml release 21 + junit 5.10.2)
+$ ls /usr/lib/jvm/default-java
+java-1.21.0-openjdk-amd64   (JDK 21 present)
+$ ls ~/.local/share/nvim/mason/packages/ | grep -E '^(jdtls|java-debug-adapter|java-test)$'
+java-debug-adapter
+java-test
+jdtls
+==> PASS: prerequisites in place. Booted `nvim Hello.java` in tmux f3qa.
+    Stale swap file from the aborted previous F3 run was deleted (option 'd').
 
 ======================================================================
-## R1 wayland+missing — fx-home has no links; wayland dry-run must
-##     NOT contain x11 rels, MUST contain .zshrc (and .multi);
-##     wayland --audit exits 1, reports .zshrc [missing], NOT the x11 rels.
-### fixture rebuild — plan Verification strategy recipe (plan lines 74-103)
-$ rm -rf /tmp/opencode/fx-repo /tmp/opencode/fx-home
-$ mkdir -p /tmp/opencode/fx-repo/common /tmp/opencode/fx-repo/linux /tmp/opencode/fx-home
-$ cp /home/ms/myp/dotfiles/link-files.bash /home/ms/myp/dotfiles/link-ignore.txt /home/ms/myp/dotfiles/.gitignore /tmp/opencode/fx-repo/
-$ printf 'z=1\n' > /tmp/opencode/fx-repo/common/.zshrc
-$ printf 'x=1\n' > /tmp/opencode/fx-repo/linux/.Xmodmap
-$ printf 'i=1\n' > /tmp/opencode/fx-repo/linux/.xinitrc
-$ printf 'm=1\n' > /tmp/opencode/fx-repo/common/.multi
-$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11app
-$ printf 's=1\n' > /tmp/opencode/fx-repo/common/.config/x11app/settings
-$ mkdir -p /tmp/opencode/fx-repo/common/.config/x11only
-$ printf 'o=1\n' > /tmp/opencode/fx-repo/common/.config/x11only/conf
-$ cat > /tmp/opencode/fx-repo/link-context.txt <<'EOF'
-# Context-neglect list. Files tagged for a context other than the current
-# session are excluded from linking, listing, --diff, --audit and --refresh.
-# Each line: <context>: <relpath>
-# Contexts: wayland, x11, headless. A relpath may appear on multiple
-# lines (relevant in several contexts). Comments/blank lines on their own
-# line. No globs. Relpath is relative to common/, linux/ or macos/.
-x11: .Xmodmap
-x11: .xinitrc
-x11: .config/x11app/settings
-x11: .config/x11only/conf
-wayland: .multi
-x11: .multi
-EOF
-$ git -C /tmp/opencode/fx-repo init -q          ; echo "git init rc=$?" -> 0
-$ git -C /tmp/opencode/fx-repo add -A           ; echo "git add rc=$?"  -> 0
-$ git -C /tmp/opencode/fx-repo commit -qm init  ; echo "git commit rc=$?" -> 0
-    (identity configured in this sandbox; a 128 "Author identity unknown"
-     would have been the documented ACCEPTED quirk — not treated as failure)
-git ls-files: .gitignore common/.config/x11app/settings common/.config/x11only/conf
-              common/.multi common/.zshrc link-context.txt link-files.bash
-              link-ignore.txt linux/.Xmodmap linux/.xinitrc
-  -> link-context.txt IS committed (required for git-index check-ignore logic)
+## 1. jdtls attaches
+Plan says `:LspInfo` — NOT available on this build (see deviation note).
+Equivalent used: `:checkhealth vim.lsp` (lspconfig's own alias target).
 
-### R1a — wayland --dry-run --yes
-$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --dry-run --yes
-$ echo $?
-0
------ OUTPUT (verbatim) -----
-+  .multi                                       [common]
-+  .zshrc                                       [common]
+$ :lua print(vim.inspect(vim.tbl_map(function(c) return c.name end, vim.lsp.get_clients())))
+{ "jdtls" }
 
-   common + linux  ->  /tmp/opencode/fx-home
------ END OUTPUT -----
-ASSERTIONS:
-  PASS  '.zshrc' present            PASS  '.multi' present
-  PASS  '.Xmodmap' absent           PASS  '.xinitrc' absent
-  PASS  '.config/x11app/settings' absent   PASS  '.config/x11only/conf' absent
-  PASS  exit code 0
-
-### R1b — wayland --audit
-$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --audit
-$ echo $?
-1
------ OUTPUT (verbatim) -----
-audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
-+  .multi                                       [missing]
-+  .zshrc                                       [missing]
-Audit findings: 2.
------ END OUTPUT -----
-ASSERTIONS (finding lines anchored ^[+*!~-][[:space:]]+ — header names the
-  neglected rels legitimately, so absence is asserted on FINDING LINES ONLY):
-  PASS  finding line '\.zshrc' present         PASS  finding line '\.multi' present
-  PASS  no finding line for '\.Xmodmap'        PASS  no finding line for '\.xinitrc'
-  PASS  no finding line for 'x11app/settings'  PASS  no finding line for 'x11only/conf'
-  PASS  exit code 1
-==> R1 PASS
-======================================================================
+$ :checkhealth vim.lsp   (excerpt)
+vim.lsp: Active Clients
+- jdtls (id: 1)
+  - Version: 1.60.0-SNAPSHOT
+  - Root directory: /tmp/opencode/java-qa-sample
+  - Command: { "/home/ms/.local/share/nvim/mason/packages/jdtls/bin/jdtls",
+               "-data", "/home/ms/.cache/nvim/jdtls/workspace/java-qa-sample" }
+  - Settings: { java = { configuration = { runtimes = { {
+      default = true, name = "JavaSE-21", path = "/usr/lib/jvm/default-java" } } } } }
+vim.lsp: Active Features — semantic_tokens: Active buffers [1]: jdtls (id: 1)
+==> PASS: jdtls attached (id 1), correct root dir, correct runtime.
+    Deviation note: `:LspInfo` -> E492: Not an editor command. Root cause:
+    nvim-lspconfig plugin/lspconfig.lua line 5-7: `if vim.fn.exists(':lsp') == 2
+    then return end` — nvim 0.11+ ships the builtin `:lsp` command, so lspconfig
+    skips defining LspInfo/LspLog/etc. `:checkhealth vim.lsp` is the documented
+    replacement and shows the same active-client info.
 
 ======================================================================
-## R6 D1-pattern — wayland '.*Xmodmap' must NOT resurrect the filter:
-##     "Nothing to do (0 links already correct)." (script's own empty
-##     message), exit 0, NOTHING created in fx-home.
-### fixture rebuild (fresh — same recipe as R1, link-context.txt committed)
-   ... recipe commands re-run verbatim (all rc 0); git init/add/commit rc=0
-   fx-home BEFORE: empty (0 entries)
-### invocation
-$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash '.*Xmodmap'
-$ echo $?
-0
------ OUTPUT (verbatim) -----
-Nothing to do (0 links already correct).
------ END OUTPUT -----
-ASSERTIONS:
-  PASS  output is exactly the script's own empty message
-        "Nothing to do (0 links already correct)."
-  PASS  exit code 0
-  PASS  fx-home after: find -mindepth 1 | wc -l  -> 0  (NOTHING created;
-        the pattern does NOT resurrect the neglected .Xmodmap)
-==> R6 PASS
-======================================================================
+## 2. blink.cmp completion pops
+Insert mode inside main(): typed `System.` (line 15, inside class body).
+
+$ tmux capture-pane -p   (excerpt)
+     15 ┊   ┊   System.out.println(new Hello().greet("world"));
+     16 ┊   }↴       󰜢 class                                                        Class<java.lang.System>   class : Class<java.lang.System>
+     17 }↴           󰏿 err                                                                      PrintStream
+                     󰏿 in                                                                       InputStream
+                     󰏿 out                                                                      PrintStream
+                     󰊕 arraycopy(Object arg0, int arg1, Object arg2, int arg3, int…                    void
+                     󰊕 clearProperty(String key)                                                     String
+                     󰊕 console()                                                                    Console
+                     󰊕 currentTimeMillis()                                                             long
+                     󰊕 exit(int status)                                                                void
+                     󰊕 gc()                                                                            void
+==> PASS: blink.cmp menu appeared with real jdtls items (out/err/in as
+    PrintStream/InputStream, methods with signatures). Context-aware:
+    typing at top level (outside class) offered declaration keywords
+    (abstract/class/enum/sealed/...) — jdtls responding correctly per position.
 
 ======================================================================
-## R7 empty-context — delete fx-repo/link-context.txt: wayland
-##     --dry-run --yes MUST still list ALL 6 rels (incl .zshrc and
-##     .Xmodmap), exit 0 — proves the `[ -s "$NEG_RELS" ]` guard.
-### setup (continues R6 fixture; R6 created nothing)
-$ rm /tmp/opencode/fx-repo/link-context.txt
-$ echo $?
-0
-### invocation
-$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --dry-run --yes
-$ echo $?
-0
------ OUTPUT (verbatim) -----
-+  .Xmodmap                                     [linux]
-+  .xinitrc                                     [linux]
-+  .config/x11app/settings                      [common]
-+  .config/x11only/conf                         [common]
-+  .multi                                       [common]
-+  .zshrc                                       [common]
+## 3. ;rn / ;ac / gd
+$ :map ;rn
+n  ;rn         *@<Lua 1340: .../runtime/lua/vim/lsp/buf.lua:716>
+                 LSP: [R]e[n]ame
+$ :map ;ac
+n  ;ac         *@<Lua 591: .../runtime/lua/vim/lsp/buf.lua:1376>
+                 LSP: [A]ction [C]ode
+$ :map gd
+n  gd          *@<Lua 183: .../runtime/lua/vim/lsp/buf.lua:343>
+                 LSP: [G]oto [D]efinition
 
-   common + linux  ->  /tmp/opencode/fx-home
------ END OUTPUT -----
-ASSERTIONS (all 6 rels present, no wipeout):
-  PASS  '.zshrc'  PASS  '.multi'  PASS  '.Xmodmap'  PASS  '.xinitrc'
-  PASS  '.config/x11app/settings'  PASS  '.config/x11only/conf'
-  PASS  exit code 0
-### fixture rebuilt FRESH afterwards (recipe above; restores the committed
-   link-context.txt via git add -A) — verified git ls-files lists link-context.txt.
-==> R7 PASS
-======================================================================
+Functional trigger — cursor on `greet` call (14:40), pressed `gd`:
+before: NORMAL ... 14:40   (on `new Hello().greet("world")` in main)
+after:  NORMAL ... 8:19    (on `public String greet(String name)` — the definition)
+==> PASS: all three keymaps bound to vim.lsp.buf.{rename,code_action,definition};
+    gd functionally jumped call -> definition via jdtls.
 
 ======================================================================
-## R8 stale-deleted — rm fx-repo/linux/.Xmodmap (context line stays) +
-##     fx-home/.Xmodmap symlink -> repo path (now dangling). Reported on
-##     BOTH wayland and x11 (context-independent), exit 1; wayland
-##     --dry-run shows `-`.
-### fixture rebuild (fresh — same recipe as R1)
-### state mutation
-$ rm /tmp/opencode/fx-repo/linux/.Xmodmap
-$ ln -s /tmp/opencode/fx-repo/linux/.Xmodmap /tmp/opencode/fx-home/.Xmodmap
-fx-home/.Xmodmap -> /tmp/opencode/fx-repo/linux/.Xmodmap   (dangling)
-
-### R8a — wayland --audit
-$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --audit
-$ echo $?
-1
------ OUTPUT (verbatim) -----
-audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc, x11: .config/x11app/settings, x11: .config/x11only/conf, x11: .multi)
--  .Xmodmap                                     stale link
-+  .multi                                       [missing]
-+  .zshrc                                       [missing]
-Audit findings: 3.
------ END OUTPUT -----
-
-### R8b — x11 --audit (context-independent: reports it too)
-$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY= DISPLAY=:0 /tmp/opencode/fx-repo/link-files.bash --audit
-$ echo $?
-1
------ OUTPUT (verbatim) -----
-audit context: x11 (neglecting: wayland: .multi)
--  .Xmodmap                                     stale link
-+  .xinitrc                                     [missing]
-+  .config/x11app/settings                      [missing]
-+  .config/x11only/conf                         [missing]
-+  .multi                                       [missing]
-+  .zshrc                                       [missing]
-Audit findings: 6.
------ END OUTPUT -----
-
-### R8c — wayland --dry-run (shows `-`)
-$ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash --dry-run
-$ echo $?
-0
------ OUTPUT (verbatim) -----
--  .Xmodmap                                     stale link
-+  .multi                                       [common]
-+  .zshrc                                       [common]
-
-   common + linux  ->  /tmp/opencode/fx-home
------ END OUTPUT -----
-ASSERTIONS:
-  PASS  wayland audit: '-  .Xmodmap  stale link' line + exit 1
-  PASS  x11 audit:     '-  .Xmodmap  stale link' line + exit 1  (context-independent)
-  PASS  wayland dry-run: '-  .Xmodmap' line present
-==> R8 PASS
-======================================================================
+## 4. :Trouble opens
+$ :Trouble diagnostics
+Window opened (bottom split) showing the jdtls TODO diagnostic tree:
+  /tmp/opencode/java-qa-sample/src/main/java/com/example/  1
+   └╴ Hello.java  1
+     └╴ TODO: localize the greeting Java (536871362) [9, 12]
+(Plain `:Trouble` also opened the mode picker: Diagnostics/fzf/loclist/lsp/...)
+==> PASS: Trouble diagnostics window opens and lists real jdtls diagnostics.
 
 ======================================================================
-## INTERACTIVE PICKER on wayland — REAL tmux session
-### fixture rebuild (fresh — x11 rels present in repo, fx-home has NO links)
-### tmux (tmux 3.4, fzf 0.44.1 on PATH; session f3qa, 200x50)
-$ tmux new-session -d -s f3qa -x 200 -y 50
-$ tmux send-keys -t f3qa "HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash" Enter
-   (BARE invocation — no args, no --yes/--dry-run/pattern: the picker only
-    opens when nothing else tells the script what to do)
-$ sleep 3
-### tmux capture-pane -p -t f3qa   (first capture — picker up)
------ CAPTURE (verbatim) -----
-compinit:527: no such file or directory: /usr/share/zsh/vendor-completions/_docker
-dotfiles ➤ HOME=/tmp/opencode/fx-home WAYLAND_DISPLAY=wayland-0 DISPLAY= /tmp/opencode/fx-repo/link-files.bash                                                                              git:master*
-link>
-  2/2 (0) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  TAB toggle · CTRL-A select all matches · CTRL-D deselect all · ENTER link
-> [other] .multi
-  [shell] .zshrc
------ END CAPTURE -----
-ASSERTIONS on captured pane:
-  PASS  picker shows '.multi'   PASS  picker shows '.zshrc'   (2/2 matches)
-  PASS  picker does NOT show '.Xmodmap'
-  PASS  picker does NOT show '.xinitrc'
-  PASS  picker does NOT show 'x11app/settings'
-  PASS  picker does NOT show 'x11only/conf'
-### quit the picker
-$ tmux send-keys -t f3qa "q"        # fzf has no default `q` quit — typed as query
-$ tmux capture-pane -p -t f3qa      # second capture
------ CAPTURE (verbatim) -----
-link> q
-  0/2 (0) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  TAB toggle · CTRL-A select all matches · CTRL-D deselect all · ENTER link
------ END CAPTURE -----
-$ tmux send-keys -t f3qa C-c
-$ sleep 1
-$ tmux capture-pane -p -t f3qa      # third capture — picker gone
------ CAPTURE (verbatim) -----
-Nothing selected.
-dotfiles ➤
------ END CAPTURE -----
-ASSERTIONS:
-  PASS  picker aborted cleanly: script printed 'Nothing selected.', returned to prompt
-  PASS  fx-home after: find -mindepth 1 | wc -l -> 0  (NO files linked — nothing written)
-$ tmux kill-session -t f3qa
-==> INTERACTIVE PICKER PASS
-======================================================================
+## 5. :Format works
+$ :lua print('Format exists:', vim.fn.exists(':Format'))
+Format exists: 2
+
+Functional test — introduced a violation, formatted, verified fix:
+$ :lua vim.api.nvim_buf_set_lines(0, 9, 10, false, {'    return    "Hello, " + name + "!";'})
+  line 10 became:  return    "Hello, " + name + "!";      (extra spaces)
+$ :Format
+  line 10 became:  return "Hello, " + name + "!";         (single space — fixed)
+No error message; buffer otherwise untouched.
+==> PASS: :Format command exists and functionally reformats via conform
+    (lsp_format fallback -> jdtls).
 
 ======================================================================
-## REAL-REPO READ-ONLY --audit on wayland env
-### baseline — git status BEFORE
-$ git -C /home/ms/myp/dotfiles status --short
- M .omo/boulder.json
- M README.md
- M link-files.bash
-?? .omo/drafts/audit-stale-prune.md
-?? .omo/drafts/link-context-filter.md
-?? .omo/evidence/f1-plan-compliance.txt
-?? .omo/evidence/f2-code-quality.txt
-?? .omo/evidence/f4-scope-fidelity.txt
-?? .omo/evidence/task-1-link-context-filter.txt
-?? .omo/evidence/task-2-link-context-filter.txt
-?? .omo/evidence/task-3-link-context-filter.txt
-?? .omo/evidence/task-4-link-context-filter.txt
-?? .omo/evidence/task-5-link-context-filter.txt
-?? .omo/notepads/link-context-filter/
-?? .omo/plans/audit-stale-prune.md
-?? .omo/plans/link-context-filter.md
-?? ctx2.txt
-### baseline — real $HOME snapshot: find "$HOME" -mindepth 1 -printf '%p|%T@|%s\n' | sort
-   -> 1,661,003 lines recorded
-### invocation (wayland env, real HOME — read-only by design)
-$ WAYLAND_DISPLAY=wayland-0 DISPLAY= /home/ms/myp/dotfiles/link-files.bash --audit
-$ echo $?
-0
------ OUTPUT (verbatim) -----
-audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc)
-Audit clean (46 links correct).
------ END OUTPUT -----
-ASSERTIONS:
-  PASS  header 'audit context: wayland (neglecting: x11: .Xmodmap, x11: .xinitrc)'
-        matches real /home/ms/myp/dotfiles/link-context.txt exactly (x11: .Xmodmap, x11: .xinitrc)
-  PASS  exit code 0 (real machine is link-clean under wayland context)
-### read-only verification
-$ git -C /home/ms/myp/dotfiles status --short   (AFTER)
-   diff of BEFORE vs AFTER git status:  EMPTY
-   PASS  git status UNCHANGED before/after — no repo writes from the audit
-$ find "$HOME" -mindepth 1 -printf '%p|%T@|%s\n' | sort   (AFTER snapshot)
-   diff of BEFORE vs AFTER HOME snapshots: the ONLY differing entries are
-   opencode/claude SESSION artifacts of THIS QA session itself:
-     - /home/ms/.claude/transcripts/ses_*.jsonl        (this session's transcript, growing)
-     - /home/ms/.local/share/opencode/log/opencode.log (this session's log)
-     - /home/ms/.local/share/opencode/opencode.db*     (this session's db/wal/shm)
-     - /home/ms/.local/share/opencode/snapshot/.../info/exclude
-   Filtered diff (excluding those 4 categories): 0 lines.
-   PASS  NO new/modified files in real $HOME from the audit run —
-         zero dotfile/linked-path writes. The audit wrote nothing.
-==> REAL-REPO READ-ONLY --audit PASS
-======================================================================
+## 6. :Mason shows jdtls / java-debug-adapter / java-test
+$ :Mason   (UI opened; Installed section, 22 packages)
+  ◍ java-debug-adapter
+  ◍ java-test
+  ◍ jdtls
+(also confirmed on disk: ~/.local/share/nvim/mason/packages/{jdtls,java-debug-adapter,java-test})
+==> PASS: all three java packages installed and shown in the Mason UI.
 
 ======================================================================
-VERDICT: APPROVE
-findings: none.
-Rows: R1 PASS · R6 PASS · R7 PASS · R8 PASS · PICKER PASS · REAL-AUDIT PASS
-All exact-line presence/absence assertions and exit codes verified on a
-real tmux terminal session (fixture rows) and on the real repo (read-only
-audit). Approved — F3 is the last functional gate; feature is ready for
-F4 (scope fidelity) sign-off.
+## Cleanup
+$ :qa!  ;  tmux kill-session -t f3qa
+Session gone, no leftover nvim processes. No config/repo files modified
+(only the /tmp/opencode sample buffer was edited in-session and discarded
+with :qa! / :e!; Hello.java on disk unchanged at 16 lines).
 ======================================================================

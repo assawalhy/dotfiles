@@ -102,3 +102,69 @@ Verified against current plugin docs/source (context7 + GitHub raw + mason-regis
 - Acceptance must use `XDG_CONFIG_HOME=/home/ms/myp/dotfiles/common/.config` (T1 learning) until T14 links the new files.
 - T4: Created `lua/plugins/conform.lua` (formatters_by_ft + format_on_save with `lsp_format = 'fallback'` + :Format cmd, moved from lsp.lua) and `lua/plugins/trouble.lua` (opts={}, cmd='Trouble', 5 <leader>x* keys). Linked via `./link-files.bash --yes '.*nvim.*'` (also linked blink.lua from T6, removed stale cmp.lua link). Both require() load headless; acceptance exit 0. Commit e4b1cd0.
 - **ENVIRONMENTAL GOTCHA #2 (codeium VimLeave exit-hang):** codeium.vim's `VimLeave` hook calls `codeium#ServerLeave()`, which blocks nvim exit when the codeium language server is unreachable. This hangs EVERY headless `-c 'qa'`/`qa!` in this session (T3/T4/T6 all hit it) — NOT a config bug. Workaround for headless acceptance: prefix `--cmd 'let g:codeium_enabled = v:false'` before the -c assertions; exit 0 cleanly. Do NOT "fix" this in the config (codeium is a user feature, plan says keep it).
+
+## [2026-08-16] F2 rejection fix — desc + commented-out cleanup (Sisyphus)
+
+- Added `desc` to all 19 `vim.keymap.set` calls in `lua/config/keymaps.lua` (wrapped-line j/k, tabnew/BufferLine x6, window focus x4, no-yank delete/change x7) and 4 in `lua/plugins/ufo.lua` (zR/zM/zr + K hover fallback — K's desc goes on the closing `end,` of the function form).
+- Deleted 12 commented-out blocks: keymaps.lua 4 zz-maps, dap.lua nvim-dap-go dep + dap-go setup call, treesitter.lua rainbow2 dep + 3 foldmethod lines, ufo.lua provider_selector block (incl. its `-- INFO:` line — F2 counts it as part of the commented-out block) + close_fold_kinds + winhighlight, neotree.lua lsp-file-operations block, telescope.lua fzf.vim block, competitest.lua output_compare_method.
+- KEPT `options.lua:12 -- vim.o.clipboard = 'unnamedplus'` (plan-mandated intentional comment) — it is now the ONLY match for the F2 commented-out-code grep, which is the expected end state.
+- Lazy `keys` descs added (F2 non-blocking rec): true-zen x5 (descs match actual keys zn/zf/zm/za, NOT the task's guessed zt/zz/zZ/zn/zN), vim-surround x4 (ds/cs/ys/S), easy-align ga, undotree U, move.nvim x8 (line/selection × down/up/left/right), sneak x4 (actual keys are f/F/t/T, not s/S).
+- Verification: stylua --check whole dir PASS (160col/single-quote config), grep for commented-out code matches ONLY options.lua:12, headless boot with XDG_CONFIG_HOME + codeium disabled exits 0.
+- NOTE for future F2-style greps: the `^\s*--\s*['"]` pattern also matches doc comments quoting plugin names (e.g. `-- NOTE: 'kevinhwang91/nvim-ufo' now handles it` in treesitter.lua) — those are documentation, not dead code, and were kept.
+
+## [2026-08-16] F1 evidence backfill — T5-T10, T12-T15 (Sisyphus)
+
+- Backfilled the F1 evidence-gap finding: created `.omo/evidence/task-{5,6,7,8,9,10,12,13,14,15}-nvim-config-cleanup-and-java.md` (10 files). All 16 todos now have evidence files. HEAD at backfill: `5c4bf98`.
+- All acceptance criteria re-run against the current tree — **16/16 PASS** (10 re-verified here + 6 existing files). No config/setup/README/test files touched; no commits.
+- **T9 headless gotcha:** editing `/tmp/opencode/java-qa-sample/.../Hello.java` headless hit a stale swap-file prompt (E325) left over from T11's crashed run (`~/.local/state/nvim/swap/%tmp%opencode%...swp`). Exit was still 0 (`qa!`), but for clean evidence prefix `-c 'set noswapfile'` before `-c 'edit ...'`. Environmental, not a config issue.
+- **T8 count note:** `ls ~/.local/share/nvim/mason/packages | grep -c java` == 2 counts only java-debug-adapter + java-test; jdtls is installed too (T3) but doesn't match the `java` pattern — the criterion's count of 2 is exact as specified.
+- **T14 audit:** `--audit '.*nvim.*'` exits 0 with "Audit clean (58 links correct)". Full unfiltered audit's only finding remains the x11-neglected `.xinitrc` (wayland session) — expected, no nvim drift. `readlink ~/.config/nvim/lua/config/options.lua` → `/home/ms/myp/dotfiles/common/.config/nvim/lua/config/options.lua` (per-file symlink live).
+- **T13 lockfile:** blink.cmp pinned at commit `78336bc8` (branch main); nvim-cmp fully absent. Orphaned plugins (async.nvim, kotlin.nvim, oil.nvim, refactoring.nvim) confirmed gone from `~/.local/share/nvim/lazy`.
+- **T12:** stylua from mason (`~/.local/share/nvim/mason/bin/stylua`) `--check` clean against `.stylua.toml` (160 cols/single quotes) — whole `common/.config/nvim` tree, exit 0.
+
+## [2026-08-16] F2 RE-RUN — APPROVE (Sisyphus)
+
+- Re-ran all 7 MUST-DO criteria after the REJECT fixes. All PASS → verdict APPROVE written to `.omo/evidence/f2-code-quality.txt` (overwrote the REJECT file, same format).
+- Fixes verified: 50/50 `vim.keymap.set` calls have desc (script count per file: keymaps 25/25, ufo 4/4, telescope 8/8, lsp.lua 9/9, java.lua 3/3, dap 1/1 via nvmap wrapper whose 15 invocations all pass desc strings). Runtime maparg asserts for ufo zR/K descs pass after `require('lazy').load({plugins={'nvim-ufo'}})`.
+- Commented-out grep now matches ONLY `options.lua:12` (intentional, plan-mandated). All 12 blocks confirmed deleted by full-file reads.
+- Lazy `keys` descs verified in all files: true-zen x5, flash x5, comment x2, vim-surround x4, easy-align x1, undotree x1, move.nvim x8, sneak x4, treesj x4, competitest x8, trouble x5, neotree x1.
+- Boot sanity: XDG_CONFIG_HOME + codeium-disabled headless boot exits 0 with >= 20 plugins loaded.
+- NOTE: the F2 fixes are UNCOMMITTED working-tree changes (10 modified files, HEAD still 5c4bf98). Evidence header documents this. Someone must commit before F3/F4 final sign-off or the fixes could be lost.
+- dap.lua desc-count gotcha for future scripted checks: the nvmap wrapper's local `desc = 'Dap: ' .. desc` assignment makes naive `desc =` counting report 2 descs for 1 keymap call — count per-call, not per-file, or special-case wrappers.
+
+## [2026-08-16] F3 manual QA executed — all 6 items PASS (Sisyphus)
+
+- Ran the F3 REAL manual QA gate interactively in tmux (session f3qa) on /tmp/opencode/java-qa-sample with the live ~/.config/nvim. Verdict APPROVE, evidence at .omo/evidence/f3-manual-qa.txt (overwrote the link-context-filter plan's file, per task).
+- **`:LspInfo` does NOT exist on this build** — E492. Root cause: nvim-lspconfig plugin/lspconfig.lua lines 5-7 `if vim.fn.exists(':lsp') == 2 then return end` — nvim 0.11+ has the builtin `:lsp` command, so lspconfig skips defining LspInfo/LspLog/etc. The documented replacement `:checkhealth vim.lsp` shows the same active-client info (jdtls id 1, root /tmp/opencode/java-qa-sample, JavaSE-21 at /usr/lib/jvm/default-java). Future QA/plan acceptance criteria should use `:checkhealth vim.lsp` or `vim.lsp.get_clients()` instead of `:LspInfo`.
+- **blink.cmp completion is context-aware via jdtls**: typing `System.` inside main() offered out/err/in (PrintStream/InputStream) + methods with signatures; typing at TOP LEVEL (outside the class body) offered declaration keywords (abstract/class/enum/sealed/...) — that's jdtls correctly answering per position, not a bug. When testing completion, type INSIDE a method.
+- **blink ghost-text display artifact**: with the completion popup open, capture-pane can show the selected item's text rendered after the cursor, making the line look longer than `getline()` reports. Ground truth = `getline()`/`complete_info()`, not the pane render.
+- **`:Trouble` opens a mode picker first** (Diagnostics/fzf/loclist/lsp/...); `:Trouble diagnostics` opens the diagnostics tree directly. It listed the jdtls TODO diagnostic at [9, 12].
+- **`:Format` functionally verified**: introduced `return    "Hello, "` (extra spaces) via nvim_buf_set_lines, ran `:Format`, line restored to single space. conform lsp_format fallback -> jdtls works.
+- **Mason UI**: jdtls/java-debug-adapter/java-test all installed (22 packages total), confirmed both in `:Mason` UI and on disk.
+- **Stale swap file from the aborted F3 run** was present on the sample file; deleted with 'd' at the E325 prompt. If F3 ever aborts again, clean ~/.local/state/nvim/swap/%tmp%opencode%... before re-running.
+- gd functional jump verified: 14:40 (greet call) -> 8:19 (greet definition). ;rn -> vim.lsp.buf.rename, ;ac -> vim.lsp.buf.code_action, gd -> vim.lsp.buf.definition, all with descs.
+
+## [2026-08-16] Rainbow2 re-enabled — user-requested follow-up (Sisyphus)
+
+- Re-added `HiPhish/nvim-ts-rainbow2` to treesitter.lua: dependency line after autotag + `rainbow = { enable = true, extended_mode = true, max_file_lines = 1000 }` block between highlight and incremental_selection. stylua --check clean (160col/single-quote), no other files touched, no commit.
+- Lazy sync cloned it (branch master, commit b3120cd5) and wrote the lockfile entry through to `common/.config/nvim/lazy-lock.json` — intended per README.
+- **MODULE NAME GOTCHA:** the plugin's Lua module is `ts-rainbow`, NOT `nvim-ts-rainbow2` — `require("nvim-ts-rainbow2")` fails with E5108 even though the plugin is installed and working. Verify with `require("ts-rainbow")` (exit 0). The task's suggested acceptance require name was wrong; the plugin itself is fine.
+- Acceptance: grep counts 1/2 pass, stylua exit 0, sync exit 0, `require("ts-rainbow")` exit 0, lockfile grep == 1.
+
+## [2026-08-16] setup-os `check:<command>` token added (Sisyphus)
+
+- Added `check:<cmd>` token support to `setup/packages.list` + `setup-os` so packages installed outside the manager (tarball/cargo/snap, differently-named apt packages) are detected as installed. Files: `setup-os`, `setup/packages.list`, `README.md`. No commit.
+- **Resolver** (`resolve()` awk): `check` var parsed in the token loop BEFORE the generic `m[substr($i,1,p-1)]` assignment — a `check:` token must NOT land in the manager map `m` (it has a colon, so the generic branch would have stored `m["check"]="bat"`). Emitted as 6th tab field: `group \t id \t mgr \t pkg \t prio \t check`. cargo/pip special-case also emits the 6th field (empty when absent).
+- **Menu loop**: `read -r group id mgr pkg prio check`; package branch: `pm_installed` stays primary, then `[ -z "$state" ] && [ -n "$check" ] && command -v "$check"` sets ` (installed)`. Steps emit 5 fields → `check` reads empty, unaffected.
+- **Downstream consumers verified with 6 fields**: `--group` ($1), `--priority` ($5 — prio stays field 5), `only_list` ($1 $2 $5 $3 $4), PICKED round-trip ($1|$2|$3|$4) all unchanged and working.
+- **Real-case verification**: on this machine dpkg DOES see a `bat` package (so bat is caught by the manager lookup, not the fallback), but neovim is genuinely invisible to dpkg (`dpkg-query -W` has no neovim) — `check:nvim` + `/opt/nvim-linux-x86_64/bin/nvim` on PATH hid it via the fallback. Menu-loop simulation: neovim SKIPPED via check fallback, bat SKIPPED, entries without check behave normally (pipx/texlive still offered).
+- **Design note**: `check:` is single-token, command name only — no spaces/args (e.g. `check:command -v bat` invalid). Multi-word checks would need a different mechanism (steps already support full shell via `# check:` headers). `--all`/`--priority` intentionally keep installed entries in the menu (pre-existing behavior), so the picker-filter test must simulate the menu loop without `want_all`.
+
+## [2026-08-16] check: audit — 25 entries tagged for out-of-manager installs (Sisyphus)
+
+- Extended `setup/packages.list` with `check:<cmd>` on 25 entries commonly installed OUTSIDE the package manager, so setup-os hides them from the picker when the binary exists on PATH even when the manager can't see it. Only `setup/packages.list` modified; `setup-os` untouched (`bash -n` clean). No commit.
+- **Binary-name gotchas**: `git-delta` → `check:delta` (binary is `delta`), `maven` → `check:mvn` (binary is `mvn`). Both are cargo/tarball/sdkman installs where the package id ≠ the command.
+- **Sections covered**: [extra] gh/git-delta/yt-dlp/pandoc/glow/gitui/lazygit (tarball/script/cargo), [gui] syncthing/obsidian/typora/megasync (tarball/AppImage), [dev] lldb (Xcode CLT)/maven/gradle (sdkman), [terminal] fzf (git-clone script)/fd (tarball), [cargo] fastmod/eza/broot/rmem/sd (tarball bypasses `cargo install --list`), [pip] git-fame/autopep8/black/mdtoc (system-pip bypasses `pipx list`).
+- **Deliberately NOT tagged**: packages always installed via the manager (git, zsh, tmux, ranger, pipx, mousepad, xsel, xclip, wl-clipboard, luarocks, ffmpeg, texlive, mpv, copyq, zathura, zathura-pdf-mupdf, okular, feh, skim, pngpaste, docker, meld, bats, noto-fonts-*, libxft-bgra).
+- **Alignment convention**: id column padded to width 20; comment column at 53 (pN ends at 51); lines without comments use single-space token separation (bat style). `check:` token goes BEFORE the `pN` token.
+- **Verification**: resolver awk simulation (same logic as `resolve()`) run with os=linux pm=apt, os=linux pm=pacman, os=macos pm=brew — all 25 new entries emit the check field as the 6th tab field (megasync only resolves on cask, as expected: `pacman:- apt:- dnf:-`).
