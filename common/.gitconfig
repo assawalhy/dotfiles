@@ -8,21 +8,12 @@
     s = status
     co = checkout
     cb = checkout -b
-    mr = merge
-    ms = merge --squash
-    mnff = merge --no-ff
     br = branch
     ll = log --oneline
     lg = log --pretty=format:"%C(yellow)%h%Creset %C(green)%s%Creset %Cred%d%Creset %Cblue[%an]" --date=short
     cm = commit -m
-    cam = commit -am
-    csm = commit -S -m
-    csam = commit -S -am
-    ca = commit --amend --no-edit
-    cma = commit --amend -m
-    cama = commit --amend -am
-    csma = commit --amend -S -m
-    casma = commit --amend -S -am
+    can = commit --amend --no-edit
+    cam = commit --amend -m
     conflicted = !vim +Conflicted
 
 [user]
