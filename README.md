@@ -33,6 +33,52 @@ platform-specific aliases, functions and `PATH` entries come from exactly one
 file and neither copy needs a `uname` branch. The same trick is used for
 `~/.config/git/os.gitconfig`.
 
+## Neovim
+
+The config lives in `common/.config/nvim/` and loads in layers:
+
+```
+init.lua                   8-line manifest: leader key + 4 requires
+lua/config/lazy.lua        plugin manager bootstrap
+lua/config/options.lua     editor settings
+lua/config/keymaps.lua     global keymaps
+lua/config/autocmds.lua    global autocommands
+lua/plugins/*.lua          one file per feature (ui, editor, git, lsp,
+                           blink, conform, trouble, jdtls, dap, treesitter,
+                           ufo, neotree, telescope, competitest)
+after/plugin/lsp.lua       LspAttach native keymaps + diagnostics
+after/ftplugin/java.lua    jdtls config for Java files
+```
+
+### LSP keymaps
+
+Bound on `LspAttach` (skipped for copilot):
+
+| Key | Action |
+|---|---|
+| `;rn` | rename |
+| `;ac` | code action |
+| `gd` | go to definition |
+| `gp` | hover |
+| `gtd` | go to type definition |
+| `gr` | references |
+| `[d` / `]d` | previous / next diagnostic |
+| `<leader>dd` | diagnostics list |
+
+### Completion (blink.cmp)
+
+`C-n`/`C-p` select, `C-b`/`C-f` scroll docs, `C-Space` complete, `CR` accept,
+`Tab`/`S-Tab` jump between snippet placeholders.
+
+### Java
+
+Requires JDK 21+ (the config points at `/usr/lib/jvm/default-java`). Maven and
+Gradle come from the `p2` tier: `./setup-os --priority p2`. Mason installs
+`jdtls`, `java-debug-adapter` and `java-test`. Lombok support is enabled by
+setting `LOMBOK_JAR` to the lombok jar path; the agent is appended to the
+jdtls VM args when set. Each project gets its own workspace cache under
+`stdpath('cache')/jdtls/workspace/<project-name>`.
+
 ## Linking
 
 ```sh
