@@ -227,7 +227,11 @@ collect() {
   IGN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   # log_total is defined at the top; the EXIT branch also covers the early
   # exits in picker/confirm so every run reports its total elapsed time.
-  trap 'log_total; rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT INT TERM HUP
+  # INT/TERM/HUP just exit: the EXIT trap then runs log_total + cleanup, and
+  # without the explicit `exit 130` a Ctrl+C during the read prompt would be
+  # swallowed and the script would carry on.
+  trap 'log_total; rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT
+  trap 'exit 130' INT TERM HUP
 
   # Ignore set, built once for all list_root calls: strip any leading ./ and
   # trailing / so entries compare cleanly against the lister's relpaths.
@@ -462,13 +466,38 @@ classify() {
   done < "$merged"
 }
 
-# Symlinks anywhere in $HOME that point into this repo but are no longer
-# wanted (source deleted, or moved between overlays leaving a broken link).
-# One single-pass `find -lname` scan (GNU and BSD/macOS find both support
-# it): -lname glob-matches the symlink's TARGET string against "$REPO/*", so
-# only repo-pointing links are ever readlinked -- measured ~2s on a 60GB /
-# 1.47M-file home vs 18.8s for the old per-dir readlink loop. $REPO must not
-# contain glob characters (escape them if that ever changes).
+# Top-level directory names where repo-created links might live.  Instead of
+# scanning all 60 GB / 1.47 M files under $HOME (28 s), only scan the
+# top-level names the repo currently manages plus any deleted in git history.
+# Sources:
+#   1. Current top-level entries of $COMMON and $OSDIR (the active overlays).
+#      Each dir is listed separately -- `ls` on multiple dirs would also emit
+#      header (`dir:`) and blank separator lines, and a blank root would fall
+#      through to scanning all of $HOME.
+#   2. Top-level entries deleted from any overlay in git history (covers dirs
+#      like linux/.mlterm or linux/.my.bash removed in earlier commits whose
+#      links may still linger in $HOME).  45 ms; pipeline status comes from
+#      sort, so non-git repos never trip set -e.
+#   3. $HOME maxdepth-1 scan catches orphaned top-level dotfiles (deleted
+#      files like .zshrc) -- handled in find_stale itself.
+# Deduped via sort -u.  Must only emit top-level *dir* names; top-level
+# file names (.zshrc, .Xmodmap …) are handled by the maxdepth-1 fallback.
+scan_roots() {
+  {
+    ls -1A "$COMMON" 2>/dev/null
+    ls -1A "$OSDIR" 2>/dev/null
+    git -C "$REPO" log --all --diff-filter=D --name-only --format='' \
+      -- 'common/*' 'macos/*' 'linux/*' 'windows/*' 2>/dev/null \
+      | awk -F/ 'NF > 1 { print $2 }'
+  } | sort -u
+}
+
+# Symlinks in $HOME that point into this repo but are no longer wanted
+# (source deleted, or moved between overlays leaving a broken link).
+# Instead of a full recursive scan of $HOME (~28 s on a 60 GB / 1.47 M-file
+# home), only scan the top-level roots the repo ever managed (scan_roots) plus
+# $HOME at maxdepth 1 (for orphaned top-level dotfiles).  Measured <100 ms.
+# $REPO must not contain glob characters (escape them if that ever changes).
 # Three-way classification for links not in $desired:
 #   target gone ([ ! -e ] follows the link)      -> stale (dangling)
 #   target exists + rel matches link-ignore.txt  -> ignored (reported by
@@ -479,7 +508,7 @@ classify() {
 # Only ever touches links whose target is under $REPO, so unrelated symlinks
 # in $HOME are never at risk.
 find_stale() {
-  local l t rel
+  local l t rel root
   while IFS= read -r l || [ -n "$l" ]; do
     t="$(readlink "$l")"
     case "$t" in "$REPO"/*) ;; *) continue ;; esac
@@ -495,7 +524,16 @@ find_stale() {
     else
       stale+=("$l")
     fi
-  done < <(find "$HOME" -type l -lname "$REPO/*" 2>/dev/null)
+  done < <(
+    # top-level orphaned dotfiles (deleted from repo but link still present)
+    find "$HOME" -maxdepth 1 -type l -lname "$REPO/*" 2>/dev/null
+    # links inside current or historically-managed top-level dirs
+    while IFS= read -r root || [ -n "$root" ]; do
+      [ -n "$root" ] || continue
+      [ -d "$HOME/$root" ] || continue
+      find "$HOME/$root" -type l -lname "$REPO/*" 2>/dev/null
+    done < <(scan_roots)
+  )
 }
 
 # Links that exist and point into the repo but are neglected for the current

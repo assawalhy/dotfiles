@@ -456,10 +456,14 @@ setup() {
 }
 
 @test "stale- dangling links in a fully-deleted dir are reported and pruned" {
-  fixture_new st_deleted
+  fixture_new st_deleted git
+  git -C "$FIX_REPO" add -A
+  git -C "$FIX_REPO" -c user.name=t -c user.email=t@t commit -qm init
   run_link --yes
   [ "$status" -eq 0 ]
   rm -rf "$FIX_REPO/common/.config"   # whole dir gone from the repo
+  git -C "$FIX_REPO" add -A
+  git -C "$FIX_REPO" -c user.name=t -c user.email=t@t commit -qm drop
   run_link --audit
   [ "$status" -eq 1 ]
   output_has_finding .config/mpv/mpv.conf
