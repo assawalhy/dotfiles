@@ -14,7 +14,7 @@ local rainbow_colors = {
 
 vim.g.rainbow_delimiters = {
   strategy = {
-    [''] = 'global',
+    [''] = 'rainbow-delimiters.strategy.global',
   },
   query = {
     [''] = 'rainbow-delimiters',

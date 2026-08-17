@@ -58,6 +58,16 @@ return {
       },
       filesystem = {
         follow_current_file = { enabled = true },
+        filtered_items = {
+          hide_dotfiles = false,   -- show .config & all dotfiles by default
+          hide_gitignored = false, -- show gitignored, auto-dimmed by NeoTreeGitIgnored
+          hide_ignored = false,    -- show .ignore/.neotreeignore files, dimmed
+          hide_by_name = {         -- hidden by default, appears when H toggled
+            '.git',
+            '.DS_Store',
+            'thumbs.db',
+          },
+        },
       },
       source_selector = {
         winbar = true,
