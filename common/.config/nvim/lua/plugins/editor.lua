@@ -5,12 +5,6 @@ return {
   -- Useful plugin to show you pending keybinds.
   { 'folke/which-key.nvim', opts = {} },
 
-  -- Generative AI (copilot alternative)
-  {
-    'Exafunction/codeium.vim',
-    event = 'BufEnter',
-  },
-
   {
     'folke/flash.nvim',
     event = 'VeryLazy',
@@ -114,7 +108,6 @@ return {
 
   {
     'fedepujol/move.nvim',
-    cmd = 'Move',
     keys = {
       { '<A-j>', ':MoveLine(1)<CR>', mode = 'n', silent = true, desc = 'Move line down' },
       { '<A-k>', ':MoveLine(-1)<CR>', mode = 'n', silent = true, desc = 'Move line up' },

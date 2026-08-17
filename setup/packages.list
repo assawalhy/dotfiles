@@ -37,6 +37,7 @@ mousepad            !macos                       p3  # GTK editor; macOS has Tex
 xsel                !macos                       p3  # X11 clipboard
 xclip               !macos                       p3  # X11 clipboard
 wl-clipboard        !macos                       p3  # Wayland clipboard
+mise p2
 luarocks p4
 
 [extra]

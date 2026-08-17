@@ -1,13 +1,50 @@
 -- skip backwards compatibility routines and speed up loading
 vim.g.skip_ts_context_commentstring_module = true
 
+-- Rainbow delimiters configuration (replaces nvim-ts-rainbow2)
+local rainbow_colors = {
+  'RainbowDelimiterViolet',
+  'RainbowDelimiterCyan',
+  'RainbowDelimiterYellow',
+  'RainbowDelimiterRed',
+  'RainbowDelimiterBlue',
+  'RainbowDelimiterOrange',
+  'RainbowDelimiterGreen',
+}
+
+vim.g.rainbow_delimiters = {
+  strategy = {
+    [''] = 'global',
+  },
+  query = {
+    [''] = 'rainbow-delimiters',
+  },
+  highlight = rainbow_colors,
+}
+
+local rainbow_hl = {
+  { RainbowDelimiterRed = '#e06c75' },
+  { RainbowDelimiterOrange = '#d19a66' },
+  { RainbowDelimiterYellow = '#e5c07b' },
+  { RainbowDelimiterGreen = '#98c379' },
+  { RainbowDelimiterCyan = '#56b6c2' },
+  { RainbowDelimiterBlue = '#61afef' },
+  { RainbowDelimiterViolet = '#c678dd' },
+}
+
+for _, hl in ipairs(rainbow_hl) do
+  for name, fg in pairs(hl) do
+    vim.api.nvim_set_hl(0, name, { fg = fg })
+  end
+end
+
 return {
   {
     'nvim-treesitter/nvim-treesitter',
     dependencies = {
       'nvim-treesitter/nvim-treesitter-textobjects',
       'windwp/nvim-ts-autotag',
-      'HiPhish/nvim-ts-rainbow2',
+
       {
         'JoosepAlviste/nvim-ts-context-commentstring',
         opts = { enable_autocmd = false },
@@ -71,11 +108,7 @@ return {
         },
       }
 
-      require('nvim-ts-rainbow2').setup {
-        enable = true,
-        extended_mode = true,
-        max_file_lines = 1000,
-      }
+
 
       local function textobj(query)
         require('nvim-treesitter-textobjects.select').select_textobject(query, 'textobjects')
@@ -113,6 +146,8 @@ return {
       -- NOTE: 'kevinhwang91/nvim-ufo' now handles it
     end,
   },
+
+  { 'HiPhish/rainbow-delimiters.nvim' },
 
   {
     'Wansmer/treesj',
