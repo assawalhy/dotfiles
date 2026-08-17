@@ -86,8 +86,9 @@ return {
         'rust',
         'tsx',
         'typescript',
-        'vimdoc',
-        'vim',
+      'vimdoc',
+      'vim',
+      'http',
       }
 
       -- Autotag

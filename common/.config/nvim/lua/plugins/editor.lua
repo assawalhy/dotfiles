@@ -129,4 +129,9 @@ return {
       { 'T', '<Plug>Sneak_T', desc = 'Sneak till backward' },
     },
   },
+
+  {
+    'rest-nvim/rest.nvim',
+    ft = 'http',
+  },
 }
