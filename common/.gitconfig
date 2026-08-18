@@ -17,9 +17,8 @@
     conflicted = !vim +Conflicted
 
 [user]
-    email = muhammadsawalhy@gmail.com
-    name = Assawalhy
-    username = assawalhy
+    email = muhammad.samir@taager.com
+    name = Muhammad Assawalhy
 
 [init]
     defaultBranch = main
