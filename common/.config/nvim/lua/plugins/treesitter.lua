@@ -41,8 +41,12 @@ end
 return {
   {
     'nvim-treesitter/nvim-treesitter',
+    branch = 'main',
     dependencies = {
-      'nvim-treesitter/nvim-treesitter-textobjects',
+      {
+        'nvim-treesitter/nvim-treesitter-textobjects',
+        branch = 'main',
+      },
       'windwp/nvim-ts-autotag',
 
       {
@@ -56,40 +60,86 @@ return {
         install_dir = vim.fn.stdpath 'data' .. '/site',
       }
 
-      -- Syntax highlighting (:h treesitter-highlight).
-      -- Regex highlighting is disabled to mirror the old
-      -- `additional_vim_regex_highlighting = false`.
+      -- Parsers compile lazily: the first buffer of a whitelisted language
+      -- kicks off a background install instead of compiling everything at
+      -- startup.
+      local wanted = {
+        c = true,
+        cpp = true,
+        go = true,
+        lua = true,
+        python = true,
+        rust = true,
+        tsx = true,
+        typescript = true,
+        vim = true,
+        vimdoc = true,
+        http = true,
+        json = true,
+        xml = true,
+        html = true,
+        latex = true,
+        markdown = true,
+      }
+
+      -- parsers a language needs alongside its own
+      local companions = {
+        markdown = { 'markdown_inline' },
+      }
+
+      local installing = {}
+
+      -- returns true when the parser is ready; otherwise starts the install
+      -- and polls until it compiles, then replays FileType on the buffer so
+      -- highlighting and indentexpr pick it up (~90s budget)
+      local function ensure_parser(lang, bufnr)
+        if pcall(vim.treesitter.language.add, lang) then return true end
+
+        if not installing[lang] then
+          installing[lang] = true
+
+          local langs = { lang }
+          vim.list_extend(langs, companions[lang] or {})
+          require('nvim-treesitter').install(langs)
+        end
+
+        local function poll(attempt)
+          if attempt > 45 then return end
+          if not pcall(vim.treesitter.language.add, lang) then
+            vim.defer_fn(function() poll(attempt + 1) end, 2000)
+            return
+          end
+
+          installing[lang] = nil
+          if vim.api.nvim_buf_is_valid(bufnr) then
+            vim.api.nvim_exec_autocmds('FileType', { buffer = bufnr })
+          end
+        end
+
+        vim.defer_fn(function() poll(1) end, 1000)
+        return false
+      end
+
       vim.api.nvim_create_autocmd('FileType', {
-        callback = function()
+        callback = function(args)
+          local lang = vim.treesitter.language.get_lang(args.match) or args.match
+          if not wanted[lang] then return end
+
+          if not ensure_parser(lang, args.buf) then return end
+
+          -- Syntax highlighting (:h treesitter-highlight).
+          -- Regex highlighting is disabled to mirror the old
+          -- `additional_vim_regex_highlighting = false`.
           if pcall(vim.treesitter.start) then
             vim.bo.syntax = ''
           end
-        end,
-      })
 
-      -- Treesitter-based indentation (experimental, from nvim-treesitter docs)
-      vim.api.nvim_create_autocmd('FileType', {
-        callback = function()
+          -- Treesitter-based indentation (experimental, from nvim-treesitter docs)
           if pcall(vim.treesitter.get_parser) then
             vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
           end
         end,
       })
-
-      -- Auto-install parsers (replaces the old `ensure_installed`)
-      require 'nvim-treesitter'.install {
-        'c',
-        'cpp',
-        'go',
-        'lua',
-        'python',
-        'rust',
-        'tsx',
-        'typescript',
-      'vimdoc',
-      'vim',
-      'http',
-      }
 
       -- Autotag
       require('nvim-ts-autotag').setup {

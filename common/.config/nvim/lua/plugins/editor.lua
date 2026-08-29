@@ -48,7 +48,7 @@ return {
   {
     'numToStr/Comment.nvim',
     keys = {
-      { 'gc',    mode = { 'x', 'n' }, desc = 'Comment' },
+      { 'gc', mode = { 'x', 'n' }, desc = 'Comment' },
       { '<C-_>', mode = { 'x', 'n' }, desc = 'Comment' },
     },
     config = function()
@@ -70,7 +70,7 @@ return {
       { 'ds', desc = 'Delete surround' },
       { 'cs', desc = 'Change surround' },
       { 'ys', desc = 'Surround' },
-      { 'S',  mode = 'x',              desc = 'Surround (visual)' },
+      { 'S', mode = 'x', desc = 'Surround (visual)' },
     },
   },
 
@@ -108,14 +108,22 @@ return {
 
   {
     'fedepujol/move.nvim',
+    cmd = { 'MoveLine', 'MoveBlock', 'MoveHChar', 'MoveHBlock' },
+    -- :Move* commands are registered by setup(), not at require time;
+    -- horizontal moves are opt-in upstream
+    config = function()
+      require('move').setup {
+        char = { enable = true },
+      }
+    end,
     keys = {
-      { '<A-j>', ':MoveLine(1)<CR>',    mode = 'n', silent = true, desc = 'Move line down' },
-      { '<A-k>', ':MoveLine(-1)<CR>',   mode = 'n', silent = true, desc = 'Move line up' },
-      { '<A-j>', ':MoveBlock(1)<CR>',   mode = 'v', silent = true, desc = 'Move selection down' },
-      { '<A-k>', ':MoveBlock(-1)<CR>',  mode = 'v', silent = true, desc = 'Move selection up' },
-      { '<A-l>', ':MoveHChar(1)<CR>',   mode = 'n', silent = true, desc = 'Move char right' },
-      { '<A-h>', ':MoveHChar(-1)<CR>',  mode = 'n', silent = true, desc = 'Move char left' },
-      { '<A-l>', ':MoveHBlock(1)<CR>',  mode = 'v', silent = true, desc = 'Move selection right' },
+      { '<A-j>', ':MoveLine(1)<CR>', mode = 'n', silent = true, desc = 'Move line down' },
+      { '<A-k>', ':MoveLine(-1)<CR>', mode = 'n', silent = true, desc = 'Move line up' },
+      { '<A-j>', ':MoveBlock(1)<CR>', mode = 'v', silent = true, desc = 'Move selection down' },
+      { '<A-k>', ':MoveBlock(-1)<CR>', mode = 'v', silent = true, desc = 'Move selection up' },
+      { '<A-l>', ':MoveHChar(1)<CR>', mode = 'n', silent = true, desc = 'Move char right' },
+      { '<A-h>', ':MoveHChar(-1)<CR>', mode = 'n', silent = true, desc = 'Move char left' },
+      { '<A-l>', ':MoveHBlock(1)<CR>', mode = 'v', silent = true, desc = 'Move selection right' },
       { '<A-h>', ':MoveHBlock(-1)<CR>', mode = 'v', silent = true, desc = 'Move selection left' },
     },
   },

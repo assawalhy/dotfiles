@@ -23,4 +23,9 @@ require('lazy').setup {
   },
   -- colorscheme that will be used when installing plugins
   install = { colorscheme = { 'onedark' } },
+
+  -- luarocks support off: system luarocks is too old for the build backends
+  -- plugin rockspecs need (e.g. rest.nvim); their lua deps are provided as
+  -- regular plugins / vendored into stdpath('data')/site/lua instead
+  rocks = { enabled = false },
 }

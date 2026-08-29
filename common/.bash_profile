@@ -21,6 +21,7 @@ alias lg=lazygit
 alias lzd=lazydocker
 alias sail='sh $([ -f sail ] && echo sail || echo vendor/bin/sail)'
 alias prgs='printf "$(git status)"'
+alias oc=opencode
 
 alias yws="yarn workspace"
 alias ywsf="yarn workspaces foreach"
@@ -256,10 +257,11 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.opencode/bin:$PATH"
-export PATH="$PATH:$HOME/.config/composer/vendor/bin"
-export PATH="$PATH:$HOME/.foundry/bin"
+export PATH="$HOME/.config/composer/vendor/bin:$PATH"
+export PATH="$HOME/.foundry/bin:$PATH"
 export PATH="$HOME/.cargo/bin:$PATH"
-export PATH="$PATH:/usr/local/go/bin"
+export PATH="$HOME/.volta/bin:$PATH"
+export PATH="/usr/local/go/bin:$PATH"
 
 if command -v mise 2>&1 > /dev/null; then
   eval "$(mise activate zsh)"

@@ -9,6 +9,17 @@
 #
 # Used by .tmux.conf, nvim and the shell aliases so none of them needs to know
 # which platform they are on.
+#
+# Backends are tried in order (pbcopy -> wl-copy -> xclip -> xsel) and a
+# runtime failure falls through to the next one: `command -v` only proves a
+# binary exists, not that its server is reachable (e.g. a stale tmux/shell
+# carrying WAYLAND_DISPLAY whose socket no longer exists).
+#
+# Exception: under WSL with an X server (both WSL_DISTRO_NAME and DISPLAY set)
+# the X11 backends go first. VcXsrv runs on Windows and calls the Win32
+# clipboard API directly, so its copies are recorded in Win+V history, while
+# updates arriving over the WSLg/RDP route paste fine but are skipped for
+# history.
 
 out=0
 sel=clipboard
@@ -26,20 +37,80 @@ for a in "$@"; do
   esac
 done
 
-if command -v pbcopy >/dev/null 2>&1; then
-  # macOS: no PRIMARY selection, so -p degrades to the normal clipboard
-  if [ "$out" = 1 ]; then exec pbpaste; else exec pbcopy; fi
-elif [ -n "$WAYLAND_DISPLAY" ] && command -v wl-copy >/dev/null 2>&1; then
-  if [ "$sel" = primary ]; then
-    if [ "$out" = 1 ]; then exec wl-paste --primary --no-newline; else exec wl-copy --primary; fi
-  else
-    if [ "$out" = 1 ]; then exec wl-paste --no-newline; else exec wl-copy; fi
-  fi
-elif command -v xclip >/dev/null 2>&1; then
-  if [ "$out" = 1 ]; then exec xclip -selection "$sel" -o; else exec xclip -selection "$sel"; fi
-elif command -v xsel >/dev/null 2>&1; then
-  if [ "$out" = 1 ]; then exec xsel -o --"$sel"; else exec xsel -i --"$sel"; fi
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# Wayland is a candidate only when the compositor socket actually exists.
+xdg="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+case "${WAYLAND_DISPLAY-}" in
+  /*) wsock="$WAYLAND_DISPLAY" ;;
+  '') wsock='' ;;
+  *) wsock="$xdg/$WAYLAND_DISPLAY" ;;
+esac
+wl_ok() { [ -n "$wsock" ] && [ -S "$wsock" ] && have wl-copy && have wl-paste; }
+
+# VcXsrv route preferred under WSL: its Windows-side owner feeds Win+V
+# history; WSLg/RDP pastes fine but history skips it.
+prefer_x11=0
+if [ -n "${WSL_DISTRO_NAME-}" ] && [ -n "${DISPLAY-}" ]; then
+  prefer_x11=1
 fi
 
-echo 'clip: no clipboard tool found (pbcopy/wl-copy/xclip/xsel)' >&2
-exit 1
+# Each attempt keeps the original runtime-fallthrough shape: a missing binary
+# or an unreachable server just fails, and the next backend in line is tried.
+try_wl_paste() {
+  if wl_ok; then
+    if [ "$sel" = primary ]; then wl-paste --primary --no-newline && return 0
+    else wl-paste --no-newline && return 0; fi
+  fi
+  return 1
+}
+try_x11_paste() {
+  if [ -n "${DISPLAY-}" ]; then
+    if have xclip && xclip -selection "$sel" -o; then return 0; fi
+    if have xsel && xsel -o --"$sel"; then return 0; fi
+  fi
+  return 1
+}
+
+if [ "$out" = 1 ]; then
+  # paste: first backend that exits 0 prints and wins
+  if have pbpaste && pbpaste; then
+    exit 0
+  fi
+  if [ "$prefer_x11" = 1 ]; then
+    try_x11_paste || try_wl_paste
+  else
+    try_wl_paste || try_x11_paste
+  fi
+else
+  # copy: buffer stdin once so every attempt sees identical bytes
+  # (command substitution would strip trailing newlines)
+  tmp=$(mktemp "${TMPDIR:-/tmp}/clip.XXXXXX") || exit 1
+  cat >"$tmp" || { rm -f "$tmp"; exit 1; }
+  ok=1
+  if have pbcopy && pbcopy <"$tmp"; then
+    ok=0  # macOS: no PRIMARY selection, so -p degrades to the normal clipboard
+  fi
+  try_wl_copy() {
+    if [ "$ok" -ne 0 ] && wl_ok; then
+      if [ "$sel" = primary ]; then wl-copy --primary <"$tmp" && ok=0
+      else wl-copy <"$tmp" && ok=0; fi
+    fi
+  }
+  try_x11_copy() {
+    if [ "$ok" -ne 0 ] && [ -n "${DISPLAY-}" ]; then
+      if have xclip && xclip -selection "$sel" -i <"$tmp"; then ok=0
+      elif have xsel && xsel -i --"$sel" <"$tmp"; then ok=0
+      fi
+    fi
+  }
+  if [ "$prefer_x11" = 1 ]; then
+    try_x11_copy
+    try_wl_copy
+  else
+    try_wl_copy
+    try_x11_copy
+  fi
+  rm -f "$tmp"
+  [ "$ok" -eq 0 ] || { echo 'clip: no clipboard tool found (pbcopy/wl-copy/xclip/xsel)' >&2; exit 1; }
+fi

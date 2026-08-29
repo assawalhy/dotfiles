@@ -12,6 +12,17 @@ function CopyBuffer()
   print 'Buffer is copied'
 end
 
+-- Route the +/* registers through clip as well: left alone, nvim probes
+-- providers itself and can settle on a different backend than clip picks,
+-- leaving the two paths out of sync.
+if vim.fn.executable 'clip' == 1 then
+  vim.g.clipboard = {
+    name = 'clip',
+    copy = { ['+'] = 'clip', ['*'] = 'clip' },
+    paste = { ['+'] = 'clip -o', ['*'] = 'clip -o' },
+  }
+end
+
 vim.keymap.set('x', ';y', '"+y', { desc = 'Copy selection to sys clipboard' })
 vim.keymap.set('n', ';wc', CopyBuffer, { desc = 'Copy current buffer to sys clipboard' })
 vim.keymap.set('x', 'gsw', "'<,'> ! awk '{ print length(), $0 } | sort -n | cut -d\\  -f2-'<CR><ESC>", { desc = 'Sort selected lines by line width' })

@@ -48,6 +48,12 @@ _LS_COLOR_FLAG='--color=auto'
 # export DISPLAY=$(grep -m 1 nameserver /etc/resolv.conf | awk '{print $2}'):0
 if [ -n "$WSL_DISTRO_NAME" ]; then
   export DISPLAY=$(ip route show | grep 'default via' | awk '{ print $3 }'):0
+
+  # WSLg exposes its Wayland socket under /mnt/wslg; link it where Wayland
+  # clients actually look, unless something already provides it there
+  if [ -S /mnt/wslg/runtime-dir/wayland-0 ] && [ ! -e "$XDG_RUNTIME_DIR/wayland-0" ]; then
+    ln -sf /mnt/wslg/runtime-dir/wayland-0 "$XDG_RUNTIME_DIR/wayland-0"
+  fi
 fi
 
 # --------------------------------------------------------------- PATH ---
