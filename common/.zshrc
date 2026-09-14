@@ -121,3 +121,7 @@ export GPG_TTY=$(tty)
 
 # also sets the ls aliases and the fzf/fd defaults
 [ -f ~/.bash_profile ] && . ~/.bash_profile
+
+# Go
+export GOPATH="$HOME/go"
+export PATH="$GOPATH/bin:$PATH"

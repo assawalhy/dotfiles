@@ -277,3 +277,5 @@ fi
 
 [[ "$TERM_PROGRAM" == "kiro" ]] && . "$(kiro --locate-shell-integration-path zsh)"
 
+export GOPATH="$HOME/go"
+export PATH="$GOPATH/bin:$PATH"

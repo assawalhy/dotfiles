@@ -12,13 +12,15 @@
 #   !linux      not available (or not wanted) on Linux
 #   pN          priority tier (p1 highest, p4 lowest); unlabeled defaults to p4
 #
-#   mgr is one of: brew cask pacman aur apt dnf zypper cargo pip
+#   mgr is one of: brew cask pacman aur apt dnf zypper cargo go npm pip
 #
 #   RESOLUTION: use the entry for the active manager if present, else fall
 #   back to <id> verbatim. So packages named the same everywhere need one word.
 #
-#   [section] headers group entries in the picker. [cargo] and [pip] are
-#   special: they install via `cargo install` / `pipx install` instead.
+#   [section] headers group entries in the picker. [cargo], [go], [npm], and
+#   [pip] are special: they install via `cargo install`, `go install`,
+#   `npm install -g`, or `pipx install` instead. For [go] use `go:<module-path>`
+#   and for [npm] use `npm:<package>` when the npm name differs from the id.
 #
 #   Comments must be on their own line.
 
@@ -46,7 +48,6 @@ git-delta           apt:-  dnf:-  check:delta        p2  # not packaged on Debia
 yt-dlp check:yt-dlp p2
 ffmpeg p2
 pandoc check:pandoc p2
-glow                apt:-  check:glow            p2  # was an install-script step; it's a real package now
 gitui               apt:-  dnf:-  check:gitui        p2  # not in Debian/Ubuntu repos
 lazygit             apt:-  check:lazygit          p2  # not in Debian/Ubuntu repos
 texlive             cask:basictex  pacman:texlive-core  apt:texlive  dnf:texlive p4
@@ -87,6 +88,14 @@ eza                 check:eza                 p1  # exa is unmaintained since 20
 broot               check:broot               p2  # the `br` shell function comes from this crate
 rmem check:rmem p2
 sd check:sd p1
+
+[go]
+glow               go:github.com/charmbracelet/glow  check:glow  p2
+pi                 go:github.com/sky-valley/pi/cmd/pi  check:pi  p2
+
+[npm]
+codex              npm:@openai/codex  check:codex  p2
+kilo               npm:@kilocode/cli  check:kilo  p2
 
 [pip]
 git-fame           check:git-fame             p2  # lines per contributor

@@ -141,6 +141,8 @@ pm_install() { # pm_install <mgr> <pkg>...
     dnf)    run sudo dnf install -y "$@" ;;
     zypper) run sudo zypper --non-interactive install "$@" ;;
     cargo)  run cargo install --locked "$@" ;;
+    go)     run go install "$@" ;;
+    npm)    run npm install -g "$@" ;;
     pip)    if [ -z "$is_dry" ] && ! command -v pipx >/dev/null 2>&1; then
               # Arch and Homebrew both ship PEP-668 externally-managed Pythons
               # where `pip install --user` refuses to run; pipx is the tool for
@@ -168,6 +170,10 @@ pm_list_installed() { # $1 = mgr -> one package name per line
     apt)        dpkg-query -f '${Package}\n' -W 2>/dev/null ;;
     dnf|zypper) rpm -qa --qf '%{NAME}\n' 2>/dev/null ;;
     cargo)      cargo install --list 2>/dev/null | awk '/^[^[:space:]]/ { print $1 }' ;;
+    go)         if command -v go >/dev/null 2>&1; then
+                  ls -1 "$(go env GOPATH)/bin" 2>/dev/null
+                fi ;;
+    npm)        npm list -g --depth=0 2>/dev/null | awk -F'[ ]' '/^[├└]/ { gsub(/@[^@]*$/, "", $NF); print $NF }' ;;
     pip)        pipx list --short 2>/dev/null | awk '{ print $1 }' ;;
   esac
 }
@@ -204,6 +210,17 @@ resolve() {
 
       if (group == "cargo" || group == "pip") {
         print group "\t" id "\t" group "\t" id "\t" (prio ? prio : "p4") "\t" check
+        next
+      }
+      if (group == "npm") {
+        pkg = ("npm" in m) ? m["npm"] : id
+        print group "\t" id "\t" group "\t" pkg "\t" (prio ? prio : "p4") "\t" check
+        next
+      }
+      if (group == "go") {
+        # use go:module-path as the install name; fall back to bare id
+        pkg = ("go" in m) ? m["go"] : id
+        print group "\t" id "\t" group "\t" pkg "\t" (prio ? prio : "p4") "\t" check
         next
       }
 
@@ -417,6 +434,11 @@ if awk -F'\t' '$3=="cargo"' "$PICKED" | grep -q . && [ -f "$STEPS/10-rustup.sh" 
   if ! command -v cargo >/dev/null 2>&1; then RUN_RUSTUP_AUTO=1; fi
 fi
 
+if awk -F'\t' '$3=="go"' "$PICKED" | grep -q . && [ -f "$STEPS/05-golang.sh" ]; then
+  awk -F'\t' -v gp="$STEPS/05-golang.sh" '$4 != gp' "$PICKED" > "$PICKED.t" && mv "$PICKED.t" "$PICKED"
+  if ! command -v go >/dev/null 2>&1; then RUN_GO_AUTO=1; fi
+fi
+
 echo 'Will install:'
 awk -F'\t' '{ printf "  [%s] %-24s %s %s\n", $1, $2, $3, $4 }' "$PICKED"
 echo
@@ -438,7 +460,7 @@ FAILED=''
 
 # Batch per manager: one dependency solve, one prompt. If the batch fails,
 # retry one at a time so a single broken package doesn't hide the rest.
-for mgr in brew cask pacman aur apt dnf zypper cargo pip; do
+for mgr in brew cask pacman aur apt dnf zypper cargo go npm pip; do
   pkgs=()
   while IFS=$'\t' read -r group id m pkg || [ -n "$m" ]; do
     [ "$m" = "$mgr" ] && pkgs+=("$pkg")
@@ -454,6 +476,14 @@ for mgr in brew cask pacman aur apt dnf zypper cargo pip; do
       printf '   [dry-run] rustup (auto, required by cargo)\n'
     else
       ( set +e; bash "$STEPS/10-rustup.sh" ) || FAILED="$FAILED step:rustup(auto)"
+    fi
+  fi
+  if [ "$mgr" = go ] && [ -n "$RUN_GO_AUTO" ]; then
+    printf '\n== step: golang (auto, required by go) ==\n'
+    if [ -n "$is_dry" ]; then
+      printf '   [dry-run] golang (auto, required by go)\n'
+    else
+      ( set +e; bash "$STEPS/05-golang.sh" ) || FAILED="$FAILED step:golang(auto)"
     fi
   fi
   if pm_install "$mgr" "${pkgs[@]}"; then continue; fi
