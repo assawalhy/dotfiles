@@ -97,6 +97,7 @@ pi                 go:github.com/sky-valley/pi/cmd/pi  check:pi  p2
 [npm]
 codex              npm:@openai/codex  check:codex  p2
 kilo               npm:@kilocode/cli  check:kilo  p2
+biome              npm:@biomejs/biome  check:biome  p2  # fmt+lint LSP via `biome lsp-proxy`
 
 [pip]
 git-fame           check:git-fame             p2  # lines per contributor
