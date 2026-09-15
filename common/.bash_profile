@@ -22,6 +22,10 @@ alias lzd=lazydocker
 alias sail='sh $([ -f sail ] && echo sail || echo vendor/bin/sail)'
 alias prgs='printf "$(git status)"'
 alias oc=opencode
+# git branch prune
+alias gbp="git branch | grep -v '^\*' | xargs git branch -D"
+alias kiro-cli="kiro-cli --v3"
+alias kc='kiro-cli'
 
 alias yws="yarn workspace"
 alias ywsf="yarn workspaces foreach"
@@ -257,11 +261,10 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.opencode/bin:$PATH"
-export PATH="$HOME/.config/composer/vendor/bin:$PATH"
-export PATH="$HOME/.foundry/bin:$PATH"
-export PATH="$HOME/.cargo/bin:$PATH"
-export PATH="$HOME/.volta/bin:$PATH"
-export PATH="/usr/local/go/bin:$PATH"
+export PATH="$PATH:$HOME/.config/composer/vendor/bin"
+export PATH="$PATH:$HOME/.foundry/bin"
+export PATH="$PATH:$HOME/.volta/bin"
+export PATH="$PATH:/usr/local/go/bin"
 
 if command -v mise 2>&1 > /dev/null; then
   eval "$(mise activate zsh)"
@@ -279,3 +282,4 @@ fi
 
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
+. "$HOME/.cargo/env"

@@ -31,7 +31,7 @@ return {
     vim.fn.sign_define('DapBreakpointCondition', { text = '⬤', texthl = 'ErrorMsg', linehl = '', numhl = 'SpellBad' })
 
     require('mason-nvim-dap').setup {
-      ensure_installed = { 'javadbg', 'javatest' },
+      ensure_installed = {},
       automatic_setup = true,
 
       handlers = {

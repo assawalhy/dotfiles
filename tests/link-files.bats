@@ -77,7 +77,13 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"hard link"* ]]
   assert_link .zshrc "$FIX_REPO/common/.zshrc"
-  [ "$(stat -c %h "$FIX_REPO/common/.zshrc")" -eq 1 ]  # home link was the only extra ref
+  # the home hard link was the only extra ref: repo file now has link count 1.
+  # `stat -c %h` is GNU-only; use the BSD/macOS-compatible `stat -f %l`.
+  if stat -f %l "$FIX_REPO/common/.zshrc" >/dev/null 2>&1; then
+    [ "$(stat -f %l "$FIX_REPO/common/.zshrc")" -eq 1 ]
+  else
+    [ "$(stat -c %h "$FIX_REPO/common/.zshrc")" -eq 1 ]
+  fi
 }
 
 @test "classify- wrong-source symlink is relinked" {
@@ -722,6 +728,184 @@ setup() {
   [ "$status" -eq 1 ]
   run diff -rq "$BATS_TEST_TMPDIR/home.snap" "$FIX_HOME"
   [ "$status" -eq 0 ]
+}
+
+# ------------------------------------------------- audit corner cases ----
+
+@test "audit- --yes and --dry-run are read-only (findings still exit 1)" {
+  fixture_new au_yes
+  run_link --audit --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[missing]"* ]]
+  fixture_new au_dry
+  run_link --audit --dry-run
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[missing]"* ]]
+}
+
+@test "audit- --diff is ignored under audit (still read-only findings)" {
+  fixture_new au_diff
+  mkhome_link .zshrc "$FIX_REPO/common/.tmux.conf"   # relink candidate w/ diff
+  run_link --audit --diff
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[relink]"* ]]
+}
+
+@test "audit- foreign symlink is a [conflict], never a stale link" {
+  fixture_new au_forc
+  mkhome_link .zshrc /etc/passwd
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"!  .zshrc"* ]]
+  [[ "$output" == *"[conflict]"* ]]
+  [[ "$output" != *"stale link"* ]]
+}
+
+@test "audit- a relative symlink is a [conflict] (can't verify its target)" {
+  fixture_new au_rel
+  mkhome_link .zshrc "../repo/common/.zshrc"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"!  .zshrc"* ]]
+  [[ "$output" == *"[conflict]"* ]]
+}
+
+@test "audit- OS-mismatch stale link is reported under a Darwin session" {
+  fixture_new au_darwin
+  stub_uname Darwin
+  mkhome_link .Xmodmap "$FIX_REPO/linux/.Xmodmap"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"-  .Xmodmap"* ]]
+  [[ "$output" == *"stale link"* ]]
+}
+
+@test "audit- prefix collision: ~/.foo -> repo/foobar is stale" {
+  fixture_new au_prefc
+  printf 'x\n' > "$FIX_REPO/common/foobar"
+  mkhome_link .foo "$FIX_REPO/common/foobar"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"-  .foo"* ]]
+  [[ "$output" == *"stale link"* ]]
+}
+
+@test "audit- dir-prefix ignore entry while still linked is i [ignored]" {
+  fixture_new au_dig
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf '.config/mpv\n' > "$FIX_REPO/link-ignore.txt"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"i  .config/mpv/mpv.conf"* ]]
+  [[ "$output" == *"[ignored]"* ]]
+}
+
+@test "audit- a leading ./ ignore entry is normalized" {
+  fixture_new au_ldig
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf './.zshrc\n' > "$FIX_REPO/link-ignore.txt"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"i  .zshrc"* ]]
+}
+
+@test "audit- a pattern narrows the ignored report" {
+  fixture_new au_pig
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf '.zshrc\n.tmux.conf\n' >> "$FIX_REPO/link-ignore.txt"
+  run_link --audit '.*zshrc.*'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"i  .zshrc"* ]]
+  [[ "$output" != *".tmux.conf"* ]]
+}
+
+@test "audit- Xwayland (both DISPLAY and WAYLAND_DISPLAY) is a wayland session" {
+  fixture_new au_xwl
+  export HOME="$FIX_HOME" WAYLAND_DISPLAY=wayland-0 DISPLAY=:0
+  mkhome_link .Xmodmap "$FIX_REPO/linux/.Xmodmap"
+  run bash -c 'HOME="$1" WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 "$2" --audit' \
+    _ "$FIX_HOME" "$FIX_REPO/link-files.bash"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"audit context: wayland"* ]]
+  [[ "$output" == *"x  .Xmodmap"* ]]
+}
+
+@test "audit- a missing link-context.txt is not an error" {
+  fixture_new au_nctx
+  rm "$FIX_REPO/link-context.txt"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"audit context: headless"* ]]
+  [[ "$output" == *"[missing]"* ]]
+}
+
+@test "audit- malformed context lines are dropped, valid ones kept" {
+  fixture_new au_badctx
+  printf 'x11: .Xmodmap\nno-colon-line\n: empty-context\n' > "$FIX_REPO/link-context.txt"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"neglecting: x11: .Xmodmap"* ]]
+  [[ "$output" != *"no-colon-line"* ]]
+}
+
+@test "audit- old-scheme hard link is [relink] (not a conflict)" {
+  fixture_new au_hard
+  ln "$FIX_REPO/common/.zshrc" "$FIX_HOME/.zshrc"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"*  .zshrc"* ]]
+  [[ "$output" == *"[relink]"* ]]
+}
+
+@test "audit- cross-overlay wrong source is [relink]" {
+  fixture_new au_cross
+  mkhome_link .config/shell/os.sh "$FIX_REPO/common/.config/shell/os.sh"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"*  .config/shell/os.sh"* ]]
+  [[ "$output" == *"[relink]"* ]]
+}
+
+@test "audit- a directory at a repo-file path is [conflict]" {
+  fixture_new au_dir
+  mkdir -p "$FIX_HOME/.zshrc"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"!  .zshrc"* ]]
+  [[ "$output" == *"[conflict]"* ]]
+}
+
+@test "audit- wayland-neglected file is wanted on wayland (no x report)" {
+  fixture_new au_wneg
+  printf 'x11: .Xmodmap\nwayland: .Xmodmap\n' > "$FIX_REPO/link-context.txt"
+  run_link_sess wayland --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"audit context: wayland"* ]]
+  [[ "$output" != *"x  .Xmodmap"* ]]
+}
+
+@test "audit- gitignored / *.bak.* / .git/* / ignored candidates are not [unlinked]" {
+  fixture_new au_skip git
+  printf '.config/mpv/skipme.conf\n' > "$FIX_REPO/.gitignore"
+  printf '.config/mpv/ignored.conf\n' >> "$FIX_REPO/link-ignore.txt"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'x\n' > "$FIX_HOME/.config/mpv/keep.conf"
+  printf 'x\n' > "$FIX_HOME/.config/mpv/skipme.conf"    # gitignored
+  printf 'x\n' > "$FIX_HOME/.config/mpv/mpv.conf.bak.1" # *.bak.*
+  mkdir -p "$FIX_HOME/.config/mpv/.git"
+  printf 'x\n' > "$FIX_HOME/.config/mpv/.git/HEAD"      # .git/*
+  printf 'x\n' > "$FIX_HOME/.config/mpv/ignored.conf"   # link-ignore.txt
+  run_link --audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"keep.conf [unlinked]"* ]]
+  [[ "$output" != *"skipme.conf"* ]]
+  [[ "$output" != *"bak.1"* ]]
+  [[ "$output" != *"HEAD"* ]]
+  [[ "$output" != *"ignored.conf"* ]]
 }
 
 # ============================================================= picker- ===

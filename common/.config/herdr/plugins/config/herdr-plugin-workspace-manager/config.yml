@@ -86,7 +86,7 @@ layouts:
 #
 
 workspaces:
-  - repo: ~/myp/dotfiles
+  - repo: ~/Projects/dotfiles
     defaultLayout: default
     layoutMatching:
       - title: Hotfix branches

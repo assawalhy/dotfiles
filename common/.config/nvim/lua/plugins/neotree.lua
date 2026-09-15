@@ -11,6 +11,11 @@ return {
     },
     opts = {
       reveal = true,
+      -- Don't clutter the expanded tree with size/type columns.
+      default_component_configs = {
+        file_size = { enabled = false },
+        type = { enabled = false },
+      },
       commands = {
         copy_selector = function(state)
           local node = state.tree:get_node()

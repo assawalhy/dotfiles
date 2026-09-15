@@ -139,8 +139,21 @@ return {
   },
 
   {
-    'rest-nvim/rest.nvim',
-    commands = { 'Http' },
-    ft = 'http',
+    'mistweaverco/kulala.nvim',
+    ft = { 'http', 'rest' },
+    keys = {
+      { '<leader>Rs', desc = 'Send request' },
+      { '<leader>Ra', desc = 'Send all requests' },
+      { '<leader>Rr', desc = 'Replay last request' },
+      { '<leader>Rb', desc = 'Open scratchpad' },
+    },
+    opts = {
+      global_keymaps = true,
+      ui = {
+        -- bodies above this size are not rendered; kulala shows a note
+        -- with the path to the saved response file instead
+        max_response_size = 1024 * 1024,
+      },
+    },
   },
 }
