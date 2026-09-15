@@ -20,7 +20,8 @@ while [ -L "$self" ]; do
   self="$(readlink "$self")"
   case "$self" in /*) ;; *) self="$self_dir/$self" ;; esac
 done
-REPO="$(cd -P "$(dirname "$self")" >/dev/null && pwd)"
+# the script lives in common/bin/, so the repo root is two levels up
+REPO="$(cd -P "$(dirname "$self")/../.." >/dev/null && pwd)"
 LIST="$REPO/setup/packages.list"
 STEPS="$REPO/setup/steps"
 

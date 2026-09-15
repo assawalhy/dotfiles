@@ -73,7 +73,7 @@ Bound on `LspAttach` (skipped for copilot):
 ### Java
 
 Requires JDK 21+ (the config points at `/usr/lib/jvm/default-java`). Maven and
-Gradle come from the `p2` tier: `./setup-os --priority p2`. Mason installs
+Gradle come from the `p2` tier: `setup-os --priority p2`. Mason installs
 `jdtls`, `java-debug-adapter` and `java-test`. Lombok support is enabled by
 setting `LOMBOK_JAR` to the lombok jar path; the agent is appended to the
 jdtls VM args when set. Each project gets its own workspace cache under
@@ -279,11 +279,11 @@ bats --tap tests/link-files.bats
 ## Installing programs
 
 ```sh
-./setup-os              # pick from a list, then install
-./setup-os --list       # just show what resolves on this machine
-./setup-os --dry-run --all
-./setup-os --priority p1 -y     # temp machine: essentials + agents, no prompt
-./setup-os --priority p1,p2     # the dev workstation tiers in one run
+setup-os              # pick from a list, then install
+setup-os --list       # just show what resolves on this machine
+setup-os --dry-run --all
+setup-os --priority p1 -y     # temp machine: essentials + agents, no prompt
+setup-os --priority p1,p2     # the dev workstation tiers in one run
 ```
 
 Uses Homebrew on macOS and pacman / apt / dnf / zypper on Linux (plus `paru` or
@@ -300,8 +300,8 @@ Every entry belongs to a priority tier, `p1` to `p4`:
 | `p4` | occasional |
 
 `--priority` selects a tier and skips the picker, so a temp machine is one
-command: `./setup-os --priority p1 -y` installs the essentials with no prompt.
-The flag is repeatable and comma-separated, so `./setup-os --priority p1,p2`
+command: `setup-os --priority p1 -y` installs the essentials with no prompt.
+The flag is repeatable and comma-separated, so `setup-os --priority p1,p2`
 covers a dev workstation in one run. It also takes precedence over `--all`,
 narrowing that to the tiers you named.
 
