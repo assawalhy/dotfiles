@@ -10,3 +10,8 @@
     # APFS updates ctime on metadata changes git doesn't care about, which
     # makes git think files are dirty; don't trust it for the stat cache.
     trustctime = false
+
+[user]
+    email = muhammad.samir@taager.com
+    name = Muhammad Assawalhy
+

@@ -40,6 +40,11 @@ fixture_new() {
   mkdir -p "$FIX_REPO/common/.config/mpv" "$FIX_REPO/common/.config/nvim" \
            "$FIX_REPO/linux/.config/shell" "$FIX_REPO/macos/.config/shell" \
            "$FIX_HOME"
+  # link-files.bash resolves $REPO via `cd -P`, so on macOS (where /var and
+  # /tmp symlink to /private/...) $FIX_REPO would differ from the script's
+  # resolved path and assert_link would never match. Resolve here the same way.
+  FIX_REPO="$(cd -P "$FIX_REPO" >/dev/null 2>&1 && pwd)"
+  FIX_HOME="$(cd -P "$FIX_HOME" >/dev/null 2>&1 && pwd)"
   cp "$SCRIPT" "$FIX_REPO/link-files.bash"
   printf 'zshrc\n'       > "$FIX_REPO/common/.zshrc"
   printf 'tmux\n'        > "$FIX_REPO/common/.tmux.conf"

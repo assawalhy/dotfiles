@@ -590,7 +590,8 @@ refresh_scan() {
           "$IGN_TMP"; then continue; fi
       # gitignored; a git error (no repo) also skips -- never capture a file
       # we cannot prove is not ignored (git check-ignore --no-index works
-      # without the index but still needs a repository)
+      # without the index but still needs a repository). The repo is always a
+      # git repo, so this error path only guards an unusual setup.
       if git -C "$REPO" check-ignore --no-index -q -- "$rel" 2>/dev/null; then
         continue
       elif [ $? -ne 1 ]; then

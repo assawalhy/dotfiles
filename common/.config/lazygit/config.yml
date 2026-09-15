@@ -1,7 +1,13 @@
-# Use delta as the diff pager. --paging=never is required: lazygit already
-# provides its own scrolling, and delta would otherwise try to page.
-# delta picks up the [delta] section from ~/.gitconfig (side-by-side, etc.).
+# Enable trackpad/mouse interactions (clicking + scrolling).
+gui:
+  mouseEvents: true
+
+# Use delta as the diff renderer. `--paging=never` is required: lazygit
+# already provides its own scrolling, and delta would otherwise try to page.
+# delta picks up the [delta] section from ~/.gitconfig (line-numbers, etc.).
+# lazygit >= 0.64 configures diff renderers via `git.diffRenderers` (an
+# array, cycled with `|`); the old `git.paging` object was removed then.
+# `colorArg: always` is the default for type stdinFilter, so it is omitted.
 git:
-  paging:
-    colorArg: always
-    pager: delta --dark --paging=never
+  diffRenderers:
+    - command: delta --dark --paging=never

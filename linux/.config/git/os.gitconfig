@@ -2,3 +2,8 @@
 
 [credential]
     helper = cache --timeout=3600
+
+[user]
+    email = muhammadsawalhy@gmail.com
+    name = Muhammad Assawalhy
+
