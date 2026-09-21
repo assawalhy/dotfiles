@@ -12,3 +12,9 @@
 # repo tooling for the bin/ scripts, not a dotfile
 bin/.github
 .config/ranger/plugins/ranger_devicons/
+
+# script-managed install artifacts under $HOME/.agents (installed by
+# setup/agent-skills.sh from setup/agent-skills.list), not dotfiles to
+# mirror into the repo
+.agents/skills/
+.agents/.skill-lock.json

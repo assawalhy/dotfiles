@@ -155,6 +155,35 @@ setup-os --dry-run --all
 setup-os --priority p1 -y
 ```
 
+## Agent Skills & Shared Context
+
+Agent skills, plugins and harness context live in two places:
+
+- **`setup/agent-skills.list`** — catalog (category|id|desc|install) of skills and
+  plugins to install. `setup/agent-skills.sh` is the interactive installer:
+  `--list` prints the catalog with installed markers, `--all` installs every
+  item, `--dry-run` shows what would run, `--context` re-wires symlinks only.
+  Orca-sourced skills/configs are intentionally **not** in the catalog.
+- **`common/` holds the committed canonical context** — currently just
+  `common/.agents/AGENTS.md` (workflow rules), wired to `~/.agents/AGENTS.md`.
+
+**The awesome-agent plugin (`assawalhy/awesome-agent`) owns its own files** — the
+catalog entry `plugin|awesome-agent` clones the repo and runs its `install.sh`,
+which installs the commands, sub-agents (awesome-agent, awesome-worker) and
+skills (awesome-plan, ddd, pr-description) into every installed harness itself
+(claude, pi prompts, cursor, codex, opencode, kilo, kiro, kimi), tracking them
+in `~/.local/share/awesome-agent/registry.txt` and updating with
+`bash ~/.local/share/awesome-agent/repo/install.sh update`. Do not mirror or
+symlink those files in `common/` — the plugin's writes would fight the links.
+
+Harness-agnostic skills install into `~/.agents/skills/` by git-clone from
+their public repos (the catalog's `agents-skill` entries); pi packages and
+claude/codex plugins install via their own CLIs. `~/.agents/skills/` and
+`~/.agents/.skill-lock.json` are script-managed install state, excluded from
+`link-files` via `link-ignore.txt` — never commit the installed copies. The
+`use-railway` skill is intentionally **not** in this repo — install it from
+the official `railwayapp/railway-skills` repo instead.
+
 ## Commit Conventions
 
 Prefix with a lowercase scope: `nvim:`, `setup:`, `shell:`, `docs:`, `test:`

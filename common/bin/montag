@@ -234,7 +234,9 @@ prepare-input-and-output() {
             elif [ "$is_audio_only" ]; then
                 ytdl_options+=(-f 'bestaudio[abr<=128k]')
             else
-                ytdl_options+=(-f "best[height<=720]")
+                # progressive (video+audio) formats are gone from YouTube;
+                # -S picks separate streams and yt-dlp merges them
+                ytdl_options+=(-S "res:720")
             fi
         fi
 
@@ -310,6 +312,25 @@ seconds-to-time() {
     printf "%02d:%02d:%02d" $hours $minutes $seconds
 }
 
+# ffmpeg's HTTP reader is throttled by YouTube (~55 KB/s); yt-dlp's downloader
+# is ~15x faster, so URLs are downloaded to a temp file before processing.
+download-url() { # url dir
+    local url="$1" dir="$2"
+    local opts=("${ytdl_options[@]}")
+
+    [ ${#opts[@]} -eq 0 ] && opts=(-S 'res:720')
+
+    if [ "$url_download_section" ]; then
+        # yt-dlp trims the section itself, so ffmpeg must not seek again
+        opts+=(--download-sections "$url_download_section" --force-keyframes-at-cuts)
+    fi
+
+    echo-debug "⬇️  ... download with yt-dlp (ffmpeg direct-URL is throttled)"
+    yt-dlp --no-playlist -o "$dir/input.%(ext)s" "${opts[@]}" "$url" >&2
+
+    find "$dir" -maxdepth 1 -type f ! -name '*.part' | head -n1
+}
+
 get-input-args() {
     set -e
     local argv=("$@")
@@ -317,35 +338,19 @@ get-input-args() {
     unset 'argv[-1]'
 
     if [[ "$input" =~ ^https?:// ]] && { [[ "$is_thumb" && "$thumb" ]] || [ ! "$is_thumb" ]; }; then
-        readarray -t links < <(print-and-run-cmd yt-dlp --no-playlist --extractor-args youtube:skip=dash,translated_subs -g "${ytdl_options[@]}" "$input")
-
-        if [ "$is_audio_only" ]; then
-            if [ ${#links[@]} = 1 ]; then
-                cmd+=("${argv[@]}" -i "${links[0]}")
-            elif [ ${#links[@]} = 2 ]; then
-                # Usually yt-dlp returns video first and audio second.
-                cmd+=("${argv[@]}" -i "${links[1]}")
-            else
-                echo-debug 'error: invalid output from "yt-dlp -g <url>"'
-                [ ! "$is_quiet" ] &&
-                >&2 printf '==============\n%s\n' "${links[@]}"
-                exit 1
-            fi
-        elif [ ${#links[@]} = 1 ]; then
-            if [ "$thumb" ]
-            then cmd+=("${argv[@]}" -i "${links[0]}" -i "$thumb" -map 0 -map 1 -c copy -disposition:v:1 attached_pic)
-            else cmd+=("${argv[@]}" -i "${links[0]}")
-            fi
-        elif [ ${#links[@]} = 2 ]; then
-            if [ "$thumb" ]
-            then cmd+=("${argv[@]}" -i "${links[0]}" "${argv[@]}" -i "${links[1]}" -i "$thumb" -map 0:v -map 1:a -map 2 -c:v copy -c:a copy -disposition:v:2 attached_pic)
-            else cmd+=("${argv[@]}" -i "${links[0]}" "${argv[@]}" -i "${links[1]}" -map 0:v -map 1:a)
-            fi
+        local dir file
+        dir="/tmp/montag/dl_$RANDOM"
+        mkdir -p "$dir"
+        temp_files+=("$dir")
+        file="$(download-url "$input" "$dir")" || true
+        if [ ! "$file" ] || [ ! -f "$file" ]; then
+            echo-debug 'error: yt-dlp produced no file'
+            clear-and-exit 1
+        fi
+        if [ "$thumb" ]; then
+            cmd+=("${argv[@]}" -i "$file" -i "$thumb" -map 0 -map 1 -c copy -disposition:v:1 attached_pic)
         else
-            echo-debug 'error: invalid output from "yt-dlp -g <url>"'
-            [ ! "$is_quiet" ] &&
-            >&2 printf '==============\n%s\n' "${links[@]}"
-            exit 1
+            cmd+=("${argv[@]}" -i "$file")
         fi
         return 0
     fi
@@ -401,7 +406,17 @@ build-ffmpeg-command() {
         [ "$duration"  ] && cut_args+=(-t "$duration")
         [ "$end_point" ] && cut_args+=(-to "$end_point")
 
-        get-input-args "${cut_args[@]}" "$input"
+        if [[ "$input" =~ ^https?:// ]]; then
+            # fetch only the requested section; if yt-dlp trims it, don't
+            # make ffmpeg seek into the already-trimmed file
+            url_download_section="$(build-ytdlp-download-section)"
+        fi
+
+        if [ "$url_download_section" ]; then
+            get-input-args "$input"
+        else
+            get-input-args "${cut_args[@]}" "$input"
+        fi
     else
         get-input-args "$input"
     fi
@@ -472,6 +487,15 @@ build-ffmpeg-command() {
         echo-debug "🗣️  ... convert the video to text"
         output="$(get-temp-file "$(basename "$output")")"
         whisper_cmd+=("$output" --verbose False --model medium --output_format txt --output_dir "$(dirname "$output")")
+    fi
+
+    # nothing to filter or cut: remux instead of re-encoding
+    if [ "${cmd[0]}" = ffmpeg ] && [ ! "$start_point" ] \
+        && [ ${#video_filters[@]} -eq 0 ] && [ ${#audio_filters[@]} -eq 0 ] \
+        && [ ! "$mute_audio" ] && [ ! "$is_audio_only" ] && [ ! "$is_gif" ] \
+        && [ ! "$is_text" ] && [ ! "$is_thumb" ]; then
+        echo-debug "📼 ... no filters or cuts, stream copy"
+        cmd+=(-c copy)
     fi
 
     if [ "$split_period" ] && [ "${cmd[0]}" = ffmpeg ]; then

@@ -33,7 +33,7 @@ tree-sitter-cli pacman:tree-sitter check:tree-sitter p2  # nvim-treesitter needs
 ranger check:ranger p2
 fzf check:fzf p1
 bat                 apt:batcat check:bat p1
-pipx check:pipx p2
+pipx                pacman:python-pipx check:pipx p2  # Arch package is python-pipx
 fd                  apt:fd-find  dnf:fd-find check:fd p1
 mousepad            !macos check:mousepad         p3  # GTK editor; macOS has TextEdit
 xsel                !macos check:xsel             p3  # X11 clipboard
@@ -45,7 +45,6 @@ luarocks check:luarocks p4
 [extra]
 gh                  pacman:github-cli check:gh p1
 git-delta           apt:-  dnf:-  check:delta        p2  # not packaged on Debian; see [cargo]
-yt-dlp check:yt-dlp p2
 jp check:jp p2
 ffmpeg check:ffmpeg p2
 pandoc check:pandoc p2
@@ -100,6 +99,8 @@ kilo               npm:@kilocode/cli  check:kilo  p2
 biome              npm:@biomejs/biome  check:biome  p2  # fmt+lint LSP via `biome lsp-proxy`
 
 [pip]
+uv                  check:uv                 p2  # PyPI latest; apt has no uv
+yt-dlp              check:yt-dlp             p2  # PyPI latest; apt's is months behind
 git-fame           check:git-fame             p2  # lines per contributor
 autopep8 check:autopep8 p2
 black check:black p2
