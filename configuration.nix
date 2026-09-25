@@ -305,6 +305,66 @@ in
     }
   ];
 
+  # Fonts. fontconfig's built-in defaults are DejaVu, which has no (or poor)
+  # Arabic coverage — so Arabic serif/monospace text fell back to a random face.
+  # Prefer Noto for Latin, and bind the proper Arabic families per generic.
+  fonts.fontconfig = {
+    defaultFonts = {
+      serif = [ "Noto Serif" "Amiri" "Noto Naskh Arabic" ];
+      sansSerif = [ "Noto Sans" "Noto Sans Arabic" ];
+      monospace = [ "Noto Sans Mono" "Kawkab Mono" ];
+      emoji = [ "Noto Color Emoji" ];
+    };
+    # `strong` beats the module's `same`-bound defaults, so Arabic requests win.
+    localConf = ''
+      <?xml version='1.0'?>
+      <!DOCTYPE fontconfig SYSTEM 'urn:fontconfig:fonts.dtd'>
+      <fontconfig>
+        <!-- Arabic serif: classical naskh (Amiri), then Noto Naskh -->
+        <match target="pattern">
+          <test name="lang" compare="contains"><string>ar</string></test>
+          <test name="family"><string>serif</string></test>
+          <edit name="family" mode="prepend" binding="strong">
+            <string>Amiri</string>
+            <string>Noto Naskh Arabic</string>
+          </edit>
+        </match>
+        <!-- Arabic sans -->
+        <match target="pattern">
+          <test name="lang" compare="contains"><string>ar</string></test>
+          <test name="family"><string>sans-serif</string></test>
+          <edit name="family" mode="prepend" binding="strong">
+            <string>Noto Sans Arabic</string>
+          </edit>
+        </match>
+        <!-- Arabic monospace: Kawkab Mono (the repo's Arabic mono face) -->
+        <match target="pattern">
+          <test name="lang" compare="contains"><string>ar</string></test>
+          <test name="family"><string>monospace</string></test>
+          <edit name="family" mode="prepend" binding="strong">
+            <string>Kawkab Mono</string>
+          </edit>
+        </match>
+        <!-- Arabic in ANY monospace context, whatever concrete family is
+             requested. The rule above only matches a request for the generic
+             `monospace` family; apps that ask for a concrete family (e.g.
+             Ghostty asks for "JetBrainsMono Nerd Font") bypass it. Monospace
+             apps mark the request with spacing=mono, and per-glyph fallback
+             puts the missing codepoint in the pattern's charset — so this
+             fires for terminal/editor fallback while leaving proportional
+             Arabic UI text on Noto Sans Arabic (spacing is not mono there).
+             Kawkab covers U+0600-U+06FF only, so that is the range tested. -->
+        <match target="pattern">
+          <test name="spacing" compare="eq"><const>mono</const></test>
+          <test name="charset" compare="contains"><charset><range><int>0x0600</int><int>0x06FF</int></range></charset></test>
+          <edit name="family" mode="prepend" binding="strong">
+            <string>Kawkab Mono</string>
+          </edit>
+        </match>
+      </fontconfig>
+    '';
+  };
+
   # Copy the NixOS configuration file and link it from the resulting system
   # (/run/current-system/configuration.nix). This is useful in case you
   # accidentally delete configuration.nix.
