@@ -261,25 +261,30 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.opencode/bin:$PATH"
+export PATH="$HOME/.cargo/bin:$PATH"
 export PATH="$PATH:$HOME/.config/composer/vendor/bin"
 export PATH="$PATH:$HOME/.foundry/bin"
 export PATH="$PATH:$HOME/.volta/bin"
 export PATH="$PATH:/usr/local/go/bin"
 
-if command -v mise 2>&1 > /dev/null; then
-  eval "$(mise activate zsh)"
+# mise + the shell integrations below are zsh-only (this file is also
+# sourced from ~/.zshrc); plain bash gets mise's own bash activation instead.
+if [ -n "${ZSH_VERSION:-}" ]; then
+  if command -v mise >/dev/null 2>&1; then
+    eval "$(mise activate zsh)"
+  fi
+  if [ -d "$HOME/.docker" ]; then
+    fpath=($HOME/.docker/completions $fpath)
+    autoload -Uz compinit
+    compinit
+  fi
+  [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+  [[ "$TERM_PROGRAM" == "kiro" ]] && . "$(kiro --locate-shell-integration-path zsh)"
+elif [ -n "${BASH_VERSION:-}" ] && command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate bash)"
 fi
-
-if [ -d "$HOME/.docker" ]; then
-  fpath=($HOME/.docker/completions $fpath)
-  autoload -Uz compinit
-  compinit
-fi
-
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-
-[[ "$TERM_PROGRAM" == "kiro" ]] && . "$(kiro --locate-shell-integration-path zsh)"
 
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
-. "$HOME/.cargo/env"
+# written by the rust installer; absent on NixOS (cargo comes from the system)
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"

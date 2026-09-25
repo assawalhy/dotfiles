@@ -92,12 +92,15 @@ print_catalog() {
 }
 
 # expand_selection <count> <input> -> selected 1-based indices, one per line
+# numbers, "lo-hi" ranges, "a"/"all" or empty = all, "n"/"none" = none.
+# Commas and spaces both separate tokens, so "1,3 5-7" picks 1,3,5,6,7.
 expand_selection() {
   local n="$1" sel="$2" tok lo hi i
   case "$sel" in
     n|N|none) return ;;
     a|A|all|'') i=1; while [ "$i" -le "$n" ]; do printf '%s\n' "$i"; i=$((i + 1)); done; return ;;
   esac
+  sel="$(printf '%s' "$sel" | tr ',' ' ')"
   for tok in $sel; do
     case "$tok" in
       *-*) lo="${tok%%-*}"; hi="${tok##*-}" ;;
@@ -122,7 +125,10 @@ install_one() {
   case "$c" in
     plugin)
       url="$ins"
-      local plugdir="$HOME/.local/share/awesome-agent" repodir="$plugdir/repo"
+      # split: bash expands every word before `local` assigns, so chaining
+      # repodir="$plugdir/repo" trips `set -u` (unbound plugdir).
+      local plugdir="$HOME/.local/share/awesome-agent"
+      local repodir="$plugdir/repo"
       if [ -d "$repodir/.git" ]; then
         printf -- '+ git -C %s pull --ff-only\n' "$repodir"
         git -C "$repodir" pull --ff-only
@@ -162,16 +168,27 @@ install_one() {
 }
 
 run_all() {
-  local k=0
+  local k=0 rc=0
   while [ "$k" -lt "$N" ]; do
     if [ -z "$(installed_path "$k")" ]; then
       printf '\n# %s — %s\n' "${id_[$k]}" "${desc_[$k]}"
-      install_one "$k"
+      # subshell re-enables errexit so install_one stops at its own first
+      # bad step; run under the caller's `set +e` so one failed item skips
+      # only itself instead of aborting the rest of the catalog.
+      ( set -e; install_one "$k" )
+      if [ $? -ne 0 ]; then
+        printf '! failed: %s\n' "${id_[$k]}" >&2
+        rc=1
+      fi
     else
       printf '# %s — already installed, skipped\n' "${id_[$k]}"
     fi
     k=$((k + 1))
   done
+  if [ "$rc" -ne 0 ]; then
+    printf '\nsome items failed (see ! lines); fix and re-run.\n' >&2
+  fi
+  return "$rc"
 }
 
 dry_run_all() {
@@ -231,8 +248,12 @@ case "$mode" in
   list) print_catalog ;;
   dry)  dry_run_all ;;
   all)
-    run_all
+    set +e          # let a failed item skip itself, not the whole catalog
+    run_all; rc=$?
     wire_context
+    [ $? -ne 0 ] && rc=1
+    set -e
+    exit "$rc"
     ;;
   context)
     wire_context
@@ -244,16 +265,19 @@ case "$mode" in
       exit 0
     fi
     print_catalog
-    printf '\nSelect items (numbers/ranges, "a"=all, "n"=none, empty=all): '
+    printf '\nSelect items (numbers/ranges, comma or space separated, "a"=all, "n"=none, empty=all): '
     read -r sel || sel=''
     picked="$(expand_selection "$N" "$sel")"
     if [ -z "$picked" ]; then
       printf 'Nothing selected.\n'
     else
+      set +e
       for k in $picked; do
         printf '\n# %s — %s\n' "${id_[$((k-1))]}" "${desc_[$((k-1))]}"
-        install_one "$((k-1))"
+        ( set -e; install_one "$((k-1))" )
+        [ $? -ne 0 ] && printf '! failed: %s\n' "${id_[$((k-1))]}" >&2
       done
+      set -e
     fi
     printf '\n'
     wire_context

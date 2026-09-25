@@ -901,11 +901,40 @@ setup() {
   printf 'x\n' > "$FIX_HOME/.config/mpv/ignored.conf"   # link-ignore.txt
   run_link --audit
   [ "$status" -eq 1 ]
-  [[ "$output" == *"keep.conf [unlinked]"* ]]
+  output_has_finding .config/mpv/keep.conf
   [[ "$output" != *"skipme.conf"* ]]
   [[ "$output" != *"bak.1"* ]]
   [[ "$output" != *"HEAD"* ]]
   [[ "$output" != *"ignored.conf"* ]]
+}
+
+@test "audit- herdr plugin installs and runtime files are not [unlinked]" {
+  fixture_new au_herdr git
+  mkdir -p "$FIX_REPO/common/.config/herdr/plugins/config/wp"
+  printf 'cfg\n' > "$FIX_REPO/common/.config/herdr/config.toml"
+  printf 'wp\n'  > "$FIX_REPO/common/.config/herdr/plugins/config/wp/config.yml"
+  run_link --yes
+  [ "$status" -eq 0 ]
+
+  mkdir -p "$FIX_HOME/.config/herdr/plugins/github/assawalhy.stay-awake-deadbeef/src"
+  mkdir -p "$FIX_HOME/.config/herdr/plugins/state/assawalhy.stay-awake"
+  printf 'plugin\n' > "$FIX_HOME/.config/herdr/plugins/github/assawalhy.stay-awake-deadbeef/src/main.js"
+  printf 'state\n'  > "$FIX_HOME/.config/herdr/plugins/state/assawalhy.stay-awake/session.json"
+  printf 'x\n' > "$FIX_HOME/.config/herdr/session.json"
+  printf 'x\n' > "$FIX_HOME/.config/herdr/plugins.json"
+  printf 'x\n' > "$FIX_HOME/.config/herdr/.plugins.lock"
+  printf 'x\n' > "$FIX_HOME/.config/herdr/herdr-client.log"
+  printf 'x\n' > "$FIX_HOME/.config/herdr/herdr-server.log"
+
+  run_link --audit
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"[unlinked]"* ]]
+
+  # the scan itself still works: an unignored new file is reported
+  printf 'x\n' > "$FIX_HOME/.config/herdr/real-new.conf"
+  run_link --audit
+  [ "$status" -eq 1 ]
+  output_has_finding .config/herdr/real-new.conf
 }
 
 # ============================================================= picker- ===
@@ -949,6 +978,18 @@ setup() {
   assert_link .config/nvim/init.lua "$FIX_REPO/common/.config/nvim/init.lua"
   assert_no_link .zshrc
   assert_no_link .tmux.conf
+  assert_no_link .config/shell/os.sh
+}
+
+@test "picker- comma-separated numbers link the selected entries only" {
+  fixture_new pk_comma
+  # same menu order as pk_range: 1 shell/os.sh, 2 mpv.conf, 3 nvim, 4 tmux, 5 zshrc
+  run_link_stdin $'2,4\ny\n'
+  [ "$status" -eq 0 ]
+  assert_link .config/mpv/mpv.conf "$FIX_REPO/common/.config/mpv/mpv.conf"
+  assert_link .tmux.conf "$FIX_REPO/common/.tmux.conf"
+  assert_no_link .zshrc
+  assert_no_link .config/nvim/init.lua
   assert_no_link .config/shell/os.sh
 }
 

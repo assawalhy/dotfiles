@@ -131,8 +131,9 @@ INTERACTIVE SELECTION:
   files to link. With fzf on a terminal: TAB toggles one entry, CTRL-A selects
   all matches, CTRL-D clears the selection, ENTER links. Without fzf -- or
   when stdin is not a terminal -- a numbered menu is shown instead: 'a'
-  selects all (the default), 'n' selects none, numbers and ranges pick
-  specific files, and an empty answer selects everything.
+  selects all (the default), 'n' selects none, numbers and ranges
+  (comma- or space-separated, e.g. "1,3 5-7") pick specific files, and an
+  empty answer selects everything.
 
 MARKERS IN THE PREVIEW:
   +  new link
@@ -322,7 +323,7 @@ menu_fallback() {
       i=$((i + 1))
     done
     printf '\n(fzf not available -- using the basic picker)\n'
-    printf "Select: 'a' = all (default) · 'n' = none · numbers and ranges · empty = all\n> "
+    printf "Select: 'a' = all (default) · 'n' = none · numbers/ranges, comma or space separated (e.g. 1,3 5-7) · empty = all\n> "
   } 2>/dev/null >/dev/tty || true
 
   if [ -t 0 ]; then
@@ -338,6 +339,7 @@ menu_fallback() {
 
 # expand_selection <count> <input> -> the selected 1-based indices, one per line
 # Accepts numbers, "lo-hi" ranges, "a"/"all" or empty = everything, "n" = none.
+# Commas and spaces both separate tokens, so "1,3 5-7" picks 1,3,5,6,7.
 expand_selection() {
   local n="$1" sel="$2" tok lo hi i
 
@@ -347,6 +349,8 @@ expand_selection() {
       i=1; while [ "$i" -le "$n" ]; do printf '%s\n' "$i"; i=$((i + 1)); done
       return ;;
   esac
+
+  sel="$(printf '%s' "$sel" | tr ',' ' ')"
 
   for tok in $sel; do
     case "$tok" in

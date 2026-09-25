@@ -13,8 +13,9 @@
 `link-files.bash` is covered by a bats suite in `tests/`. Run it with:
 
 ```bash
-bats tests/link-files.bats          # main suite (expected: 97 ok, 0 not ok)
+bats tests/link-files.bats          # main suite (expected: 99 ok, 0 not ok)
 bats tests/link-known-issues.bats   # known-bug encodings (expected: all fail)
+bats tests/select.bats              # typed multi-select parser (setup-os, agent-skills)
 ```
 
 - **`tests/link-files.bats`** — locks in current behavior: link-, classify-,
@@ -22,6 +23,11 @@ bats tests/link-known-issues.bats   # known-bug encodings (expected: all fail)
   prefixed tests (filter with `bats --filter '^audit-'`). Tests only the
   committed script; the OS is stubbed (`setup()` stubs `uname` to Linux,
   overlay tests override with `stub_uname Darwin`).
+- **`tests/select.bats`** — no terminal/fixtures: `eval`s the real
+  `expand_selection` extracted from `common/bin/setup-os` and
+  `setup/agent-skills.sh` and checks comma/space/ranges plus `a`/`n`/empty.
+  Keep `expand_selection` top-level with a bare `}` at column 0 or the awk
+  extractor breaks.
 - **`tests/helpers.bash`** — `fixture_new <name> [git]` builds a throwaway
   fixture repo + fake `$HOME` under `$BATS_TEST_TMPDIR` (auto-cleaned); the
   real `$HOME` is never touched. Each fixture copies the real script, so
@@ -131,6 +137,12 @@ rather than left bare.
 `setup-os` (symlinked to `~/bin/setup-os`) installs everything from `setup/packages.list`.
 
 - **Managers**: `brew cask pacman aur apt dnf zypper cargo go npm pip`
+  - On **NixOS** the system-scope managers are skipped (`PM=nixos`, detected
+    via `/etc/NIXOS`): system packages are declared in `configuration.nix`
+    (mapped from `setup/packages.list`), and setup-os only runs user-scope
+    installs — `setup/steps` and the `cargo/go/npm/pip` groups. `npm -g` is
+    redirected to a writable `~/.local` prefix (nixpkgs' npm prefix is
+    read-only) and no sudo is invoked.
 - **Sections** `[cargo]`, `[go]`, `[npm]`, `[pip]` install via `cargo install`,
   `go install`, `npm install -g`, `pipx install` instead of a native package:
   - `[go]` entries: `id  go:<module-path>  check:<bin>  pN`
@@ -142,6 +154,9 @@ rather than left bare.
 - Non-package installs live in `setup/steps/*.sh`; the go step
   (`setup/steps/05-golang.sh`) auto-runs when `[go]` packages are selected but
   Go is missing
+- Step headers: `# desc:` `# os:` `# check:` `# prio:` plus optional
+  `# requires:` (space-separated commands; the step is only offered when at
+  least one exists — e.g. `02-paru.sh` requires `pacman`).
 
 Coding agents: `opencode`/`claude` install via dedicated steps
 (`setup/steps/61-opencode.sh`, `62-claude-code.sh`), `pi` via `[go]`,

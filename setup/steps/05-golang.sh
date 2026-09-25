@@ -5,6 +5,15 @@
 # prio: p2
 set -euo pipefail
 
+# NixOS: the toolchain is declarative (configuration.nix ships go, see
+# setup/packages.list); /usr/local is not writable even with sudo, so this
+# step is a no-op there. The [go] group still runs `go install` for
+# user-scope modules once go exists.
+if [ -e /etc/NIXOS ]; then
+  echo 'NixOS: go comes from configuration.nix -- nothing to do here' >&2
+  exit 0
+fi
+
 GO_VERSION="${GO_VERSION:-1.24.1}"
 
 # Install go if missing

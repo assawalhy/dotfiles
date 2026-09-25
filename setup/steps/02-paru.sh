@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # desc: paru (AUR helper)
 # os: linux
+# requires: pacman
 # check: command -v paru || command -v yay || ! command -v pacman
 # prio: p1
 set -euo pipefail

@@ -18,3 +18,15 @@ bin/.github
 # mirror into the repo
 .agents/skills/
 .agents/.skill-lock.json
+
+# herdr runtime state + plugin installs. These are rebuilt by herdr at runtime;
+# plugin sources come from setup/steps/65-herdr-stay-awake.sh. plugins/config/
+# stays linkable because committed plugin config lives there (e.g.
+# herdr-plugin-workspace-manager/config.yml).
+.config/herdr/herdr-client.log
+.config/herdr/herdr-server.log
+.config/herdr/plugins.json
+.config/herdr/session.json
+.config/herdr/.plugins.lock
+.config/herdr/plugins/github/
+.config/herdr/plugins/state/
