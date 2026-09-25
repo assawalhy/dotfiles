@@ -30,6 +30,16 @@ let
       license = lib.licenses.ofl;
     };
   };
+
+  # lazygit from a pinned nixpkgs-unstable revision. The nixos-26.05 channel
+  # pins 0.61.1, but common/.config/lazygit/config.yml uses `git.diffRenderers`,
+  # which needs >= 0.64 (the old `git.paging` was removed then). Only this one
+  # package comes from unstable; the rest of the system stays on 26.05. The
+  # rev's lazygit is in cache.nixos.org, so it is fetched, not compiled.
+  unstable = import (builtins.fetchTarball {
+    url = "https://github.com/NixOS/nixpkgs/archive/4975466d324710c576dc11ad614684e6bd8cad8e.tar.gz";
+    sha256 = "1if9h4d8rkgd7a41j978swbixif81iqfd7hk302w0fbd23i9g7y4";
+  }) { system = pkgs.stdenv.hostPlatform.system; };
 in
 {
   imports =
@@ -184,7 +194,7 @@ in
     ffmpeg
     pandoc
     gitui
-    lazygit
+    unstable.lazygit # >= 0.64 for git.diffRenderers; see the `unstable` let-binding
     texliveBasic # provides kpsewhich
 
     ## [gui]
