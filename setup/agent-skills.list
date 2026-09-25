@@ -7,23 +7,34 @@
 # Categories:
 #   agents-skill    clone <git-url> and copy one skill folder into
 #                   ~/.agents/skills/<id>; install field: <git-url>@<folder>
-#   vendored-skill  copy setup/skills/<id> into ~/.agents/skills/<id>
 #   pi-package      pi package/extension; install field is a shell command
-#   claude-plugin   Claude Code plugin; install field is a shell command
-#   codex-plugin    Codex plugin; install field is a shell command
 #   plugin          clone <git-url> and run its own installer (TUI); the plugin
 #                   detects harnesses and installs per its own layout
+#   agent-tool      one entry per utility (MCP/plugin/skill shipped by a third
+#                   party); setup/agent-tools.sh installs it into every harness
+#                   present (opencode, claude, codex, cursor, pi, kiro, ...)
+#
+# Skills that ship inside an installable package are agent-tool entries, not
+# vendored copies: graphify (PyPI graphifyy + `graphify install`), teach &
+# friends (cloned from repo into ~/.agents/skills). Only genuinely private
+# skills with no public source would justify a vendored copy (setup/skills/).
 #
 # ~/.agents skills are harness-agnostic (AGENTS.md / .agents/skills are read
 # by pi, Claude Code, Codex, Gemini CLI, kilo, ...). Orca-managed skills are
 # intentionally NOT listed here.
+#
+# ~/.agents/.skill-lock.json is Claude's native skill-sync state. The catalog
+# is the repo-owned install path; the lock file is not committed.
 
 agents-skill|find-skills|Skill discovery & install guide|https://github.com/vercel-labs/skills.git@skills/find-skills
 agents-skill|show-me|Explain topics with diagrams & HTML artifacts|https://github.com/humanlayer/skills.git@plugins/show-me/skills/show-me
+agents-skill|teach|Teach a skill or concept within the workspace|https://github.com/mattpocock/skills.git@skills/productivity/teach
 agents-skill|grill-me|Cross-examine plans, ideas and proposals|https://github.com/mattpocock/skills.git@skills/productivity/grill-me
 agents-skill|grill-with-docs|Grill claims with real documentation evidence|https://github.com/mattpocock/skills.git@skills/engineering/grill-with-docs
 agents-skill|tdd|Test-driven development workflow|https://github.com/mattpocock/skills.git@skills/engineering/tdd
 agents-skill|improve-claude-md|Improve CLAUDE.md instruction adherence|https://github.com/humanlayer/skills.git@plugins/improve-claude-md/skills/improve-claude-md
+
+agent-tool|graphify|Any input to a persistent knowledge graph (PyPI graphifyy: skill + graphify install)|setup/agent-tools.sh install graphify
 
 # use-railway intentionally NOT listed: it ships from the official
 # railwayapp/railway-skills repo (plugins/railway/skills/use-railway) —
@@ -32,10 +43,10 @@ agents-skill|improve-claude-md|Improve CLAUDE.md instruction adherence|https://g
 plugin|awesome-agent|assawalhy/awesome-agent: commands, sub-agents and skills (awesome-plan, ddd, pr-description) for every harness|https://github.com/assawalhy/awesome-agent.git
 
 pi-package|tmustier-pi-extensions|pi-extensions: extensions & skills by tmustier (ralph loop, raw-paste, extend-pi, ...)|pi install git:github.com/tmustier/pi-extensions
-pi-package|plannotator|Plan review & annotation, pi extension|pi install npm:@plannotator/pi-extension
 
-claude-plugin|medusa-dev@medusa|medusa-dev skills for Claude Code|claude plugin marketplace add medusajs/medusa-agent-skills && claude plugin install medusa-dev@medusa
-claude-plugin|slack@claude-plugins-official|Slack skills for Claude Code|claude plugin marketplace add anthropics/claude-plugins-official && claude plugin install slack@claude-plugins-official
-
-codex-plugin|github@openai-curated|GitHub skills for Codex|codex plugin add github@openai-curated
-codex-plugin|slack@openai-curated|Slack skills for Codex (optional)|codex plugin add slack@openai-curated
+# Multi-harness tools: install field is handled by setup/agent-tools.sh, which
+# targets every harness present on the machine.
+agent-tool|context7|Up-to-date library docs via MCP (opencode/codex/cursor/claude/pi)|setup/agent-tools.sh install context7
+agent-tool|plannotator|Plan & code review: opencode/claude plugins, pi extension, codex/kiro/gemini hooks|setup/agent-tools.sh install plannotator
+agent-tool|warp|Warp terminal notifications: claude + codex plugins|setup/agent-tools.sh install warp
+agent-tool|typescript-lsp|Claude Code LSP speedups (claude-only upstream)|setup/agent-tools.sh install typescript-lsp

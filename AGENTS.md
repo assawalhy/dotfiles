@@ -172,15 +172,41 @@ setup-os --priority p1 -y
 
 ## Agent Skills & Shared Context
 
-Agent skills, plugins and harness context live in two places:
+Two kinds of artifacts, two source-of-truth rules:
 
-- **`setup/agent-skills.list`** — catalog (category|id|desc|install) of skills and
-  plugins to install. `setup/agent-skills.sh` is the interactive installer:
-  `--list` prints the catalog with installed markers, `--all` installs every
-  item, `--dry-run` shows what would run, `--context` re-wires symlinks only.
-  Orca-sourced skills/configs are intentionally **not** in the catalog.
-- **`common/` holds the committed canonical context** — currently just
-  `common/.agents/AGENTS.md` (workflow rules), wired to `~/.agents/AGENTS.md`.
+- **Installable artifacts** (skills, plugins, MCPs, packages) are recorded in
+  `setup/agent-skills.list` and installed fresh by `setup/agent-skills.sh` —
+  nothing is copied as a whole config file.
+- **Authored context files** (AGENTS.md, CLAUDE.md) are committed in `common/`
+  and symlinked by `link-files --fix`. Nothing can regenerate them, so the repo
+  is the source.
+
+### Catalog (`setup/agent-skills.list`)
+
+- **`agents-skill`** — clone from a public repo into `~/.agents/skills/`
+- **`pi-package`** — pi extension install (`pi install ...`)
+- **`plugin`** — clone + run its own installer (currently `awesome-agent`)
+- **`agent-tool`** — one entry per utility; `setup/agent-tools.sh` installs *
+  into every harness present* (opencode, claude, codex, cursor, pi, kiro, ...).
+  Tools: `context7` (MCP docs), `plannotator` (plan/code review), `warp`
+  (terminal notifications), `typescript-lsp`, `graphify` (knowledge-graph
+  skill; the PyPI package's own `graphify install` handles the skill copy).
+
+`setup/agent-skills.sh` modes: `--list` (catalog with installed markers),
+`--all` (install every item), `--dry-run`, `--context` (prints how committed
+context is wired — the wiring itself is `link-files --fix`). Orca-sourced
+skills/configs are intentionally **not** in the catalog.
+
+### Committed context (`common/`)
+
+- `common/.agents/AGENTS.md` — global agent instructions, wired to
+  `~/.agents/AGENTS.md`
+- `common/.claude/CLAUDE.md` — Claude Code persona + import of the global file,
+  wired to `~/.claude/CLAUDE.md`
+
+These are real dotfiles managed by `link-files` like every other file in the
+repo. The old `wire_context` in agent-skills.sh was removed: two writers for
+one path is how `~/.agents/AGENTS.md` ended up as a 2-line stub.
 
 **The awesome-agent plugin (`assawalhy/awesome-agent`) owns its own files** — the
 catalog entry `plugin|awesome-agent` clones the repo and runs its `install.sh`,
@@ -193,11 +219,12 @@ symlink those files in `common/` — the plugin's writes would fight the links.
 
 Harness-agnostic skills install into `~/.agents/skills/` by git-clone from
 their public repos (the catalog's `agents-skill` entries); pi packages and
-claude/codex plugins install via their own CLIs. `~/.agents/skills/` and
-`~/.agents/.skill-lock.json` are script-managed install state, excluded from
-`link-files` via `link-ignore.txt` — never commit the installed copies. The
-`use-railway` skill is intentionally **not** in this repo — install it from
-the official `railwayapp/railway-skills` repo instead.
+claude/codex plugins install via their own CLIs; multi-harness tools via
+`setup/agent-tools.sh`. `~/.agents/skills/` and `~/.agents/.skill-lock.json`
+are script-managed install state, excluded from `link-files` via
+`link-ignore.txt` — never commit the installed copies. The `use-railway` skill
+is intentionally **not** in this repo — install it from the official
+`railwayapp/railway-skills` repo instead.
 
 ## Commit Conventions
 

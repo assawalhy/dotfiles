@@ -6,15 +6,17 @@
 #   setup/agent-skills.sh --all          install every catalog item, no prompt
 #   setup/agent-skills.sh --list         print the catalog with installed markers
 #   setup/agent-skills.sh --dry-run      print what --all would run, without running
-#   setup/agent-skills.sh --context      only (re)wire the shared context files
+#   setup/agent-skills.sh --context      print how committed context files are wired
 #
 # The catalog installs harness-agnostic skills into ~/.agents/skills (read by
 # pi, Claude Code, Codex, Gemini CLI, kilo, ...), plus per-harness packages and
-# plugins. The awesome-agent plugin (catalog entry `plugin|awesome-agent`)
-# installs its own commands/agents/skills into every harness dir itself
-# (claude, pi prompts, cursor, codex, opencode, ...) — dotfiles does NOT mirror
-# those. The only committed context file is common/.agents/AGENTS.md, wired
-# to ~/.agents/AGENTS.md below.
+# plugins (install field is a shell command per category). The awesome-agent
+# plugin (catalog entry `plugin|awesome-agent`) installs its own
+# commands/agents/skills into every harness dir itself (claude, pi prompts,
+# cursor, codex, opencode, ...) — dotfiles does NOT mirror those.
+#
+# Authored context files (common/.agents/AGENTS.md, common/.claude/CLAUDE.md)
+# are dotfiles, symlinked by link-files — this script never wires them.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -74,7 +76,12 @@ installed_path() {
          && grep -q "\[plugins\.\"$i\"\]" "$HOME/.codex/config.toml"; then
         printf '%s' '~/.codex/config.toml'
       fi ;;
+    agent-tool/*)
+      local st
+      st="$(bash "$REPO/setup/agent-tools.sh" status "$i" 2>/dev/null || true)"
+      [ -n "$st" ] && printf '%s' "$st" ;;
   esac
+  return 0
 }
 
 print_catalog() {
@@ -160,6 +167,10 @@ install_one() {
       mkdir -p "$SKILLS_DIR"
       cp -R "$REPO/setup/skills/$i" "$SKILLS_DIR/$i"
       ;;
+    agent-tool)
+      printf -- '+ bash setup/agent-tools.sh install %s\n' "$i"
+      bash "$REPO/setup/agent-tools.sh" install "$i"
+      ;;
     *)
       printf -- '+ %s\n' "$ins"
       ( eval "$ins" ) ;;
@@ -203,46 +214,18 @@ dry_run_all() {
   done
 }
 
-# --------------------------------------------------- context wire ---
+# --------------------------------------------------- context hint ---
 
-# link_if_needed <home-relpath> <repo-common-relpath>
-link_if_needed() {
-  local dest="$HOME/$1" src="$REPO/common/$2" bak
-  if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
-    printf '  = %s (ok)\n' "$1"
-  elif [ -e "$dest" ]; then
-    if [ -L "$dest" ] || ! cmp -s "$dest" "$src"; then
-      mkdir -p "$BACKUP_DIR"
-      bak="$BACKUP_DIR/$(basename "$dest")"
-      [ -e "$bak" ] && rm -rf "$bak"
-      mv "$dest" "$bak"
-      printf '  ~ %s (backed up to %s)\n' "$1" "$bak"
-    else
-      rm "$dest"
-      printf '  ~ %s (replaced identical file)\n' "$1"
-    fi
-    mkdir -p "$(dirname "$dest")"
-    ln -s "$src" "$dest"
-  else
-    mkdir -p "$(dirname "$dest")"
-    ln -s "$src" "$dest"
-    printf '  + %s\n' "$1"
-  fi
-}
-
-wire_context() {
-  local pairs=( ".agents/AGENTS.md|.agents/AGENTS.md" )
-  local p
-  printf -- 'Wiring shared context files:\n'
-  for p in "${pairs[@]}"; do
-    link_if_needed "${p%%|*}" "${p#*|}"
-  done
+context_hint() {
+  printf -- 'Committed context files are dotfiles, symlinked by link-files:\n'
+  printf -- '  common/.agents/AGENTS.md -> ~/.agents/AGENTS.md\n'
+  printf -- '  common/.claude/CLAUDE.md -> ~/.claude/CLAUDE.md\n'
+  printf -- 'Run: bash link-files.bash --fix\n'
 }
 
 # ----------------------------------------------------------- main ---
 
 load_catalog
-BACKUP_DIR="$HOME/.agent-context-backup-$(date +%Y%m%d-%H%M%S)"
 
 case "$mode" in
   list) print_catalog ;;
@@ -250,13 +233,12 @@ case "$mode" in
   all)
     set +e          # let a failed item skip itself, not the whole catalog
     run_all; rc=$?
-    wire_context
-    [ $? -ne 0 ] && rc=1
+    context_hint
     set -e
     exit "$rc"
     ;;
   context)
-    wire_context
+    context_hint
     ;;
   interactive)
     if [ ! -t 0 ]; then
@@ -280,7 +262,7 @@ case "$mode" in
       set -e
     fi
     printf '\n'
-    wire_context
+    context_hint
     ;;
 esac
 
