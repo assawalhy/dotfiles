@@ -172,6 +172,9 @@ in
     ranger
     fzf
     bat
+    tealdeer # tldr pages client; binary is `tldr`
+    btop # resource monitor (TUI)
+    htop # process viewer
     # pipx: this channel's drv isn't cached on cache.nixos.org, so it builds
     # from source, where pipx 1.8.0's own pytest suite fails against 26.05's
     # `packaging` (name@url normalization expects no spaces around @). The
@@ -183,6 +186,8 @@ in
     fd
     xsel
     xclip
+    wl-clipboard # wl-copy/wl-paste; Wayland clipboard (in packages.list)
+    mousepad # GTK editor; macOS ships TextEdit (in packages.list)
     mise
     luarocks
 
@@ -217,6 +222,9 @@ in
     nerd-fonts.jetbrains-mono
     nerd-fonts.fira-code
     ghostty
+    # GNOME 42+ has no desktop icons; this extension restores them (enabled via
+    # the org/gnome/shell dconf default below).
+    gnomeExtensions.desktop-icons-ng-ding
 
     ## [dev]
     docker
@@ -226,6 +234,11 @@ in
     maven
     gradle
     bun
+    # VS Code, added as a plain package (NOT via programs.vscode): the module
+    # always wraps it with vscode-with-extensions and pins --extensions-dir to a
+    # read-only store path, which makes UI extension installs fail with ENOENT.
+    # This way extensions install into ~/.vscode/extensions.
+    vscode.fhs
     stdenv.cc # compiler wrapper: cargo wants `cc`, cgo wants `gcc` (rmem, pi)
 
     ## [fonts]
@@ -267,6 +280,8 @@ in
     zenity # GUI password prompt for sudo -A (sudo-askpass)
     usbutils # lsusb
     ntfs3g # mkntfs/ntfsfix/ntfs-3g for removable NTFS
+
+    onlyoffice-desktopeditors
   ];
 
   # Some programs need SUID wrappers, can be configured further or are
@@ -301,9 +316,18 @@ in
         "org/gnome/desktop/input-sources" = {
           xkb-options = [ "caps:escape" ];
         };
+        # Desktop Icons NG (DING) — GNOME 50 shows no desktop icons on its own.
+        "org/gnome/shell" = {
+          enabled-extensions = [ "ding@rastersoft.com" ];
+        };
       };
     }
   ];
+
+  # NOTE: programs.vscode is intentionally NOT used — it wraps VS Code with
+  # vscode-with-extensions and forces a read-only --extensions-dir, so
+  # installing extensions from the UI fails. vscode.fhs is in
+  # environment.systemPackages instead (see [dev]).
 
   # Fonts. fontconfig's built-in defaults are DejaVu, which has no (or poor)
   # Arabic coverage — so Arabic serif/monospace text fell back to a random face.
@@ -395,5 +419,25 @@ in
   };
 
   programs.zsh.enable = true; # interactive zsh support + /etc/shells entry
-  programs.nix-ld.enable = true;
+
+  # Foreign (non-Nix) binaries — see .agents/plans/05-foreign-binaries.
+  # nix-ld supplies the /lib64/ld-linux interpreter; `libraries` supplies the
+  # runtime dlopen() targets those binaries expect (invisible to `ldd`).
+  # NOTE: do NOT add `wayland` here — OpenTUI (opencode) would then select its
+  # Wayland clipboard backend, which GNOME/Mutter cannot serve, and paste would
+  # break again (epic 04 D5). Omitting it keeps OpenTUI on working X11/XWayland.
+  programs.nix-ld = {
+    enable = true;
+    libraries = with pkgs; [
+      libxcb # opencode clipboard (X11/XWayland)
+      glib # libglib-2.0 / libgobject-2.0 (opencode, claude)
+      libsecret # secret storage (opencode, claude)
+      alsa-lib # libasound.so.2
+      libpulseaudio # libpulse.so.0
+    ];
+  };
+
+  # Resolve hardcoded shebang/interpreter paths (/bin/bash, /usr/bin/python3, …)
+  # via PATH for scripts shipped by foreign binaries.
+  services.envfs.enable = true;
 }

@@ -33,6 +33,9 @@ tree-sitter-cli pacman:tree-sitter check:tree-sitter p2  # nvim-treesitter needs
 ranger check:ranger p2
 fzf check:fzf p1
 bat                 apt:batcat check:bat p1
+tealdeer            check:tldr                p2  # tldr pages client (binary: tldr)
+btop                check:btop                p2  # resource monitor (TUI)
+htop                check:htop                p2  # process viewer
 pipx                pacman:python-pipx check:pipx p2  # Arch package is python-pipx
 fd                  apt:fd-find  dnf:fd-find check:fd p1
 mousepad            !macos check:mousepad         p3  # GTK editor; macOS has TextEdit
