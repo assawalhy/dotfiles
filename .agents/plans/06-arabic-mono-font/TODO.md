@@ -9,4 +9,4 @@
 - [x] rebuild (stage `/etc/nixos`, switch)
 - [x] verify: live `fc-match` matrix (concrete-family Arabic → Kawkab; primary/serif/sans unchanged)
 - [ ] verify visual: Arabic in a new terminal is fixed-width
-- [ ] commit (blocked: another session has staged unrelated files)
+- [x] commit (scoped to epics 05/06 via a temporary index; other sessions' staged work left untouched)

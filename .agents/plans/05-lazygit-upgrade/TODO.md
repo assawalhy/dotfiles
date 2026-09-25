@@ -6,4 +6,4 @@
 - [x] validate: `nix-instantiate --parse` + fetch-only resolvable (0.65.1)
 - [x] backup `/etc/nixos/configuration.nix`, copy repo version, rebuild
 - [x] verify: `lazygit --version` = 0.65.1 (delta render is visual — user)
-- [ ] commit (blocked: another session has staged unrelated files)
+- [x] commit (scoped to epics 05/06 via a temporary index; other sessions' staged work left untouched)
