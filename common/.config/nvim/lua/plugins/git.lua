@@ -12,6 +12,8 @@ return {
         untracked = { text = '┆' },
       },
       signcolumn = true,
+      -- Color the line number itself (VSCode-style gutter), not just the sign.
+      numhl = true,
       on_attach = function(bufnr)
         local gitsigns = require('gitsigns')
         local map = function(mode, lhs, rhs, opts)
