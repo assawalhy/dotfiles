@@ -15,7 +15,10 @@ return {
     config = function()
       vim.lsp.config('html', { filetypes = { 'html', 'twig', 'hbs' } })
       for _, server in ipairs { 'bashls', 'clangd', 'pyright', 'ts_ls', 'eslint', 'biome', 'intelephense', 'html', 'lua_ls' } do
-        vim.lsp.enable(server)
+        -- Oversized files stay LSP-free (see config/autocmds.lua).
+        vim.lsp.enable(server, function(bufnr)
+          return not vim.b[bufnr].large_file
+        end)
       end
     end,
   },

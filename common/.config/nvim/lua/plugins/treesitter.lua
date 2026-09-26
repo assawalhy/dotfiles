@@ -122,6 +122,9 @@ return {
 
       vim.api.nvim_create_autocmd('FileType', {
         callback = function(args)
+          -- Oversized files stay plain (see config/autocmds.lua).
+          if vim.b[args.buf].large_file then return end
+
           local lang = vim.treesitter.language.get_lang(args.match) or args.match
           if not wanted[lang] then return end
 
