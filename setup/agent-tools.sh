@@ -9,9 +9,8 @@
 #                                         configured in every harness present,
 #                                         print nothing otherwise; exits 0
 #
-# Tools: context7 (MCP docs), plannotator (plan/code review), warp (terminal
-# notifications), typescript-lsp (Claude Code LSP speedups), graphify
-# (knowledge-graph skill; installs via its own `graphify install`).
+# Tools: context7 (MCP docs), plannotator (plan/code review), typescript-lsp
+# (Claude Code LSP speedups), graphify (knowledge-graph CLI + per-harness skill).
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -137,15 +136,32 @@ context7_status() {
 
 # ---- plannotator: plan & code review ----
 
+# plannotator ships as a 150+ MB CLI plus a sem sidecar and an agent-terminal
+# runtime; the official installer owns all of it (binary, sidecar, runtime,
+# hooks, skills, commands). Run it non-interactively so setup-os never blocks
+# on its /dev/tty wizard, keep its output (a failed download must not look
+# like success), and verify the binary actually landed.
 plannotator_bin_install() {
+  local bin="$HOME/.local/bin/plannotator" log
+  [ -x "$bin" ] && return 0
   command -v plannotator >/dev/null 2>&1 && return 0
-  command -v curl >/dev/null 2>&1 || { printf '  - curl missing, cannot install plannotator\n'; return 0; }
-  printf '  + plannotator: running official installer (auto-detects claude/codex/opencode/pi/kiro/gemini/copilot/droid/amp)\n'
-  curl -fsSL https://plannotator.ai/install.sh | bash 2>/dev/null
+  command -v curl >/dev/null 2>&1 || { printf '  - plannotator: curl missing, cannot install\n' >&2; return 1; }
+  log="$(mktemp "${TMPDIR:-/tmp}/plannotator.XXXXXX")" || log=/dev/null
+  printf '  + plannotator: official installer (binary + sem sidecar + runtimes + agent hooks, ~150 MB; this takes a few minutes)\n'
+  curl -fsSL https://plannotator.ai/install.sh | bash -s -- --non-interactive >"$log" 2>&1 || true
+  if [ -x "$bin" ] || command -v plannotator >/dev/null 2>&1; then
+    printf '  + plannotator: binary installed\n'
+    rm -f "$log"
+    return 0
+  fi
+  printf '  - plannotator: binary not found after the official installer failed\n' >&2
+  [ "$log" != /dev/null ] && tail -n 15 "$log" >&2
+  rm -f "$log"
+  return 1
 }
 
 plannotator_opencode_install() {
-  run_harness opencode opencode opencode plugin @plannotator/opencode@latest 2>/dev/null
+  run_harness opencode opencode opencode plugin add @plannotator/opencode@latest 2>/dev/null
 }
 plannotator_opencode_status() {
   local cfg
@@ -169,45 +185,21 @@ plannotator_pi_status() {
 }
 
 plannotator_install() {
-  plannotator_bin_install
+  local rc=0
+  plannotator_bin_install || rc=1
   plannotator_opencode_install
   plannotator_claude_install
   plannotator_pi_install
   # codex/kiro/gemini integrations are created by the official installer above.
+  return "$rc"
 }
 plannotator_status() {
-  local klaus=1
-  command -v plannotator >/dev/null 2>&1 || klaus=0
+  local bin="$HOME/.local/bin/plannotator" klaus=1
+  { [ -x "$bin" ] || command -v plannotator >/dev/null 2>&1; } || klaus=0
   harness_present opencode && { plannotator_opencode_status && : || klaus=0; }
   harness_present claude   && { plannotator_claude_status   && : || klaus=0; }
   harness_present pi       && { plannotator_pi_status       && : || klaus=0; }
   [ "$klaus" -eq 1 ] && printf '%s\n' "$HOME/.agents/tools/plannotator"
-}
-
-# ---- warp: terminal notifications ----
-
-warp_claude_install() {
-  run_harness claude claude claude plugin marketplace add warpdotdev/claude-code-warp 2>/dev/null
-  run_harness claude claude claude plugin install warp@claude-code-warp 2>/dev/null
-}
-warp_claude_status() {
-  grep -q '"warp@claude-code-warp"' "$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null
-}
-
-warp_codex_install() {
-  run_harness codex codex codex plugin marketplace add warpdotdev/codex-warp 2>/dev/null
-  run_harness codex codex codex plugin add warp@codex-warp 2>/dev/null
-}
-warp_codex_status() {
-  grep -q 'warp@codex-warp' "$HOME/.codex/config.toml" 2>/dev/null
-}
-
-warp_install() { warp_claude_install; warp_codex_install; }
-warp_status() {
-  local ok=0 missing=0
-  harness_present claude && { warp_claude_status && ok=$((ok+1)) || missing=$((missing+1)); }
-  harness_present codex  && { warp_codex_status  && ok=$((ok+1)) || missing=$((missing+1)); }
-  [ "$missing" -eq 0 ] && [ "$ok" -gt 0 ] && printf '%s\n' "$HOME/.agents/tools/warp"
 }
 
 # ---- typescript-lsp: Claude Code LSP speedups (claude-only upstream) ----
@@ -242,41 +234,53 @@ graphify_skill_path() { # <platform> -> path of installed SKILL.md
 }
 
 graphify_bin_install() {
-  command -v graphify >/dev/null 2>&1 && return 0
+  local bin="$HOME/.local/bin/graphify"
+  { [ -x "$bin" ] || command -v graphify >/dev/null 2>&1; } && return 0
   if command -v uv >/dev/null 2>&1; then
     printf '  + graphify: installing graphifyy via uv tool\n'
-    uv tool install -q graphifyy[sql] 2>/dev/null || \
-      uv tool install -q graphifyy 2>/dev/null || \
-      { printf '  - graphify: uv tool install failed\n'; return 0; }
+    if uv tool install -q graphifyy[sql] || uv tool install -q graphifyy; then
+      return 0
+    fi
+    printf '  - graphify: uv tool install failed\n' >&2
   elif command -v pipx >/dev/null 2>&1; then
     printf '  + graphify: installing graphifyy via pipx\n'
-    pipx install -q graphifyy 2>/dev/null || { printf '  - graphify: pipx install failed\n'; return 0; }
+    if pipx install -q graphifyy; then
+      return 0
+    fi
+    printf '  - graphify: pipx install failed\n' >&2
   else
-    printf '  - graphify: need uv or pipx to install graphifyy (it owns its own installer)\n'
-    return 0
+    printf '  - graphify: need uv or pipx to install graphifyy (it owns its own installer)\n' >&2
   fi
+  [ -x "$bin" ] || command -v graphify >/dev/null 2>&1
 }
 
 graphify_platform_install() {
-  local p="$1"
+  local p="$1" sp log
   # Non-project opencode/cursor installs write plugin/rule files relative to
   # CWD; run from $HOME so they land under the home dir, never in a repo.
-  (cd "$HOME" && graphify install --platform "$p") >/dev/null 2>&1 \
-    && printf '  + graphify: skill installed for %s\n' "$p" \
-    || printf '  - graphify: %s install failed\n' "$p"
+  log="$(mktemp "${TMPDIR:-/tmp}/graphify.XXXXXX")" || log=/dev/null
+  (cd "$HOME" && graphify install --platform "$p") >"$log" 2>&1
+  sp="$(graphify_skill_path "$p")" || sp=""
+  if [ -n "$sp" ] && [ -f "$sp" ]; then
+    printf '  + graphify: skill installed for %s\n' "$p"
+  else
+    printf '  - graphify: %s install failed (no %s)\n' "$p" "${sp:-skill file}" >&2
+    [ "$log" != /dev/null ] && tail -n 5 "$log" >&2
+  fi
+  rm -f "$log"
 }
 
 graphify_install() {
-  graphify_bin_install
-  command -v graphify >/dev/null 2>&1 || return 0
+  graphify_bin_install || return 1
   local p
   for p in $GRAPHIFY_PLATFORMS; do
     harness_present "$p" && graphify_platform_install "$p"
   done
+  return 0
 }
 
 graphify_status() {
-  command -v graphify >/dev/null 2>&1 || return 1
+  { [ -x "$HOME/.local/bin/graphify" ] || command -v graphify >/dev/null 2>&1; } || return 1
   local ok=0 missing=0 p sp
   for p in $GRAPHIFY_PLATFORMS; do
     harness_present "$p" || continue
@@ -286,21 +290,22 @@ graphify_status() {
 }
 
 # ---- dispatch ----
+# install failures propagate (agent-skills.sh turns them into "! failed");
+# status always exits 0 per the contract above.
 
+rc=0
 case "$CMD:$TOOL" in
-  install:context7)      context7_install ;;
+  install:context7)      context7_install; rc=$? ;;
   status:context7)       context7_status ;;
-  install:plannotator)   plannotator_install ;;
+  install:plannotator)   plannotator_install; rc=$? ;;
   status:plannotator)    plannotator_status ;;
-  install:warp)          warp_install ;;
-  status:warp)           warp_status ;;
-  install:typescript-lsp) typescript_lsp_install ;;
+  install:typescript-lsp) typescript_lsp_install; rc=$? ;;
   status:typescript-lsp) typescript_lsp_status ;;
-  install:graphify)      graphify_install ;;
+  install:graphify)      graphify_install; rc=$? ;;
   status:graphify)       graphify_status ;;
   *)
-    printf 'usage: setup/agent-tools.sh <install|status> <context7|plannotator|warp|typescript-lsp|graphify>\n' >&2
+    printf 'usage: setup/agent-tools.sh <install|status> <context7|plannotator|typescript-lsp|graphify>\n' >&2
     exit 1 ;;
 esac
 
-exit 0
+exit "$rc"

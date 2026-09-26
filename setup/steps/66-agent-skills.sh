@@ -15,7 +15,7 @@ Agent skills and plugins are managed from the catalog:
 Catalog: setup/agent-skills.list
 Skills install into ~/.agents/skills/ (harness-agnostic) or via each harness's
 own CLI (pi install, claude plugin, codex plugin). Multi-harness tools
-(context7, plannotator, warp, typescript-lsp) install into every harness
+(context7, plannotator, typescript-lsp, graphify) install into every harness
 present via setup/agent-tools.sh. The awesome-agent plugin installs its own
 commands/agents/skills into every harness; context files
 (common/.agents/AGENTS.md, common/.claude/CLAUDE.md) are symlinked by

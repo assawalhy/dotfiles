@@ -48,5 +48,4 @@ pi-package|tmustier-pi-extensions|pi-extensions: extensions & skills by tmustier
 # targets every harness present on the machine.
 agent-tool|context7|Up-to-date library docs via MCP (opencode/codex/cursor/claude/pi)|setup/agent-tools.sh install context7
 agent-tool|plannotator|Plan & code review: opencode/claude plugins, pi extension, codex/kiro/gemini hooks|setup/agent-tools.sh install plannotator
-agent-tool|warp|Warp terminal notifications: claude + codex plugins|setup/agent-tools.sh install warp
 agent-tool|typescript-lsp|Claude Code LSP speedups (claude-only upstream)|setup/agent-tools.sh install typescript-lsp

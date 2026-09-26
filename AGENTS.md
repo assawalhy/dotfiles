@@ -188,9 +188,10 @@ Two kinds of artifacts, two source-of-truth rules:
 - **`plugin`** — clone + run its own installer (currently `awesome-agent`)
 - **`agent-tool`** — one entry per utility; `setup/agent-tools.sh` installs *
   into every harness present* (opencode, claude, codex, cursor, pi, kiro, ...).
-  Tools: `context7` (MCP docs), `plannotator` (plan/code review), `warp`
-  (terminal notifications), `typescript-lsp`, `graphify` (knowledge-graph
-  skill; the PyPI package's own `graphify install` handles the skill copy).
+  Tools: `context7` (MCP docs), `plannotator` (plan/code review CLI + sem
+  sidecar + runtimes, via its official installer), `typescript-lsp`, `graphify`
+  (knowledge-graph CLI; the PyPI `graphifyy` package's own `graphify install`
+  handles the per-harness skill copy).
 
 `setup/agent-skills.sh` modes: `--list` (catalog with installed markers),
 `--all` (install every item), `--dry-run`, `--context` (prints how committed
