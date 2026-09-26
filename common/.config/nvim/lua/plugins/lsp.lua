@@ -14,11 +14,9 @@ return {
     'neovim/nvim-lspconfig',
     config = function()
       vim.lsp.config('html', { filetypes = { 'html', 'twig', 'hbs' } })
+      local gate = require('config.lsp_gate')
       for _, server in ipairs { 'bashls', 'clangd', 'pyright', 'ts_ls', 'eslint', 'biome', 'intelephense', 'html', 'lua_ls' } do
-        -- Oversized files stay LSP-free (see config/autocmds.lua).
-        vim.lsp.enable(server, function(bufnr)
-          return not vim.b[bufnr].large_file
-        end)
+        gate.gate(server)
       end
     end,
   },
