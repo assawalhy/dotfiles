@@ -111,6 +111,25 @@ in
 
   nixpkgs.config.allowUnfree = true;
 
+  # ranger's kitty-graphics query sends `S`, which Ghostty 1.3.x rejects with
+  # `EINVAL: invalid data`; ranger aborts before drawing (ranger#3203). Ghostty
+  # also rejects ranger's fallback temp-file medium (`t=t`). Treat the EINVAL
+  # reply like `EBADF` so ranger uses direct (`t=d`) transmission, which Ghostty
+  # accepts (verified in a real Ghostty surface). Drop this overlay once
+  # ranger#3203 is fixed upstream; `--replace-fail` fails the build loudly if a
+  # ranger bump moves the line.
+  nixpkgs.overlays = [
+    (final: prev: {
+      ranger = prev.ranger.overrideAttrs (old: {
+        postPatch = (old.postPatch or "") + ''
+          substituteInPlace ranger/ext/img_display.py \
+            --replace-fail "elif b'EBADF' in resp:" \
+                           "elif b'EBADF' in resp or b'EINVAL' in resp:"
+        '';
+      });
+    })
+  ];
+
   # Fingerprint reader (HP ZBook Fury 15 G7, Synaptics 06cb:00df) — required
   # for the GNOME lock screen / GDM fingerprint unlock.
   services.fprintd.enable = true;
