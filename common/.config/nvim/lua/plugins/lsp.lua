@@ -14,8 +14,9 @@ return {
     'neovim/nvim-lspconfig',
     config = function()
       vim.lsp.config('html', { filetypes = { 'html', 'twig', 'hbs' } })
+      local gate = require('config.lsp_gate')
       for _, server in ipairs { 'bashls', 'clangd', 'pyright', 'ts_ls', 'eslint', 'biome', 'intelephense', 'html', 'lua_ls' } do
-        vim.lsp.enable(server)
+        gate.gate(server)
       end
     end,
   },
