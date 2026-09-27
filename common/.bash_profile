@@ -235,6 +235,35 @@ function wjava() {
     "$java" $JC_OPTIONS -cp "$(dirname "$bin")" "$(basename "$bin")" "$@"
 }
 
+function rkotlin() {
+  local bin file
+
+  file="$1"; shift
+  bin="$(ensure-file "$file" kt)"
+  if [ ! "$bin" ]; then return 1; fi
+  bin="$(realpath "$bin")"
+
+  kotlinc "$file" -include-runtime -d "$bin.jar" &&
+  java -jar "$bin.jar" "$@"
+}
+
+function wkotlin() {
+  local bin file cmd
+
+  file="$1"; shift
+  bin="$(ensure-file "$file" kt)"
+  if [ ! "$bin" ]; then return 1; fi
+  bin="$(realpath "$bin")"
+
+  # The pipeline has to reach the shell as ONE -x string: handed separate
+  # argv tokens, nodemon slurps the inner flags itself (`-d` is its own
+  # --delay), kotlinc never receives `-d <jar>`, and every rebuild is
+  # discarded while `java -jar` keeps running the stale jar.
+  cmd="$(printf '%q ' kotlinc "$file" -include-runtime -d "$bin.jar")"
+  cmd+="&& $(printf '%q ' java -jar "$bin.jar" "$@")"
+  nodemon -w "$file" -e kt -x "$cmd"
+}
+
 function wpy() {
   local bin
   local file=$1; shift
