@@ -44,10 +44,12 @@ lua/config/options.lua     editor settings
 lua/config/keymaps.lua     global keymaps
 lua/config/autocmds.lua    global autocommands
 lua/plugins/*.lua          one file per feature (ui, editor, git, lsp,
-                           blink, conform, trouble, jdtls, dap, treesitter,
+                           blink, conform, trouble, dap, treesitter,
                            ufo, neotree, telescope, competitest)
+lua/config/lsp_gate.lua    per-buffer LSP attach gate, shared by the servers
+lua/config/java.lua        jdtls + kotlin_language_server
+lua/config/memory.lua      RAM guard for the two JVM servers
 after/plugin/lsp.lua       LspAttach native keymaps + diagnostics
-after/ftplugin/java.lua    jdtls config for Java files
 ```
 
 ### LSP keymaps
@@ -70,14 +72,34 @@ Bound on `LspAttach` (skipped for copilot):
 `C-n`/`C-p` select, `C-b`/`C-f` scroll docs, `C-Space` complete, `CR` accept,
 `Tab`/`S-Tab` jump between snippet placeholders.
 
-### Java
+### Java, Kotlin and competitive programming
 
-Requires JDK 21+ (the config points at `/usr/lib/jvm/default-java`). Maven and
-Gradle come from the `p2` tier: `setup-os --priority p2`. Mason installs
-`jdtls`, `java-debug-adapter` and `java-test`. Lombok support is enabled by
-setting `LOMBOK_JAR` to the lombok jar path; the agent is appended to the
-jdtls VM args when set. Each project gets its own workspace cache under
-`stdpath('cache')/jdtls/workspace/<project-name>`.
+The toolchain comes from mise (`common/.config/mise/config.toml`: `temurin-21`
+and `kotlin`), so `java`, `javac` and `kotlinc` are on PATH without distro
+packages; `_jdk_home` in `~/.config/shell/os.sh` resolves through
+`mise where java`. Maven and Gradle come from the `p2` tier:
+`setup-os --priority p2`.
+
+Both language servers are mason-installed (`ensure_installed` in
+`lua/plugins/lsp.lua`) and gated per buffer by `lua/config/lsp_gate.lua`, so
+oversized files stay LSP-free:
+
+- **jdtls** (`lua/config/java.lua`) is launched as `java` itself — the
+  equinox launcher jar plus `-configuration config_linux`/`config_mac` — not
+  through the `jdtls` wrapper script: the wrapper would be nvim's immediate
+  child and the JVM a grandchild that nvim never kills (nvim#29475). The heap
+  is capped at 768 MB and every project gets its own workspace under
+  `stdpath('cache')/jdtls/<name>-<hash>`. Lombok comes from mason's bundled
+  `lombok.jar`; set `LOMBOK_JAR` to override.
+- **kotlin_language_server** gets the same heap cap through `_JAVA_OPTIONS`.
+
+`lua/config/memory.lua` backs both: no JVM starts below 2 GiB available RAM,
+running ones are stopped below 1.5 GiB (20 s watchdog and on `ExitPre`), and
+JVMs orphaned by a crashed nvim are swept on the next start.
+
+Competitive programming: CompetiTest compiles and runs Kotlin
+(`kotlinc` → `java -jar`) as well as Java, and the shell profile grows
+`rkotlin`/`wkotlin` alongside `rjava`/`wjava` for running a single file.
 
 ## Linking
 
