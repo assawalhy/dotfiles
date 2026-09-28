@@ -123,12 +123,15 @@ return {
       cpp = { exec = 'g++', args = { '-std=c++23', '-DSAWALHY', '-Wall', '-Wextra', '-fsanitize=address', '-Wconversion', '$(FNAME)', '-o', '$(FNOEXT)' } },
       rust = { exec = 'rustc', args = { '$(FNAME)' } },
       java = { exec = 'javac', args = { '$(FNAME)' } },
+      kotlin = { exec = 'kotlinc', args = { '$(FNAME)', '-include-runtime', '-d', '$(FNOEXT).jar' } },
       go = { exec = 'go', args = { 'build', '-o', '$(FNOEXT)', '$(FNAME)' } },
     },
 
     run_command = {
       go = { exec = './$(FNOEXT)' },
       python = { exec = 'python3', args = { '$(FNAME)' } },
+      java = { exec = 'java', args = { '$(FNOEXT)' } },
+      kotlin = { exec = 'java', args = { '-jar', '$(FNOEXT).jar' } },
     },
 
     template_file = '~/myp/problem-solving/template.$(FEXT)',

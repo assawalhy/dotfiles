@@ -2,7 +2,18 @@ return {
   {
     'williamboman/mason-lspconfig.nvim',
     opts = {
-      ensure_installed = { 'bashls', 'clangd', 'pyright', 'ts_ls', 'eslint', 'intelephense', 'html', 'lua_ls' },
+      ensure_installed = {
+        'bashls',
+        'clangd',
+        'pyright',
+        'ts_ls',
+        'eslint',
+        'intelephense',
+        'html',
+        'lua_ls',
+        'jdtls',
+        'kotlin_language_server',
+      },
       automatic_enable = false,
     },
     dependencies = {
@@ -18,6 +29,9 @@ return {
       for _, server in ipairs { 'bashls', 'clangd', 'pyright', 'ts_ls', 'eslint', 'biome', 'intelephense', 'html', 'lua_ls' } do
         gate.gate(server)
       end
+      -- jdtls + kotlin_language_server: JVM servers with their own memory
+      -- guard, heap cap and direct-`java` launch (config/java.lua).
+      require('config.java').setup()
     end,
   },
   { 'folke/lazydev.nvim', ft = 'lua', opts = { library = { { path = '${3rd}/luv/library', words = { 'vim%.uv' } } } } },

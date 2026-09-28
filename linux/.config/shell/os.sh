@@ -31,7 +31,23 @@ memusage() {
 }
 
 # $1 = major version (optional) -> prints JAVA_HOME
+# The JDK on Linux is mise-managed (common/.config/mise/config.toml), so this
+# is what rjava/wjava resolve through; mise is activated from ~/.bash_profile.
+# The /usr/lib/jvm fallback only exists on Debian-family distros.
 _jdk_home() {
+  local home=''
+  if command -v mise >/dev/null 2>&1; then
+    if [ -n "$1" ]; then
+      home="$(mise where "java@$1" 2>/dev/null | head -n 1)"
+    else
+      home="$(mise where java 2>/dev/null | head -n 1)"
+    fi
+    if [ -n "$home" ]; then
+      printf '%s\n' "$home"
+      return 0
+    fi
+  fi
+
   if [ -n "$1" ]; then
     printf '/usr/lib/jvm/java-%s-openjdk\n' "$1"
   else

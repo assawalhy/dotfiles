@@ -30,6 +30,7 @@ zsh check:zsh p1
 tmux check:tmux p1
 neovim check:nvim p2
 tree-sitter-cli pacman:tree-sitter check:tree-sitter p2  # nvim-treesitter needs it to compile parsers
+unzip                 check:unzip    p2  # mason unpacks .zip packages (kotlin-language-server)
 ranger check:ranger p2
 fzf check:fzf p1
 bat                 apt:batcat check:bat p1
@@ -102,6 +103,7 @@ pi                 go:github.com/sky-valley/pi/cmd/pi  check:pi  p2
 codex              npm:@openai/codex  check:codex  p2
 kilo               npm:@kilocode/cli  check:kilo  p2
 biome              npm:@biomejs/biome  check:biome  p2  # fmt+lint LSP via `biome lsp-proxy`
+nodemon            npm:nodemon  check:nodemon  p2  # backs the w*/watch helpers in .bash_profile
 
 [pip]
 uv                  check:uv                 p2  # PyPI latest; apt has no uv
