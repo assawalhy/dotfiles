@@ -3,7 +3,7 @@ return {
     'nvim-neo-tree/neo-tree.nvim',
     dependencies = {
       'nvim-lua/plenary.nvim',
-      'nvim-tree/nvim-web-devicons', -- not strictly required, but recommended
+      'nvim-tree/nvim-web-devicons', -- optional; it provides the file icons
       'MunifTanjim/nui.nvim',
     },
     keys = {
@@ -11,7 +11,7 @@ return {
     },
     opts = {
       reveal = true,
-      -- Don't clutter the expanded tree with size/type columns.
+      -- Size and type columns are disabled to keep the expanded tree compact.
       default_component_configs = {
         file_size = { enabled = false },
         type = { enabled = false },
@@ -64,10 +64,10 @@ return {
       filesystem = {
         follow_current_file = { enabled = true },
         filtered_items = {
-          hide_dotfiles = false,   -- show .config & all dotfiles by default
-          hide_gitignored = false, -- show gitignored, auto-dimmed by NeoTreeGitIgnored
-          hide_ignored = false,    -- show .ignore/.neotreeignore files, dimmed
-          hide_by_name = {         -- hidden by default, appears when H toggled
+          hide_dotfiles = false,   -- show .config and all other dotfiles by default
+          hide_gitignored = false, -- show gitignored files; NeoTreeGitIgnored dims them
+          hide_ignored = false,    -- show files matched by .ignore/.neotreeignore; they are dimmed
+          hide_by_name = {         -- hidden by default; the H key in the tree shows them
             '.git',
             '.DS_Store',
             'thumbs.db',

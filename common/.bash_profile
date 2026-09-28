@@ -7,7 +7,6 @@
 # $_LS_COLOR_FLAG and puts homebrew on PATH.
 [ -f "$HOME/.config/shell/os.sh" ] && . "$HOME/.config/shell/os.sh"
 
-# set PATH so it includes user's private bin if it exists
 [ -d "$HOME/bin" ] && export PATH="$HOME/bin:$PATH"
 [ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"
 
@@ -22,7 +21,6 @@ alias lzd=lazydocker
 alias sail='sh $([ -f sail ] && echo sail || echo vendor/bin/sail)'
 alias prgs='printf "$(git status)"'
 alias oc=opencode
-# git branch prune
 alias gbp="git branch | grep -v '^\*' | xargs git branch -D"
 alias kiro-cli="kiro-cli --v3"
 alias kc='kiro-cli'
@@ -54,7 +52,6 @@ else                                         _FD=''
 fi
 if [ -n "$_FD" ]; then
   export FZF_DEFAULT_COMMAND="$_FD --strip-cwd-prefix"
-  # To apply the command to CTRL-T as well
   export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 fi
 unset _FD
@@ -92,17 +89,6 @@ function z() {
   zellij --layout ~/.config/zellij/layouts/layout1.yaml
 }
 
-# lg()
-# {
-#   export LAZYGIT_NEW_DIR_FILE=~/.lazygit/newdir
-#   lazygit "$@"
-#   if [ -f $LAZYGIT_NEW_DIR_FILE ]; then
-#     cd "$(cat $LAZYGIT_NEW_DIR_FILE)"
-#     rm -f $LAZYGIT_NEW_DIR_FILE > /dev/null
-#   fi
-# }
-
-# list all + exclude
 function lae() {
   if [ "$#" -lt 2 ]; then
     echo invalid number of arguments >&2
@@ -113,7 +99,6 @@ function lae() {
   while [ "$#" -gt 0 ]; do
     patterns+="\\|\\($1\\)"; shift
   done
-  # list the first arg, and exclude the reset
   /bin/ls -A "$dir" | sed "/^$patterns$/ d" | awk "{ print \"$dir/\"\$0 }"
 }
 
@@ -186,7 +171,6 @@ function rg++() {
 }
 
 function wg++() {
-  # watch and compile, then execute the code
   local bin
   local file="$1"
   bin="$(ensure-file "$file" cc cpp)"
@@ -251,12 +235,10 @@ function wpy() {
 # Platform-specific entries (/snap/bin, homebrew, ...) live in
 # ~/.config/shell/os.sh. Only cross-platform, $HOME-relative ones belong here.
 
-# bun
 [ -s "$HOME/.bun/_bun" ] && . "$HOME/.bun/_bun"
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
-# written by the rust/uv installers; absent on a fresh machine
 [ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
 
 export PATH="$HOME/.local/bin:$PATH"

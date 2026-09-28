@@ -132,8 +132,10 @@ install_one() {
   case "$c" in
     plugin)
       url="$ins"
-      # split: bash expands every word before `local` assigns, so chaining
-      # repodir="$plugdir/repo" trips `set -u` (unbound plugdir).
+      # split into two `local` lines: bash expands every word of the `local`
+      # command before it assigns any of them, so the chained assignment
+      # repodir="$plugdir/repo" runs while plugdir is still unbound and trips
+      # `set -u`.
       local plugdir="$HOME/.local/share/awesome-agent"
       local repodir="$plugdir/repo"
       if [ -d "$repodir/.git" ]; then
@@ -183,9 +185,8 @@ run_all() {
   while [ "$k" -lt "$N" ]; do
     if [ -z "$(installed_path "$k")" ]; then
       printf '\n# %s — %s\n' "${id_[$k]}" "${desc_[$k]}"
-      # subshell re-enables errexit so install_one stops at its own first
-      # bad step; run under the caller's `set +e` so one failed item skips
-      # only itself instead of aborting the rest of the catalog.
+      # subshell re-enables errexit so install_one exits at its first failed
+      # command; without it install_one keeps running after a failure
       ( set -e; install_one "$k" )
       if [ $? -ne 0 ]; then
         printf '! failed: %s\n' "${id_[$k]}" >&2
@@ -231,7 +232,7 @@ case "$mode" in
   list) print_catalog ;;
   dry)  dry_run_all ;;
   all)
-    set +e          # let a failed item skip itself, not the whole catalog
+    set +e          # a failed item must not stop the rest of the catalog
     run_all; rc=$?
     context_hint
     set -e

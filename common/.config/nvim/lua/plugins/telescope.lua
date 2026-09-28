@@ -48,7 +48,6 @@ return {
       vim.keymap.set('n', '<leader>sg', require('telescope.builtin').live_grep, { desc = '[S]earch by [G]rep' })
       vim.keymap.set('n', '<leader>sd', require('telescope.builtin').diagnostics, { desc = '[S]earch [D]iagnostics' })
       vim.keymap.set('n', '<leader>/', function()
-        -- You can pass additional configuration to telescope to change theme, layout, etc.
         require('telescope.builtin').current_buffer_fuzzy_find(require('telescope.themes').get_dropdown {
           previewer = false,
         })

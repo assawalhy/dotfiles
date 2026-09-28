@@ -2,7 +2,6 @@
 
 PS1='[\u@\h \W]\$ '
 
-# If not running interactively, don't do anything
 [[ $- != *i* ]] && return
 
 export GPG_TTY=$(tty)
@@ -16,6 +15,5 @@ export GPG_TTY=$(tty)
 
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 
-# Go
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"

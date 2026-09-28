@@ -4,8 +4,8 @@
 # prio: p3
 set -euo pipefail
 
-# The one that actually matters: without it, holding j/k in nvim opens the
-# accent picker instead of repeating the key.
+# ApplePressAndHoldEnabled is the setting that matters here: without it,
+# holding j/k in nvim opens the accent picker instead of repeating the key.
 defaults write NSGlobalDomain ApplePressAndHoldEnabled -bool false
 defaults write NSGlobalDomain KeyRepeat -int 2
 defaults write NSGlobalDomain InitialKeyRepeat -int 15

@@ -42,8 +42,8 @@ return {
   },
   init = function()
     vim.o.fillchars = [[eob: ,fold: ,foldopen:,foldsep: ,foldclose:]]
-    vim.o.foldcolumn = '1' -- '0' is not bad
-    vim.o.foldlevel = 99 -- Using ufo provider need a large value, feel free to decrease the value
+    vim.o.foldcolumn = '1'
+    vim.o.foldlevel = 99 -- The ufo provider requires a large foldlevel value
     vim.o.foldlevelstart = 99
     vim.o.foldenable = true
   end,
@@ -66,7 +66,7 @@ return {
           local hlGroup = chunk[2]
           table.insert(newVirtText, { chunkText, hlGroup })
           chunkWidth = vim.fn.strdisplaywidth(chunkText)
-          -- str width returned from truncate() may less than 2nd argument, need padding
+          -- truncate() can return fewer columns than requested, so pad the difference
           if curWidth + chunkWidth < targetWidth then
             suffix = suffix .. (' '):rep(targetWidth - curWidth - chunkWidth)
           end

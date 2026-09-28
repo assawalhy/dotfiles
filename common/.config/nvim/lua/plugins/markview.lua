@@ -1,4 +1,4 @@
--- Markdown previewer. Needs the markdown + markdown_inline parsers, which
+-- Markdown previewer. Requires the markdown and markdown_inline parsers, which
 -- treesitter.lua compiles on demand when the first .md buffer opens.
 return {
   {

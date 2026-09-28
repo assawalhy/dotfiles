@@ -1,7 +1,3 @@
-# Edit this configuration file to define what should be installed on
-# your system. Help is available in the configuration.nix(5) man page, on
-# https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
-
 { config, lib, pkgs, ... }:
 
 let
@@ -43,11 +39,10 @@ let
 in
 {
   imports =
-    [ # Include the results of the hardware scan.
+    [
       ./hardware-configuration.nix
     ];
 
-  # Use the systemd-boot EFI boot loader.
   boot.loader.systemd-boot = {
     enable = true;
     configurationLimit = 2; # ESP is a Windows-created 100M partition; each
@@ -60,53 +55,32 @@ in
   # Compress the initrd to save space on the tiny EFI partition
   boot.initrd.compressor = "zstd";
 
-  networking.hostName = "nixos"; # Define your hostname.
+  networking.hostName = "nixos";
 
-  # Configure network connections interactively with nmcli or nmtui.
   networking.networkmanager.enable = true;
 
-  # Set your time zone.
   time.timeZone = "Africa/Cairo";
 
-  # Configure network proxy if necessary
-  # networking.proxy.default = "http://user:password@proxy:port/";
-  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
-
-  # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
   # Arabic locales (glibc) — ar is available for apps/locales alongside en_US.
   i18n.extraLocales = [ "ar_EG.UTF-8/UTF-8" ];
-  # console = {
-  #   font = "Lat2-Terminus16";
-  #   keyMap = "us";
-  #   useXkbConfig = true; # use xkb options in tty.
-  # };
 
-  # Enable the X11 windowing system.
   services.xserver.enable = true;
 
   services.displayManager.gdm.enable = true;
   services.desktopManager.gnome.enable = true;
 
-  # Configure keymap in X11 / the display manager.
-  # NOTE: GNOME (Wayland) sessions take their xkb options from gsettings, not
-  # from this option — see programs.dconf below and the gsettings call made in
-  # the session, otherwise caps:escape appears to "not work".
+  # GNOME (Wayland) sessions take their xkb options from gsettings, not from
+  # this option — see programs.dconf below; without that block caps:escape
+  # has no effect under GNOME.
   services.xserver.xkb.layout = "us";
   services.xserver.xkb.options = "caps:escape";
 
-  # Enable CUPS to print documents.
-  # services.printing.enable = true;
-
-  # Enable sound.
-  # services.pulseaudio.enable = true;
-  # OR
   services.pipewire = {
     enable = true;
     pulse.enable = true;
   };
 
-  # Enable touchpad support (enabled in most desktopManager).
   services.libinput.enable = true;
 
   nixpkgs.config.allowUnfree = true;
@@ -116,7 +90,7 @@ in
   # also rejects ranger's fallback temp-file medium (`t=t`). Treat the EINVAL
   # reply like `EBADF` so ranger uses direct (`t=d`) transmission, which Ghostty
   # accepts (verified in a real Ghostty surface). Drop this overlay once
-  # ranger#3203 is fixed upstream; `--replace-fail` fails the build loudly if a
+  # ranger#3203 is fixed upstream; `--replace-fail` fails the build if a
   # ranger bump moves the line.
   nixpkgs.overlays = [
     (final: prev: {
@@ -137,11 +111,10 @@ in
   # Docker engine + CLI (packages.list [dev] "docker").
   virtualisation.docker.enable = true;
 
-  # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.assawalhy = {
     isNormalUser = true;
     shell = pkgs.zsh; # default login shell (registered via programs.zsh.enable)
-    extraGroups = [ "wheel" "docker" ]; # Enable ‘sudo’ and docker.
+    extraGroups = [ "wheel" "docker" ];
     packages = with pkgs; [
       tree
       proton-vpn
@@ -156,10 +129,6 @@ in
     "flakes"
   ];
 
-  # programs.firefox.enable = true;
-
-  # List packages installed in system profile.
-  # You can use https://search.nixos.org/ to find more packages (and options).
   # Mapped from setup/packages.list (setup-os); entries with no nixpkgs package
   # (pi, kilo, rmem, autopep8, mdtoc) are installed afterwards via their
   # section tool: go install / npm install -g / cargo install / pipx install.
@@ -172,9 +141,9 @@ in
 
   # Removable NTFS drives: prefer the ntfs-3g FUSE driver over the in-kernel
   # ntfs3. ntfs3 refuses unclean volumes ("volume is dirty and force flag is not
-  # set") and its unmount (ntfs3_kill_sb) can wedge the kernel in D-state, which
-  # freezes udisksd and blocks open/unmount/eject until reboot. ntfs-3g recovers
-  # the NTFS journal transparently and is a killable userspace process.
+  # set") and its unmount (ntfs3_kill_sb) can hang in D-state, which freezes
+  # udisksd and blocks open, unmount, and eject until reboot. ntfs-3g recovers
+  # the NTFS journal and is a userspace process that can be killed.
   # Key is udisks2's supported knob (see its mount_options.conf.example).
   services.udisks2.settings."mount_options.conf".defaults.ntfs_drivers = "ntfs";
 
@@ -192,8 +161,8 @@ in
     fzf
     bat
     tealdeer # tldr pages client; binary is `tldr`
-    btop # resource monitor (TUI)
-    htop # process viewer
+    btop
+    htop
     # pipx: this channel's drv isn't cached on cache.nixos.org, so it builds
     # from source, where pipx 1.8.0's own pytest suite fails against 26.05's
     # `packaging` (name@url normalization expects no spaces around @). The
@@ -219,6 +188,7 @@ in
     pandoc
     gitui
     unstable.lazygit # >= 0.64 for git.diffRenderers; see the `unstable` let-binding
+    lazydocker
     texliveBasic # provides kpsewhich
 
     ## [gui]
@@ -230,7 +200,7 @@ in
     # Deferred (2026-09-24): its source build full-clones the MEGAsync repo and
     # GitHub cancels the long HTTP/2 stream mid-pack ("curl 92 HTTP/2 stream 7
     # reset by server"), blocking the entire switch. Everything else it needs is
-    # built. Re-add once the fetch survives — e.g. force git http.version =
+    # built. Re-add once the fetch completes — e.g. force git http.version =
     # HTTP/1.1 for sandboxed builders (nix.settings.extra-sandbox-paths + a
     # /homeless-shelter/.gitconfig) — then rebuild.
     # megasync
@@ -258,7 +228,7 @@ in
     # read-only store path, which makes UI extension installs fail with ENOENT.
     # This way extensions install into ~/.vscode/extensions.
     vscode.fhs
-    stdenv.cc # compiler wrapper: cargo wants `cc`, cgo wants `gcc` (rmem, pi)
+    stdenv.cc # compiler wrapper: cargo invokes `cc`, cgo invokes `gcc` (rmem, pi)
 
     ## [fonts]
     noto-fonts
@@ -303,50 +273,27 @@ in
     onlyoffice-desktopeditors
   ];
 
-  # Some programs need SUID wrappers, can be configured further or are
-  # started in user sessions.
-  # programs.mtr.enable = true;
-  # programs.gnupg.agent = {
-  #   enable = true;
-  #   enableSSHSupport = true;
-  # };
-
-  # List services that you want to enable:
-
-  # Enable the OpenSSH daemon.
   services.openssh.enable = true;
 
-  # for protonvpn to work
+  # protonvpn does not work while reverse-path filtering is enabled.
   networking.firewall.checkReversePath = false;
 
-  # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ ... ];
-  # networking.firewall.allowedUDPPorts = [ ... ];
-  # Or disable the firewall altogether.
-  # networking.firewall.enable = false;
-
   # System-wide dconf defaults for the GNOME "user" profile. The user database
-  # wins over these defaults, so this is the fallback that makes
-  # services.xserver.xkb.options actually effective under GNOME Wayland (the
-  # session reads org.gnome.desktop.input-sources, not the X server config).
+  # takes precedence over these defaults, so this is the fallback that makes
+  # services.xserver.xkb.options effective under GNOME Wayland (the session
+  # reads org.gnome.desktop.input-sources, not the X server config).
   programs.dconf.profiles.user.databases = [
     {
       settings = {
         "org/gnome/desktop/input-sources" = {
           xkb-options = [ "caps:escape" ];
         };
-        # Desktop Icons NG (DING) — GNOME 50 shows no desktop icons on its own.
         "org/gnome/shell" = {
           enabled-extensions = [ "ding@rastersoft.com" ];
         };
       };
     }
   ];
-
-  # NOTE: programs.vscode is intentionally NOT used — it wraps VS Code with
-  # vscode-with-extensions and forces a read-only --extensions-dir, so
-  # installing extensions from the UI fails. vscode.fhs is in
-  # environment.systemPackages instead (see [dev]).
 
   # Fonts. fontconfig's built-in defaults are DejaVu, which has no (or poor)
   # Arabic coverage — so Arabic serif/monospace text fell back to a random face.
@@ -358,7 +305,7 @@ in
       monospace = [ "Noto Sans Mono" "Kawkab Mono" ];
       emoji = [ "Noto Color Emoji" ];
     };
-    # `strong` beats the module's `same`-bound defaults, so Arabic requests win.
+    # `strong` outranks the module's `same`-bound defaults, so Arabic requests take precedence.
     localConf = ''
       <?xml version='1.0'?>
       <!DOCTYPE fontconfig SYSTEM 'urn:fontconfig:fonts.dtd'>
@@ -408,29 +355,7 @@ in
     '';
   };
 
-  # Copy the NixOS configuration file and link it from the resulting system
-  # (/run/current-system/configuration.nix). This is useful in case you
-  # accidentally delete configuration.nix.
-  # system.copySystemConfiguration = true;
-
-  # This option defines the first version of NixOS you have installed on this particular machine,
-  # and is used to maintain compatibility with application data (e.g. databases) created on older NixOS versions.
-  #
-  # Most users should NEVER change this value after the initial install, for any reason,
-  # even if you've upgraded your system to a new NixOS release.
-  #
-  # This value does NOT affect the Nixpkgs version your packages and OS are pulled from,
-  # so changing it will NOT upgrade your system - see https://nixos.org/manual/nixos/stable/#sec-upgrading for how
-  # to actually do that.
-  #
-  # This being lower than the current NixOS release does NOT mean your system is
-  # out of date, out of support, or vulnerable.
-  #
-  # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
-  # and migrated your data accordingly.
-  #
-  # For more information, see `man configuration.nix` or https://nixos.org/manual/nixos/stable/options#opt-system.stateVersion .
-  system.stateVersion = "26.05"; # Did you read the comment?
+  system.stateVersion = "26.05";
 
   programs.git = {
     enable = true;
@@ -441,8 +366,8 @@ in
 
   # Foreign (non-Nix) binaries — see .agents/plans/05-foreign-binaries.
   # nix-ld supplies the /lib64/ld-linux interpreter; `libraries` supplies the
-  # runtime dlopen() targets those binaries expect (invisible to `ldd`).
-  # NOTE: do NOT add `wayland` here — OpenTUI (opencode) would then select its
+  # runtime dlopen() targets those binaries expect (`ldd` does not list them).
+  # Do not add `wayland` here — OpenTUI (opencode) would then select its
   # Wayland clipboard backend, which GNOME/Mutter cannot serve, and paste would
   # break again (epic 04 D5). Omitting it keeps OpenTUI on working X11/XWayland.
   programs.nix-ld = {
@@ -454,6 +379,18 @@ in
       alsa-lib # libasound.so.2
       libpulseaudio # libpulse.so.0
     ];
+  };
+
+  # First-login unit that provisions uv's default Python links (python,
+  # python3 in ~/.local/bin); NixOS equivalent of setup/steps/91-uv-python.sh.
+  systemd.user.services.uv-python = {
+    description = "uv default Python (python, python3 links)";
+    wantedBy = [ "default.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ConditionPathExists = "!%h/.local/bin/python";
+      ExecStart = "${pkgs.uv}/bin/uv python install 3 --default";
+    };
   };
 
   # Resolve hardcoded shebang/interpreter paths (/bin/bash, /usr/bin/python3, …)

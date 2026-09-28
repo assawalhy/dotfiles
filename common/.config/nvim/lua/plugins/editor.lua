@@ -2,7 +2,7 @@ return {
   -- Detect tabstop and shiftwidth automatically
   'tpope/vim-sleuth',
 
-  -- Useful plugin to show you pending keybinds.
+  -- Shows the keybindings available after a prefix key
   { 'folke/which-key.nvim', opts = {} },
 
   {
@@ -55,9 +55,9 @@ return {
       require('Comment').setup {
         pre_hook = require('ts_context_commentstring.integrations.comment_nvim').create_pre_hook(),
         mappings = {
-          ---Operator-pending mapping; `gcc` `gbc` `gc[count]{motion}` `gb[count]{motion}`
+          --- Operator-pending mappings: gcc, gbc, gc[count]{motion}, gb[count]{motion}
           basic = true,
-          ---Extra mapping; `gco`, `gcO`, `gcA`
+          --- Extra mappings: gco, gcO, gcA
           extra = true,
         },
       }
@@ -109,8 +109,8 @@ return {
   {
     'fedepujol/move.nvim',
     cmd = { 'MoveLine', 'MoveBlock', 'MoveHChar', 'MoveHBlock' },
-    -- :Move* commands are registered by setup(), not at require time;
-    -- horizontal moves are opt-in upstream
+    -- The :Move* commands are registered by setup(), not at require time.
+    -- Horizontal moves are opt-in upstream.
     config = function()
       require('move').setup {
         char = { enable = true },
@@ -150,8 +150,8 @@ return {
     opts = {
       global_keymaps = true,
       ui = {
-        -- bodies above this size are not rendered; kulala shows a note
-        -- with the path to the saved response file instead
+        -- Bodies above this size are not rendered. Kulala shows a note with
+        -- the path to the saved response file instead.
         max_response_size = 1024 * 1024,
       },
     },

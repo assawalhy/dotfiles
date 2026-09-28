@@ -2,7 +2,6 @@ return {
   'mfussenegger/nvim-dap',
   event = 'VeryLazy',
   dependencies = {
-    -- Creates a beautiful debugger UI
     'nvim-telescope/telescope-dap.nvim',
     {
       'rcarriga/nvim-dap-ui',
@@ -15,11 +14,10 @@ return {
       opts = {},
     },
 
-    -- Installs the debug adapters for you
+    -- mason.nvim and mason-nvim-dap install the debug adapters
     'williamboman/mason.nvim',
     'jay-babu/mason-nvim-dap.nvim',
 
-    -- Add your own debuggers here
   },
   config = function()
     local dap = require 'dap'
@@ -35,7 +33,7 @@ return {
       automatic_setup = true,
 
       handlers = {
-        -- NOTE: you should make sure that gdb is installed
+        -- NOTE: the cppdbg adapter requires gdb to be installed
         cppdbg = function(config)
           config.configurations = {
             {
@@ -82,7 +80,7 @@ return {
             },
           }
 
-          require('mason-nvim-dap').default_setup(config) -- don't forget this!
+          require('mason-nvim-dap').default_setup(config) -- applies the adapter defaults after config.configurations was replaced above
         end,
       },
     }
@@ -94,15 +92,13 @@ return {
       vim.keymap.set({ 'n', 'v' }, keys, func, { desc = desc })
     end
 
-    -- Basic debugging keymaps, feel free to change to your liking!
     nvmap('<F5>', dap.continue, 'Start/Continue')
     nvmap('<F6>', dap.close, 'Close session')
-    -- Toggle to see last session result. Without this,
-    -- you can't see session output in case of unhandled exception.
+    -- The UI must be open to read the session output after an unhandled exception
     nvmap('<F7>', dapui.toggle, 'See last session result.')
     nvmap('<F10>', dap.step_over, 'Step over')
     nvmap('<F11>', dap.step_into, 'Step into')
-    nvmap('<F23>', dap.step_out, 'Step out') -- shift + f11
+    nvmap('<F23>', dap.step_out, 'Step out') -- Shift+F11 arrives as <F23>
 
     nvmap('<leader>db', dap.toggle_breakpoint, 'toggle Breakpoint')
     nvmap('<leader>dB', function()
@@ -124,6 +120,5 @@ return {
     dap.listeners.before.event_terminated['dapui_config'] = dapui.close
     dap.listeners.before.event_exited['dapui_config'] = dapui.close
 
-    -- Install golang specific config
   end,
 }

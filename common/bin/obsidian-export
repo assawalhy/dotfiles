@@ -39,7 +39,6 @@ join-arr-by() {
 
 
 get-file-containing-tags() {
-  # use `files` from argv or all the vault files
   if (( ${#files[@]} )); then
     vault_md_files=("${files[@]}")
   else
@@ -47,7 +46,7 @@ get-file-containing-tags() {
   fi
 
   files=()
-  # prepend "#" to all tags and join them by "\|"
+  # prefix each tag with "#" and join the tags with "\|"
   grep_pattern="$(join-arr-by '\|' "${tags[@]/#/#}")"
 
   for file in "${vault_md_files[@]}"; do
@@ -70,7 +69,7 @@ confirm() {
 }
 
 collect-args() {
-  vault="." # default to current directory
+  vault="."
 
   while (($#)); do
     arg="$1"; shift
@@ -91,7 +90,7 @@ collect-args() {
       >&2 echo "sorry this file doesn't exists: $arg"
       exit 1
     fi
-    files+=("$arg") # fallback, append to the files
+    files+=("$arg")
   done
 
   if [ "$is_help" ]; then
@@ -109,7 +108,7 @@ collect-args() {
     sed -e '/attachmentFolderPath/ !d' "$vault"/.obsidian/app.json |
       grep -oP '\s*"attachmentFolderPath": \K"(.*?)"'
   )"
-  # remove quotations ""
+  # strip the quotes around the value
   attachments="$vault/${attachments:1:-1}"
 
   # convert comma delimited values into array
@@ -136,7 +135,7 @@ prepare-file() {
   # replace `![[image-name.png]]` to `![](./assets/image-name.png)`
   output="$(echo "$output" | sed -r "s:^\!\[\[([^\|]*)(\|(.*))?\]\]:![\3](./assets/\1):")"
 
-  # increase the level due to adding the file name as a `# header`
+  # add one "#" to each heading because the file name header is level 1
   [ "$is_file_name_as_header" ] &&
     output="$(echo "$output" | sed -r 's/^#+ .*/#\0/')"
   echo "$output"

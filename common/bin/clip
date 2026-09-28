@@ -7,19 +7,13 @@
 #   clip -p        copy stdin to the PRIMARY selection (X11; CLIPBOARD elsewhere)
 #   clip -op       print the PRIMARY selection
 #
-# Used by .tmux.conf, nvim and the shell aliases so none of them needs to know
-# which platform they are on.
+# Used by .tmux.conf, nvim and the shell aliases, so none of them contains a
+# platform check.
 #
 # Backends are tried in order (pbcopy -> wl-copy -> xclip -> xsel) and a
 # runtime failure falls through to the next one: `command -v` only proves a
-# binary exists, not that its server is reachable (e.g. a stale tmux/shell
-# carrying WAYLAND_DISPLAY whose socket no longer exists).
-#
-# Exception: under WSL with an X server (both WSL_DISTRO_NAME and DISPLAY set)
-# the X11 backends go first. VcXsrv runs on Windows and calls the Win32
-# clipboard API directly, so its copies are recorded in Win+V history, while
-# updates arriving over the WSLg/RDP route paste fine but are skipped for
-# history.
+# binary exists, not that its server is reachable (for example a long-running
+# tmux or shell that still has WAYLAND_DISPLAY set while the socket is gone).
 
 out=0
 sel=clipboard
@@ -39,7 +33,7 @@ done
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# Wayland is a candidate only when the compositor socket actually exists.
+# Wayland is used only when the compositor socket exists.
 xdg="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 case "${WAYLAND_DISPLAY-}" in
   /*) wsock="$WAYLAND_DISPLAY" ;;
@@ -48,15 +42,15 @@ case "${WAYLAND_DISPLAY-}" in
 esac
 wl_ok() { [ -n "$wsock" ] && [ -S "$wsock" ] && have wl-copy && have wl-paste; }
 
-# VcXsrv route preferred under WSL: its Windows-side owner feeds Win+V
-# history; WSLg/RDP pastes fine but history skips it.
+# Under WSL with an X server (WSL_DISTRO_NAME and DISPLAY both set) prefer the
+# X11 backends: VcXsrv runs on Windows and calls the Win32 clipboard API
+# directly, so its copies are recorded in Win+V history, while copies arriving
+# over the WSLg/RDP route paste fine but are skipped for history.
 prefer_x11=0
 if [ -n "${WSL_DISTRO_NAME-}" ] && [ -n "${DISPLAY-}" ]; then
   prefer_x11=1
 fi
 
-# Each attempt keeps the original runtime-fallthrough shape: a missing binary
-# or an unreachable server just fails, and the next backend in line is tried.
 try_wl_paste() {
   if wl_ok; then
     if [ "$sel" = primary ]; then wl-paste --primary --no-newline && return 0
@@ -73,7 +67,7 @@ try_x11_paste() {
 }
 
 if [ "$out" = 1 ]; then
-  # paste: first backend that exits 0 prints and wins
+  # paste: the first backend that exits 0 supplies the output
   if have pbpaste && pbpaste; then
     exit 0
   fi
@@ -89,7 +83,7 @@ else
   cat >"$tmp" || { rm -f "$tmp"; exit 1; }
   ok=1
   if have pbcopy && pbcopy <"$tmp"; then
-    ok=0  # macOS: no PRIMARY selection, so -p degrades to the normal clipboard
+    ok=0  # macOS has no PRIMARY selection, so -p falls back to the normal clipboard
   fi
   try_wl_copy() {
     if [ "$ok" -ne 0 ] && wl_ok; then

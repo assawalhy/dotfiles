@@ -9,16 +9,11 @@ function send-command() {
 
 if ! tmux has-session -t "$SESSIONNAME" &> /dev/null
 then
-  # new session, default window for frontend
   tmux new-session -s "$SESSIONNAME" -n backend -c "$BACK_PATH" -d
   tmux split-window -v -p 50 "$@"
   send-command "docker compose up"
 
-  # lazygit window
-  # tmux new-window -n lazygit -t "$SESSIONNAME" -c "$BACK_PATH"
-  # send-command "lazygit"
 
-  # go back to the frontend window
   tmux select-window -t "$SESSIONNAME":backend
   tmux select-pane -t "$SESSIONNAME":backend.1
   send-command "make run"

@@ -5,9 +5,9 @@
 # prio: p2
 set -euo pipefail
 
-# NixOS: the toolchain is declarative (configuration.nix ships go, see
-# setup/packages.list); /usr/local is not writable even with sudo, so this
-# step is a no-op there. The [go] group still runs `go install` for
+# NixOS: the toolchain is declarative -- configuration.nix ships go (see
+# setup/packages.list), and /usr/local is not writable even with sudo. This
+# step does nothing on NixOS; the [go] group still runs `go install` for
 # user-scope modules once go exists.
 if [ -e /etc/NIXOS ]; then
   echo 'NixOS: go comes from configuration.nix -- nothing to do here' >&2
@@ -16,7 +16,6 @@ fi
 
 GO_VERSION="${GO_VERSION:-1.24.1}"
 
-# Install go if missing
 if ! command -v go >/dev/null 2>&1; then
   ARCH="$(uname -m)"
   case "$ARCH" in
@@ -38,21 +37,19 @@ if ! command -v go >/dev/null 2>&1; then
   echo "→ installing to /usr/local/go"
   sudo tar -C /usr/local -xzf "${tmpdir}/${TARBALL}"
 
-  # Ensure /usr/local/go/bin is in PATH for the rest of this session
   export PATH="/usr/local/go/bin:$PATH"
 fi
 
-# Persist PATH for future shells (idempotent). Always run, even when go was
-# already present, so a toolchain installed outside this script still gets its
-# bin dirs on PATH. ~/.bash_profile is the shared config here: ~/.zshrc sources
-# it, so one write covers bash and zsh.
+# Persist PATH for future shells (idempotent). This block always runs, even
+# when go was already present, so a toolchain installed outside this script
+# still gets its bin dirs on PATH. ~/.bash_profile is the shared config here:
+# ~/.zshrc sources it, so one write covers bash and zsh.
 PROFILE="$HOME/.bash_profile"
 [ -f "$PROFILE" ] || : > "$PROFILE"
 
 PROFILE_LINE='export PATH="/usr/local/go/bin:$PATH"'
 grep -qF '/usr/local/go/bin' "$PROFILE" || echo "$PROFILE_LINE" >> "$PROFILE"
 
-# Set GOPATH and persist it
 export GOPATH="${GOPATH:-$HOME/go}"
 GO_PATH_LINE="export GOPATH=\"\$HOME/go\""
 grep -qF 'GOPATH' "$PROFILE" || echo "$GO_PATH_LINE" >> "$PROFILE"

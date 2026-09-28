@@ -33,7 +33,6 @@ harness_present() {
   esac
 }
 
-# helper: guard a step behind a harness + optional binary
 run_harness() { # <harness> <binary> <cmd...>
   local h="$1" bin="$2"; shift 2
   harness_present "$h" || return 0
@@ -44,11 +43,10 @@ run_harness() { # <harness> <binary> <cmd...>
   "$@"
 }
 
-# Runner guard: skip a step when the harness binary is missing
 harness_status_print() { [ -n "${1:-}" ] && printf '%s\n' "$1"; }
 
 # jq_add_key <path> <jq-assignment>
-# Adds/overwrites ONE key in a JSON config with jq, preserving every other
+# Adds/overwrites one key in a JSON config with jq, preserving every other
 # key (default_agent, plugin arrays, hooks, ...) verbatim. Never links the
 # file and never writes when jq cannot parse the existing file.
 jq_add_key() {
@@ -137,10 +135,10 @@ context7_status() {
 # ---- plannotator: plan & code review ----
 
 # plannotator ships as a 150+ MB CLI plus a sem sidecar and an agent-terminal
-# runtime; the official installer owns all of it (binary, sidecar, runtime,
-# hooks, skills, commands). Run it non-interactively so setup-os never blocks
-# on its /dev/tty wizard, keep its output (a failed download must not look
-# like success), and verify the binary actually landed.
+# runtime; the official installer installs all of it (binary, sidecar,
+# runtime, hooks, skills, commands). Run it non-interactively because its
+# installer opens a /dev/tty wizard that would block setup-os, keep its output
+# (a failed download must be visible), and verify the binary exists afterwards.
 plannotator_bin_install() {
   local bin="$HOME/.local/bin/plannotator" log
   [ -x "$bin" ] && return 0
@@ -190,7 +188,8 @@ plannotator_install() {
   plannotator_opencode_install
   plannotator_claude_install
   plannotator_pi_install
-  # codex/kiro/gemini integrations are created by the official installer above.
+  # codex, kiro and gemini integrations are installed by the official
+  # installer above.
   return "$rc"
 }
 plannotator_status() {
@@ -257,7 +256,8 @@ graphify_bin_install() {
 graphify_platform_install() {
   local p="$1" sp log
   # Non-project opencode/cursor installs write plugin/rule files relative to
-  # CWD; run from $HOME so they land under the home dir, never in a repo.
+  # CWD; run from $HOME so those files land under the home dir and not inside
+  # a repository checkout.
   log="$(mktemp "${TMPDIR:-/tmp}/graphify.XXXXXX")" || log=/dev/null
   (cd "$HOME" && graphify install --platform "$p") >"$log" 2>&1
   sp="$(graphify_skill_path "$p")" || sp=""

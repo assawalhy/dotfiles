@@ -10,7 +10,6 @@ function send-command() {
 tmux has-session -t $SESSIONNAME &> /dev/null
 
 if [ $? != 0 ]; then
-  # new session, default window for frontend
   tmux new-session -s $SESSIONNAME -n main -c "$PROJECT_DIR" -d
   send-command "source ./env/bin/activate"
   send-command "nvim"

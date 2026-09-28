@@ -12,7 +12,6 @@ set_kbdlayout() {
   setxkbmap "$next_layout"
   [ -f ~/.Xmodmap ] && xmodmap ~/.Xmodmap
   [ -f ~/."$next_layout_first".Xmodmap ] && echo found && xmodmap ~/."$next_layout_first".Xmodmap
-  # pgrep i3status | xargs --no-run-if-empty kill -s USR1 # tell i3status to update
 }
 
 cycle() {
@@ -33,14 +32,6 @@ cycle() {
   fi
 }
 
-# i3status() {
-#   while :
-#   do
-#     read line
-#     block="{\"full_text\":\"$(get_kbdlayout)\"}"
-#     echo "${line/\[\{/\[$block,\{}" || exit 1
-#   done
-# }
 
 subcommand="$1"
 shift || { echo

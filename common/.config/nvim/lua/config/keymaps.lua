@@ -1,7 +1,6 @@
--- copy to clipboard
--- ~/bin/clip comes from the dotfiles repo and picks pbcopy / wl-copy / xclip /
--- xsel at runtime, so this needs no platform branch.
--- NOTE: vim.fn.executable() returns a number, and 0 is truthy in Lua -- it must
+-- ~/bin/clip comes from the dotfiles repo and picks pbcopy, wl-copy, xclip or
+-- xsel at runtime. This needs no platform branch.
+-- NOTE: vim.fn.executable() returns a number and 0 is truthy in Lua. It must
 -- be compared against 1, never used as a bare condition.
 function CopyBuffer()
   if vim.fn.executable 'clip' ~= 1 then
@@ -12,9 +11,8 @@ function CopyBuffer()
   print 'Buffer is copied'
 end
 
--- Route the +/* registers through clip as well: left alone, nvim probes
--- providers itself and can settle on a different backend than clip picks,
--- leaving the two paths out of sync.
+-- Route the +/* registers through clip as well. Without this, nvim selects its
+-- own clipboard backend, which can differ from the backend clip uses.
 if vim.fn.executable 'clip' == 1 then
   vim.g.clipboard = {
     name = 'clip',
@@ -27,11 +25,10 @@ vim.keymap.set('x', ';y', '"+y', { desc = 'Copy selection to sys clipboard' })
 vim.keymap.set('n', ';wc', CopyBuffer, { desc = 'Copy current buffer to sys clipboard' })
 vim.keymap.set('x', 'gsw', "'<,'> ! awk '{ print length(), $0 } | sort -n | cut -d\\  -f2-'<CR><ESC>", { desc = 'Sort selected lines by line width' })
 
--- easily move in wrapped lines
 vim.keymap.set('n', 'j', "v:count ? 'j' : 'gj'", { silent = true, expr = true, desc = 'Move down in wrapped lines' })
 vim.keymap.set('n', 'k', "v:count ? 'k' : 'gk'", { silent = true, expr = true, desc = 'Move up in wrapped lines' })
 
--- navigate tabs done by bufferline plugin
+-- Buffer tabs are handled by the bufferline plugin; <tab>n opens a tab page
 vim.keymap.set('n', '<tab>n', '<CMD>tabnew<CR>', { desc = 'New tab' })
 vim.keymap.set('n', '<tab>l', '<CMD>BufferLineCycleNext<CR>', { desc = 'Next buffer tab' })
 vim.keymap.set('n', '<tab>h', '<CMD>BufferLineCyclePrev<CR>', { desc = 'Previous buffer tab' })
@@ -47,7 +44,6 @@ vim.keymap.set('n', '<C-h>', '<C-w>h', { desc = 'Focus window left' })
 vim.keymap.set('n', '<C-j>', '<C-w>j', { desc = 'Focus window below' })
 vim.keymap.set('n', '<C-k>', '<C-w>k', { desc = 'Focus window above' })
 
--- delete without yanking
 vim.keymap.set('n', ';d', '"_d', { desc = 'Delete without yanking' })
 vim.keymap.set('n', ';c', '"_c', { desc = 'Change without yanking' })
 vim.keymap.set('n', ';D', '"_D', { desc = 'Delete to end of line without yanking' })

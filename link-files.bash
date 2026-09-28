@@ -3,9 +3,9 @@
 # link-files.bash -- symlink this repo's dotfiles into $HOME (macOS + Linux).
 #
 # Sources are  <repo>/common  and  <repo>/<os>  where <os> is linux or macos.
-# On a path collision the OS overlay wins. The repo is the source of truth;
-# --refresh captures new files that appeared inside linked dirs back into the
-# repo and symlinks them in place (see --reverse below).
+# On a path collision the OS overlay file is used. The repo is the source of
+# truth; --refresh captures new files that appeared inside linked dirs back
+# into the repo and symlinks them in place.
 #
 # NOTE: must stay bash 3.2 compatible -- stock macOS /bin/bash is 3.2.57.
 #       No readarray/mapfile, no `declare -A`, no ${v,,}, no globstar.
@@ -25,8 +25,8 @@ esac
 # ------------------------------------------------------------- paths ---
 
 # Resolve the repo from this script's own location, never from $PWD, so the
-# script works from any directory. realpath(1) is avoided (missing on older
-# macOS); this is the portable symlink-walking idiom.
+# script works from any directory. realpath(1) is avoided because older macOS
+# releases do not ship it; the while-loop walks the symlink chain instead.
 self="$0"
 while [ -L "$self" ]; do
   self_dir="$(cd -P "$(dirname "$self")" >/dev/null && pwd)"
@@ -43,11 +43,9 @@ STAMP="$(date +%Y%m%d%H%M%S)"
 
 # ---------------------------------------------------------------- log ---
 #
-# Phase logging + elapsed-time instrumentation. Every slow phase logs a
-# start line and a done line carrying its duration to stderr, so the
-# preview, picker (fzf) and apply output on stdout stay untouched.
-# Timing uses `date +%s%N` (GNU); BSD/macOS date has no %N and falls back
-# to whole seconds, so sub-second phases read 0.000 there.
+# Phase durations go to stderr, so stdout carries only the preview, picker
+# and apply output. Timing uses `date +%s%N` (GNU); BSD/macOS date has no %N
+# and falls back to whole seconds, so sub-second phases read 0.000 there.
 T_START=0
 T_LAST=0
 
@@ -76,7 +74,7 @@ log_done() { # $1 = label; print the phase duration and stamp a new start
   T_LAST="$now"
 }
 
-log_total() { # hooked into collect()'s EXIT trap: whole-run elapsed time
+log_total() { # registered on collect()'s EXIT: prints whole-run elapsed time
   local now
   now="$(now_ns)"
   printf -- '   %s total elapsed\n' "$(fmt_dur $((now - T_START)))" >&2
@@ -187,9 +185,9 @@ parse_args() {
 
 # ------------------------------------------------------------- files ---
 
-# `arr+=(...)` in a `while read` loop only works with process substitution --
-# a pipe would run the loop in a subshell and silently discard the array.
-# `|| [ -n "$line" ]` catches a final line with no trailing newline.
+# `arr+=(...)` in a `while read` loop only works with process substitution:
+# a pipe runs the loop body in a subshell, and the array assignment would be
+# lost. `|| [ -n "$line" ]` catches a final line with no trailing newline.
 #
 # The sed strips whole-line comments only; `s/#.*//' would corrupt any path
 # containing a '#'. [[:space:]] is honoured by both BSD and GNU sed, unlike \s.
@@ -206,8 +204,8 @@ list_root() {
   [ -d "$1" ] || return 0
   # Pure bash/POSIX lister, no node. Ignore set ($IGN_TMP, built once in
   # collect()): exact relpath, or any path under a directory entry. Files of
-  # unknown type (fifo/socket) never reach here -- `find -type f` skips them
-  # silently, where list-files.mjs used to error and exit 1. Deliberate.
+  # unknown type (fifo/socket) never reach here: `find -type f` skips them,
+  # where list-files.mjs used to error and exit 1. Deliberate.
   find "$1" -type f 2>/dev/null \
     | awk -v r="$1" '
         NR == FNR { ign[$0] = 1; next }
@@ -226,27 +224,27 @@ collect() {
   merged="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   desired="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   IGN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
-  # log_total is defined at the top; the EXIT branch also covers the early
-  # exits in picker/confirm so every run reports its total elapsed time.
-  # INT/TERM/HUP just exit: the EXIT trap then runs log_total + cleanup, and
-  # without the explicit `exit 130` a Ctrl+C during the read prompt would be
-  # swallowed and the script would carry on.
+  # The EXIT branch also covers the early exits in picker/confirm, so every
+  # run prints its total elapsed time. INT/TERM/HUP only run the EXIT handler
+  # (log_total + cleanup); without the explicit `exit 130`, a Ctrl+C during
+  # the read prompt does not stop the script.
   trap 'log_total; rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT
   trap 'exit 130' INT TERM HUP
 
   # Ignore set, built once for all list_root calls: strip any leading ./ and
-  # trailing / so entries compare cleanly against the lister's relpaths.
+  # trailing / so entries match the lister's relpaths exactly.
   printf '%s\n' "${ignores[@]}" | sed 's#^\./##; s#/$##' > "$IGN_TMP"
 
   # OS root first, common second; awk keeps the FIRST hit per relpath, which
-  # is exactly the overlay-wins rule. The filter is applied to the relative
-  # path only -- matching the whole line would also match the absolute root.
-  # Doing it in awk also avoids `set -e` tripping on grep's empty-result exit 1.
+  # implements the overlay rule (the OS overlay takes precedence over
+  # common). The filter is applied to the relative path only -- matching the
+  # whole line would also match the absolute root. Doing it in awk also
+  # avoids `set -e` aborting when grep exits 1 on an empty result.
   # --refresh (and --audit) keep the overlay set complete instead of applying
   # the pattern here: the pattern narrows their candidates later, but their
   # linked-dir discovery and in-repo exclusion need every repo relpath.
-  # The session-context neglect filter below runs at collect time, on top of
-  # the pattern filter, for every mode (link/list/diff/refresh/audit).
+  # The session-context neglect filter below runs at collect time for every
+  # mode (link/list/diff/refresh/audit).
   all_flag=0
   [ -n "$is_refresh" ] && all_flag=1
   [ -n "$is_audit" ] && all_flag=1
@@ -259,7 +257,7 @@ collect() {
   # Session-context filter (link-context.txt): rels listed for a context other
   # than the current session are dropped from $merged, on top of the pattern
   # filter above. $desired keeps the neglect-unfiltered rels so find_stale and
-  # refresh_scan still recognize filtered-out-but-linked files as wanted.
+  # refresh_scan still count filtered-out-but-linked files as wanted.
   NEG_RELS="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   awk -v sctx="$(session_context)" '
     { ctx = $0; sub(/: .*/, "", ctx)
@@ -275,9 +273,9 @@ collect() {
 
 # ------------------------------------------------------------ picker ---
 
-# Menu lines are "rel \t [<group>] rel"; the group label drives the fallback
-# menu's section headers. fzf >= 0.48 knows the start event, so there we can
-# preselect everything on open; older fzf starts empty (ctrl-a still works).
+# fzf >= 0.48 supports the start event in --bind, so picker_bind can
+# preselect every entry on open; older fzf starts with an empty selection
+# (ctrl-a still works).
 fzf_ge() {
   local v vma vmi ma mi
   v="$(fzf --version 2>/dev/null | awk '{print $1}')"
@@ -395,8 +393,6 @@ picker() {
     exit 0
   fi
 
-  # tty decides fzf-vs-fallback INSIDE the picker; piped stdin, cron/CI and
-  # fzf-less machines all take the numbered menu.
   if [ -t 0 ] && command -v fzf >/dev/null 2>&1; then
     fzf --multi --delimiter=$'\t' --with-nth=2.. --height=90% --reverse \
         --tiebreak=index --prompt='link> ' \
@@ -480,8 +476,8 @@ classify() {
 #      through to scanning all of $HOME.
 #   2. Top-level entries deleted from any overlay in git history (covers dirs
 #      like linux/.mlterm or linux/.my.bash removed in earlier commits whose
-#      links may still linger in $HOME).  45 ms; pipeline status comes from
-#      sort, so non-git repos never trip set -e.
+#      links may still linger in $HOME).  45 ms; the pipeline's exit status
+#      comes from sort, so a failing git command does not trigger `set -e`.
 #   3. $HOME maxdepth-1 scan catches orphaned top-level dotfiles (deleted
 #      files like .zshrc) -- handled in find_stale itself.
 # Deduped via sort -u.  Must only emit top-level *dir* names; top-level
@@ -498,15 +494,13 @@ scan_roots() {
 
 # Symlinks in $HOME that point into this repo but are no longer wanted
 # (source deleted, or moved between overlays leaving a broken link).
-# Instead of a full recursive scan of $HOME (~28 s on a 60 GB / 1.47 M-file
-# home), only scan the top-level roots the repo ever managed (scan_roots) plus
-# $HOME at maxdepth 1 (for orphaned top-level dotfiles).  Measured <100 ms.
+# Only the top-level roots the repo ever managed (scan_roots) plus $HOME at
+# maxdepth 1 (for orphaned top-level dotfiles) are scanned.  Measured <100 ms.
 # $REPO must not contain glob characters (escape them if that ever changes).
 # Three-way classification for links not in $desired:
 #   target gone ([ ! -e ] follows the link)      -> stale (dangling)
 #   target exists + rel matches link-ignore.txt  -> ignored (reported by
-#                                                   --audit/--fix in later
-#                                                   todos)
+#                                                   --audit/--fix)
 #   target exists + not ignored (other-OS-overlay
 #   leftover, or a manually-made link)           -> stale
 # Only ever touches links whose target is under $REPO, so unrelated symlinks
@@ -563,9 +557,9 @@ find_neglinked() {
 # ---------------------------------------------------------- refresh ---
 
 # --refresh: capture new real files that appeared inside linked dirs into the
-# repo (mirror-root: OS overlay wins, else common) and symlink them back.
-# One direction only (home -> repo); never touches existing repo files;
-# conflicts and ignored paths are skipped, not resolved.
+# repo (mirror-root: the OS overlay takes precedence, else common) and
+# symlink them back. One direction only (home -> repo); never touches
+# existing repo files; conflicts and ignored paths are skipped, not resolved.
 rfr_rel=(); rfr_home=(); rfr_dest=(); rfr_root=()
 
 refresh_scan() {
@@ -575,9 +569,6 @@ refresh_scan() {
   # rels (parent is $HOME itself) are skipped -- $HOME is never scanned. Nested
   # dirs collapse to their shallowest ancestor so `find` never reports a file
   # twice (e.g. .config/nvim and .config/nvim/lua/plugins).
-  # `$desired` (built in collect) doubles as the in-repo rel set: a candidate
-  # whose absolute path is listed there is already managed (or a conflict) and
-  # is skipped silently, exactly like find_stale (:368).
   while IFS= read -r d || [ -n "$d" ]; do
     [ -d "$HOME/$d" ] || continue
     [ -L "$HOME/$d" ] && continue
@@ -586,9 +577,10 @@ refresh_scan() {
       rel="${f#$HOME/}"
       # neglected for this session -> never captured (link-context.txt)
       if grep -Fxq "$rel" "$NEG_RELS"; then continue; fi
-      # already in the repo (managed or conflict) -> skip silently
+      # already in the repo (managed or conflict) -> skip this candidate
       if grep -Fxq "$f" "$desired"; then continue; fi
-      # link-ignore.txt, exact or under a directory entry (list_root:130-137)
+      # link-ignore.txt, exact or under a directory entry (the list_root
+      # ignore rule)
       if awk -v rel="$rel" \
           'rel == $0 || index(rel, $0 "/") == 1 { found = 1 } END { exit !found }' \
           "$IGN_TMP"; then continue; fi
@@ -605,7 +597,7 @@ refresh_scan() {
         */.git/*|.git/*) continue ;;
         *.bak.*)         continue ;;
       esac
-      # `=~` RHS must stay unquoted for bash 3.2 (find_stale:371)
+      # `=~` RHS must stay unquoted for bash 3.2 (see find_stale)
       [[ $rel =~ $filter ]] || continue
       # mirror-root rule: OS overlay if the dir exists there, else common
       ddir="$(dirname "$rel")"
@@ -687,7 +679,7 @@ session_context() {
   fi
 }
 
-# Mirror read_ignores (:114-120): whole-line comments and blank lines dropped,
+# Mirror read_ignores: whole-line comments and blank lines dropped,
 # lines without a "<context>: " pair are malformed and ignored. A missing
 # link-context.txt is an empty neglect list, not an error.
 read_contexts() {
@@ -919,7 +911,7 @@ link_one() { # $1=src $2=dst $3=1 to back up an existing real file
   fi
   # rm + ln, never `ln -sf`: on BSD, forcing a link over an existing symlink
   # to a directory creates the link *inside* it, and the flag that prevents
-  # that differs between BSD (-h) and GNU (-n/-T). Removing first sidesteps it.
+  # that differs between BSD (-h) and GNU (-n/-T). Remove the old link first.
   rm -f "$2"
   ln -s "$1" "$2"
 }

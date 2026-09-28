@@ -10,13 +10,13 @@
 # names are prefixed (link- classify- overlay- context- ignore- refresh-
 # audit- picker- cli- guard-) so `bats --filter '^cli-'` etc. work.
 #
-# Known current behaviors locked in here (verified 2026-08-15):
+# Known current behaviors asserted by these tests (verified 2026-08-15):
 #   * the numbered fallback menu consumes one stdin line; the confirmation
 #     prompt consumes the next -- so piped runs need 'a'/'n'/'<n>' plus 'y'.
 #     'a' alone links nothing (confirm reads EOF and exits 1).
-#   * an ignore entry ADDED while the file is still linked surfaces in
+#   * an ignore entry ADDED while the file is still linked appears in
 #     --audit as `i [ignored]`.
-#   * an ignore entry REMOVED while the file is unlinked surfaces as
+#   * an ignore entry REMOVED while the file is unlinked appears as
 #     `+ [missing]`.
 #   * --force backs up real files (.bak.<STAMP>); foreign symlinks are only
 #     replaced, never backed up.
@@ -155,7 +155,7 @@ setup() {
 
 # ============================================================ overlay- ===
 
-@test "overlay- common+linux collision: the linux overlay wins" {
+@test "overlay- common+linux collision: the linux overlay takes precedence" {
   fixture_new ov_linux
   printf 'linux tmux\n' > "$FIX_REPO/linux/.tmux.conf"
   run_link --yes
@@ -164,7 +164,7 @@ setup() {
   [ "$(cat "$FIX_HOME/.tmux.conf")" = "linux tmux" ]
 }
 
-@test "overlay- Darwin: the macos overlay wins" {
+@test "overlay- Darwin: the macos overlay takes precedence" {
   fixture_new ov_macos
   stub_uname Darwin
   run_link --yes
@@ -421,7 +421,7 @@ setup() {
   output_not_has_finding bin/.github
 }
 
-@test "ignore- ignored but dangling link is still reported stale ([ ! -e ] wins)" {
+@test "ignore- ignored but dangling link is still reported stale ([ ! -e ] takes precedence)" {
   fixture_new ig_dangling
   run_link --yes
   [ "$status" -eq 0 ]
@@ -467,7 +467,7 @@ setup() {
   git -C "$FIX_REPO" -c user.name=t -c user.email=t@t commit -qm init
   run_link --yes
   [ "$status" -eq 0 ]
-  rm -rf "$FIX_REPO/common/.config"   # whole dir gone from the repo
+  rm -rf "$FIX_REPO/common/.config"
   git -C "$FIX_REPO" add -A
   git -C "$FIX_REPO" -c user.name=t -c user.email=t@t commit -qm drop
   run_link --audit

@@ -367,6 +367,12 @@ packages, so you don't have to bootstrap it by hand first.
   - contains the PATH changes.
 - `.config/shell/os.sh`.
   - contains os-specific configs like the homebrew stuff or the WSL things.
+- Python comes from uv, not the distro: `setup/steps/91-uv-python.sh` runs
+  `uv python install 3 --default`, which links `python` and `python3` (uv only
+  links the versioned `python3.x` otherwise) into `~/.local/bin` — a dir
+  `.bash_profile` already puts on PATH, so `uv python update-shell` is not
+  needed. There is deliberately no bare `pip`: use `uv pip ...` or
+  `python3 -m pip` (a bare `pip install` is PEP 668-blocked anyway).
 - These configs should only account for the applications and packges that the setup script handles, other packages when installed will add them selfs.
 - These rules should be verified when changes happens to them in the HOME and synced to this repo.
 

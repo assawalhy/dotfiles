@@ -1,4 +1,5 @@
--- skip backwards compatibility routines and speed up loading
+-- Skips the context-commentstring module's backwards-compatibility routines.
+-- This speeds up loading.
 vim.g.skip_ts_context_commentstring_module = true
 
 -- Rainbow delimiters configuration (replaces nvim-ts-rainbow2)
@@ -61,7 +62,7 @@ return {
       }
 
       -- Parsers compile lazily: the first buffer of a whitelisted language
-      -- kicks off a background install instead of compiling everything at
+      -- starts a background install instead of compiling every parser at
       -- startup.
       local wanted = {
         c = true,
@@ -82,16 +83,16 @@ return {
         markdown = true,
       }
 
-      -- parsers a language needs alongside its own
+      -- Parsers a language needs alongside its own
       local companions = {
         markdown = { 'markdown_inline' },
       }
 
       local installing = {}
 
-      -- returns true when the parser is ready; otherwise starts the install
-      -- and polls until it compiles, then replays FileType on the buffer so
-      -- highlighting and indentexpr pick it up (~90s budget)
+      -- Returns true when the parser is ready. Otherwise it starts the install,
+      -- polls until the parser compiles, then replays FileType on the buffer so
+      -- highlighting and indentexpr pick it up (about 90 s: 45 polls at 2 s)
       local function ensure_parser(lang, bufnr)
         if pcall(vim.treesitter.language.add, lang) then return true end
 
@@ -197,7 +198,7 @@ return {
       }
 
       -- Folding
-      -- NOTE: 'kevinhwang91/nvim-ufo' now handles it
+      -- NOTE: folding is handled by the plugin kevinhwang91/nvim-ufo
     end,
   },
 

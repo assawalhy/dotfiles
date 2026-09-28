@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# source: https://www.reddit.com/r/commandline/comments/hb50u0/is_there_a_youtubedl_interactive_script/
-# this is a modified version of the above code, but I started from their
+# Based on: https://www.reddit.com/r/commandline/comments/hb50u0/is_there_a_youtubedl_interactive_script/
+# This is a modified version of that script.
 
 set -e
 
@@ -65,8 +65,6 @@ while read -r line; do
     choices+=("$(echo "$line" | awk '{print $1}')" "$line" OFF)
 done <<< "$(yt-dlp "${ytdl_options[@]}" -F --no-playlist "$url" | sed '0,/--------/d' | tac)"
 
-# printf "%s\n" "${array[@]}"
-# exit 0
 
 if ! which whiptail > /dev/null 2>&1; then
     echo "whiptail program is not found, please install it" >&2
@@ -93,5 +91,5 @@ echo Choosen quality settings: "$quality_settings"
 
 echo "Downloading... =>" yt-dlp -f "$quality_settings" --no-playlist -ciw -o "%(title)s.%(ext)s" "${ytdl_options[@]}" "$url"
 
-# use ytdl_options at the end to allow overriding default options
+# ytdl_options come last so they override the defaults above
 yt-dlp -f "$quality_settings" --no-playlist -ciw -o "%(title)s.%(ext)s" "${ytdl_options[@]}" "$url"

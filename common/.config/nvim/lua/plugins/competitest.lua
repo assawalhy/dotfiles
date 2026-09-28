@@ -1,4 +1,4 @@
--- luarocks install luafilesystem luasocket
+-- Requires luafilesystem and luasocket (install with: luarocks install luafilesystem luasocket)
 
 local base_path = string.format('%s/myp/problem-solving', vim.loop.os_homedir())
 
@@ -25,7 +25,6 @@ local function trim(s)
   return s:match '^%s*(.-)%s*$' or ''
 end
 
--- Function to fetch HTML content from a URL
 function fetch_html(url)
   local socket = require("socket.http")
   local body, code, headers, status = socket.request(url)
@@ -57,10 +56,9 @@ local function relative_path(task, file_extension)
     contest = trim(string.sub(task.group, hyphen + 3))
   end
 
-  local original_judge = judge -- Save the original judge name
-  local lower_judge = string.lower(judge) -- Lowercase the judge name
+  local original_judge = judge
+  local lower_judge = string.lower(judge)
 
-  -- Check if lower_judge contains any key from judgesMap
   local found = false
   for key, value in pairs(judgesMap) do
     if string.find(lower_judge, key, 1, true) then
@@ -86,7 +84,8 @@ local function relative_path(task, file_extension)
       local existing_folder = find_contest_folder(our_base_path, contest_id)
 
       if existing_folder then
-        -- some contests have problems some as PDF which results in different contest name but the same contest id
+        -- Some contests have problems available as PDFs, which produce a
+        -- different contest name but the same contest id, so reuse the folder
         contest = existing_folder
       else
         contest = contest_id .. ' - ' .. contest

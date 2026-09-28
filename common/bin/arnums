@@ -23,7 +23,7 @@ arnum=""
 len=${#num}
 
 for i in `seq $len`; do
-  chr=${num:i-1:1} # i is 1-based index
+  chr=${num:i-1:1} # i counts from 1 while the substring offset counts from 0
   archr="$(convert_char $chr)"
   arnum="${arnum}$archr" 
 done
@@ -33,11 +33,9 @@ if [ $# -eq 1 ]; then
   exit 0
 fi
 
-## decide which cli command to use
 
 case "$1" in
   echo) cmd="echo -n";;
-  # default value
   type) cmd="xdotool type";;
   *)
     >&2 echo error: invalid command \"$1\" && exit 1

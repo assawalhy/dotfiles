@@ -3,13 +3,12 @@
 # setup-os -- interactively install the programs this dotfiles repo expects.
 #
 # Uses Homebrew on macOS and pacman/apt/dnf/zypper on Linux. Package names are
-# declared in setup/packages.list; the multi-line install snippets that used to
-# live in `setup-linux` are now one executable file each under setup/steps/.
+# declared in setup/packages.list; executable install steps live one file each
+# under setup/steps/.
 #
 # On NixOS (PM=nixos) the system-scope groups are skipped -- they are declared
 # in configuration.nix -- and only user-scope installs run: setup/steps plus
-# the cargo/go/npm/pip groups (npm -g is redirected to a writable ~/.local
-# prefix, since nixpkgs' npm prefix is read-only). No sudo is used there.
+# the cargo/go/npm/pip groups.
 #
 # NOTE: must stay bash 3.2 compatible -- stock macOS /bin/bash is 3.2.57.
 #       No readarray/mapfile, no `declare -A`, no ${v,,}. Data-structure work
@@ -169,9 +168,9 @@ pm_install() { # pm_install <mgr> <pkg>...
     go)     run go install "$@" ;;
     npm)    run "${NPM_G[@]}" npm install -g "$@" ;;
     pip)    if [ -z "$is_dry" ] && ! command -v pipx >/dev/null 2>&1; then
-              # Arch and Homebrew both ship PEP-668 externally-managed Pythons
-              # where `pip install --user` refuses to run; pipx is the tool for
-              # these, since they are all CLIs rather than libraries.
+              # Arch and Homebrew ship PEP-668 externally-managed Pythons where
+              # `pip install --user` refuses to run. These packages are CLIs
+              # rather than libraries, so pipx installs them.
               printf '   ! pipx is missing; select it in [terminal] and re-run\n' >&2
               return 1
             fi
@@ -243,7 +242,6 @@ resolve() {
         next
       }
       if (group == "go") {
-        # use go:module-path as the install name; fall back to bare id
         pkg = ("go" in m) ? m["go"] : id
         print group "\t" id "\t" group "\t" pkg "\t" (prio ? prio : "p4") "\t" check
         next
@@ -372,7 +370,6 @@ expand_selection() {
     '') return ;;
   esac
 
-  # commas and spaces both separate tokens, so "1,3 5-7" picks 1,3,5,6,7
   sel="$(printf '%s' "$sel" | tr ',' ' ')"
 
   for tok in $sel; do
@@ -403,13 +400,13 @@ trap 'rm -f "$TMP" "$MENU" "$PICKED"; rm -rf "$CACHE_DIR"' EXIT INT TERM HUP
   [ -n "$packages_only" ] || resolve_steps
 } > "$TMP"
 
-# --group filter
 if [ -n "$groups" ]; then
   pat="$(printf '%s' "$groups" | sed 's/^ //; s/ /|/g')"
   awk -F'\t' -v p="^($pat)$" '$1 ~ p' "$TMP" > "$TMP.f" && mv "$TMP.f" "$TMP"
 fi
 
-# --priority tier filter: auto-selects a whole tier, like --all limited to it
+# --priority tier filter: sets want_all so the whole tier is selected without
+# the picker
 if [ -n "$prios" ]; then
   want_all=1
   pat="$(printf '%s' "$prios" | sed 's/^ //; s/ /|/g')"
@@ -425,7 +422,6 @@ if [ -n "$only_list" ]; then
   exit 0
 fi
 
-# Build the menu, dropping what is already present unless --show-installed.
 n_skipped=0
 while IFS=$'\t' read -r group id mgr pkg prio check || [ -n "$group" ]; do
   state=''
@@ -433,8 +429,9 @@ while IFS=$'\t' read -r group id mgr pkg prio check || [ -n "$group" ]; do
     step_done "$pkg" && state=' (done)'
   else
     pm_installed "$mgr" "$pkg" && state=' (installed)'
-    # fallback: the command exists even though the manager can't see it
-    # (tarball/cargo/snap installs, differently-named packages)
+    # fallback: the command is on PATH even though the manager's package list
+    # does not contain it (tarball, cargo or snap installs; differently-named
+    # packages)
     if [ -z "$state" ] && [ -n "$check" ] && command -v "$check" >/dev/null 2>&1; then
       state=' (installed)'
     fi
@@ -456,14 +453,16 @@ if [ -n "$want_all" ]; then
   cut -f1-4 "$MENU" > "$PICKED"
 else
   # The picker needs a usable /dev/tty: fzf's UI and the typed fallback both
-  # prompt through it, while the menu list travels on stdin. Without one, fail
-  # with guidance instead of the silent "Nothing selected." no-op.
+  # prompt through it, while the menu list travels on stdin. Without one,
+  # print an error and exit 1 instead of reaching an empty selection and
+  # printing "Nothing selected."
   if ! { : >/dev/tty; } 2>/dev/null; then
     printf 'error: the interactive picker needs a terminal (none available)\n' >&2
     printf '       re-run with --all, --priority p1,p2, or --group <name>\n' >&2
     exit 1
   fi
-  # key = the first four tab-separated fields, so the selection round-trips
+  # choose()/cut -f1 splits on tabs, so join the four key fields with "|"
+  # first; tr converts them back to tabs after the selection
   awk -F'\t' 'BEGIN { OFS = "\t" } { print $1 "|" $2 "|" $3 "|" $4, $5 }' "$MENU" \
     | choose | tr '|' '\t' > "$PICKED"
 fi
@@ -477,11 +476,10 @@ fi
   printf '(%d entr%s already present, hidden -- use --show-installed to see them)\n\n' \
     "$n_skipped" "$([ "$n_skipped" = 1 ] && echo y || echo ies)"
 
-# A cargo batch is impossible without the Rust toolchain. When one is about to
-# run, drop the rustup step from PICKED -- the steps-last loop does not re-check
-# `# check:` and would otherwise run it a second time. Auto-run it here instead,
-# but only when cargo is actually missing, so an existing toolchain is never
-# stomped by a fresh rustup install.
+# A cargo batch needs the Rust toolchain. Drop the rustup step from PICKED
+# because the steps-last loop does not re-check `# check:` and would run it a
+# second time; run it here instead, but only when cargo is missing, so an
+# existing toolchain is not replaced by a fresh rustup install.
 if awk -F'\t' '$3=="cargo"' "$PICKED" | grep -q . && [ -f "$STEPS/10-rustup.sh" ]; then
   awk -F'\t' -v rp="$STEPS/10-rustup.sh" '$4 != rp' "$PICKED" > "$PICKED.t" && mv "$PICKED.t" "$PICKED"
   if ! command -v cargo >/dev/null 2>&1; then RUN_RUSTUP_AUTO=1; fi
@@ -513,7 +511,7 @@ fi
 FAILED=''
 
 # Batch per manager: one dependency solve, one prompt. If the batch fails,
-# retry one at a time so a single broken package doesn't hide the rest.
+# retry packages one at a time so the outcome of each package is reported.
 for mgr in brew cask pacman aur apt dnf zypper cargo go npm pip; do
   pkgs=()
   while IFS=$'\t' read -r group id m pkg || [ -n "$m" ]; do
@@ -522,8 +520,6 @@ for mgr in brew cask pacman aur apt dnf zypper cargo go npm pip; do
   [ ${#pkgs[@]} -gt 0 ] || continue
 
   printf '\n== %s (%d) ==\n' "$mgr" "${#pkgs[@]}"
-  # The rustup step was dropped from PICKED above; run it now so the cargo
-  # batch below has a toolchain to build with.
   if [ "$mgr" = cargo ] && [ -n "$RUN_RUSTUP_AUTO" ]; then
     printf '\n== step: rustup (auto, required by cargo) ==\n'
     if [ -n "$is_dry" ]; then
@@ -548,8 +544,9 @@ for mgr in brew cask pacman aur apt dnf zypper cargo go npm pip; do
   done
 done
 
-# Steps last -- they routinely depend on git/curl/zsh being installed already.
-# Each runs in a subshell so its `set -e` can't kill this driver.
+# Steps run last because they depend on git/curl/zsh being installed already.
+# Each runs in a subshell so a step's `set -e` exit does not terminate this
+# script.
 while IFS=$'\t' read -r group id m pkg || [ -n "$m" ]; do
   [ "$m" = step ] || continue
   printf '\n== step: %s ==\n' "$id"

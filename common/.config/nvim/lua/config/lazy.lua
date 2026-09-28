@@ -15,17 +15,16 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
--- Setup lazy.nvim
 require('lazy').setup {
   spec = {
-    -- import your plugins
     { import = 'plugins' },
   },
-  -- colorscheme that will be used when installing plugins
+  -- colorscheme used while plugins are being installed
   install = { colorscheme = { 'onedark' } },
 
-  -- luarocks support off: system luarocks is too old for the build backends
-  -- plugin rockspecs need (e.g. rest.nvim); their lua deps are provided as
-  -- regular plugins / vendored into stdpath('data')/site/lua instead
+  -- Luarocks support is off: the system luarocks is older than the build
+  -- backends that plugin rockspecs need (for example rest.nvim). Their Lua
+  -- dependencies are provided as regular plugins or vendored into
+  -- stdpath('data')/site/lua instead.
   rocks = { enabled = false },
 }

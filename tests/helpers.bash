@@ -5,7 +5,7 @@
 # Every test builds a throwaway fixture repo + fake $HOME under
 # $BATS_TEST_TMPDIR (auto-cleaned by bats); the real $HOME is never touched.
 # link-files.bash derives $REPO from its own location, so each test copies
-# the real script into its own fixture repo -- hermetic runs.
+# the real script into its own fixture repo and runs in isolation.
 #
 # NOTE: these helpers run under the modern bash of the bats runner; the
 # *script* under test must stay bash 3.2 compatible, and is never edited here.

@@ -71,8 +71,8 @@ _LS_COLOR_FLAG='-G'
 
 # --------------------------------------------------------------- PATH ---
 
-# Optional: GNU coreutils without the g- prefix. Left commented on purpose --
-# it silently changes ls/sed/date semantics for every script you run.
+# Optional: GNU coreutils without the g- prefix. Left commented out on purpose:
+# it changes which ls/sed/date every script in this shell runs.
 #   for _g in coreutils findutils gnu-sed gawk grep; do
 #     [ -d "$HOMEBREW_PREFIX/opt/$_g/libexec/gnubin" ] &&
 #       PATH="$HOMEBREW_PREFIX/opt/$_g/libexec/gnubin:$PATH"

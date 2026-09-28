@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # TODO: collect all options to one ffmpeg command, not more temp files
-# TODO: use `ffmpeg -loglevel error` for quiet mode
 
 set -e
 
@@ -177,7 +176,6 @@ add-quotes() {
 
 print-cmd() {
     for arg in "$@"; do
-        # Skip escaping for common shell operators
         if [[ "$arg" == "||" || "$arg" == "&&" || "$arg" == "|" || "$arg" == "&" || "$arg" == ";" || "$arg" == ">" || "$arg" == "<" ]]; then
             echo -n "$arg "
             continue
@@ -185,7 +183,6 @@ print-cmd() {
         
         # Check if argument contains characters that need escaping
         if [[ "$arg" =~ [][{}\(\)\\\*\?~\`\$\#\=\!\|\&\;\<\>\'\"] ]] || [[ "$arg" =~ [[:space:]] ]]; then
-            # shell-escape the argument
             arg="'$(echo "$arg" | sed "s/'/'\\\\''/g")'"
         fi
         
@@ -197,7 +194,7 @@ print-cmd() {
 print-and-run-cmd() {
     local quoted="$(print-cmd "$@")"
     echo-debug "$quoted"
-    # eval is used to only allow piping (using |) and chaining (using &&)
+    # eval runs the assembled string, so pipes and && chains work in it
     eval "$quoted"
 }
 
@@ -206,7 +203,7 @@ get-file-name-from-url() {
     local output
     echo-debug Getting the file name from a url
     output="$(print-and-run-cmd yt-dlp "${ytdl_options[@]}" --no-playlist -O '%(title)s.%(ext)s' "$1")"
-    output="${output/\//_}" # replace / with _
+    output="${output/\//_}"
     echo "$output"
 }
 
@@ -234,14 +231,14 @@ prepare-input-and-output() {
             elif [ "$is_audio_only" ]; then
                 ytdl_options+=(-f 'bestaudio[abr<=128k]')
             else
-                # progressive (video+audio) formats are gone from YouTube;
-                # -S picks separate streams and yt-dlp merges them
+                # Progressive formats that combine video and audio are gone
+                # from YouTube. -S picks separate streams and yt-dlp merges them.
                 ytdl_options+=(-S "res:720")
             fi
         fi
 
-        # If quiet mode requested, make yt-dlp quieter: suppress warnings and progress
-        # (we still want errors to appear). Avoid adding duplicate flags.
+        # In quiet mode add --no-warnings and --no-progress to yt-dlp, but not
+        # --quiet, so errors still appear. Flags already present are skipped.
         if [ "$is_quiet" ]; then
             for _flag in --no-warnings --no-progress; do
                 case " ${ytdl_options[*]} " in
@@ -255,12 +252,11 @@ prepare-input-and-output() {
             output=$(get-file-name-from-url "$input")
         fi
     elif [ ! "$output" ]; then
-        # then same extension as the input
+        # the extension matches the input; the base name gains a -montaged suffix
         output="$(echo "$input" | sed -e 's/^\(.*\)\.\(.*\)$/\1-montaged.\2/')"
     fi
 
     if [ "$is_gif" ]; then
-        # use the same name with .gif as extension
         output="${output%.*}.gif"
     elif [ "$is_audio_only" ] && [ ! "$is_output_explicit" ]; then
         output="${output%.*}.mp3"
@@ -272,7 +268,6 @@ build-ytdlp-download-section() {
         local section_arg="*${start_point}"
         
         if [ "$duration" ]; then
-            # Convert start + duration to end time
             local start_seconds=$(time-to-seconds "$start_point")
             local duration_seconds=$(time-to-seconds "$duration")
             local end_seconds=$((start_seconds + duration_seconds))
@@ -300,7 +295,7 @@ time-to-seconds() {
         local seconds=${BASH_REMATCH[3]}
         echo $((hours * 3600 + minutes * 60 + seconds))
     else
-        echo "$time_str"  # Return as-is if we can't parse
+        echo "$time_str"
     fi
 }
 
@@ -312,8 +307,8 @@ seconds-to-time() {
     printf "%02d:%02d:%02d" $hours $minutes $seconds
 }
 
-# ffmpeg's HTTP reader is throttled by YouTube (~55 KB/s); yt-dlp's downloader
-# is ~15x faster, so URLs are downloaded to a temp file before processing.
+# YouTube throttles ffmpeg's HTTP reader to about 55 KB/s. yt-dlp's downloader
+# is about 15 times faster, so URLs are downloaded to a temp file first.
 download-url() { # url dir
     local url="$1" dir="$2"
     local opts=("${ytdl_options[@]}")
@@ -321,7 +316,6 @@ download-url() { # url dir
     [ ${#opts[@]} -eq 0 ] && opts=(-S 'res:720')
 
     if [ "$url_download_section" ]; then
-        # yt-dlp trims the section itself, so ffmpeg must not seek again
         opts+=(--download-sections "$url_download_section" --force-keyframes-at-cuts)
     fi
 
@@ -407,8 +401,8 @@ build-ffmpeg-command() {
         [ "$end_point" ] && cut_args+=(-to "$end_point")
 
         if [[ "$input" =~ ^https?:// ]]; then
-            # fetch only the requested section; if yt-dlp trims it, don't
-            # make ffmpeg seek into the already-trimmed file
+            # fetch only the requested section: yt-dlp does the trimming, so
+            # ffmpeg must not seek into the already-trimmed file
             url_download_section="$(build-ytdlp-download-section)"
         fi
 
@@ -489,7 +483,7 @@ build-ffmpeg-command() {
         whisper_cmd+=("$output" --verbose False --model medium --output_format txt --output_dir "$(dirname "$output")")
     fi
 
-    # nothing to filter or cut: remux instead of re-encoding
+    # No filters and no cuts: use stream copy (-c copy) instead of re-encoding
     if [ "${cmd[0]}" = ffmpeg ] && [ ! "$start_point" ] \
         && [ ${#video_filters[@]} -eq 0 ] && [ ${#audio_filters[@]} -eq 0 ] \
         && [ ! "$mute_audio" ] && [ ! "$is_audio_only" ] && [ ! "$is_gif" ] \
