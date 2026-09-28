@@ -11,4 +11,4 @@
 - [x] memory guard: per-server floors — kotlin_lsp tripped the 1.5 GiB floor mid-session; it gets 0.75 GiB, jdtls/kls keep 1.5 GiB
 - [x] reaper needle validated: server cmdline is `kotlin-lsp/current/bin/intellij-server`
 - [x] `bats tests/link-files.bats`: 99 ok, 0 not ok
-- [ ] commits (`setup:`, `nvim:`) + push + PR
+- [x] commits (`setup:`, `nvim:`) + push + PR #20
