@@ -211,6 +211,8 @@ in
     nerd-fonts.jetbrains-mono
     nerd-fonts.fira-code
     ghostty
+    wezterm
+
     # GNOME 42+ has no desktop icons; this extension restores them (enabled via
     # the org/gnome/shell dconf default below).
     gnomeExtensions.desktop-icons-ng-ding
@@ -378,6 +380,27 @@ in
       libsecret # secret storage (opencode, claude)
       alsa-lib # libasound.so.2
       libpulseaudio # libpulse.so.0
+
+      # Playwright's Chromium (prebuilt, `~/.cache/ms-playwright`) — the
+      # headless shell and the full binary both dlopen these at startup and
+      # die on `libnspr4.so` without them. Runtime .so only: no compiler
+      # toolchain is involved, and the `dev` outputs are deliberately not
+      # listed. libgbm + libdrm rather than all of `mesa` (narrower closure,
+      # no EGL/wayland drivers).
+      nspr # libnspr4.so
+      nss # libnss3.so / libnssutil3.so / libsmime3.so
+      at-spi2-core # libatk-1.0.so.0 / libatk-bridge-2.0.so.0 / libatspi.so.0
+      dbus # libdbus-1.so.3
+      expat # libexpat.so.1
+      libgbm # libgbm.so.1
+      libdrm # libdrm.so.2
+      libX11 # libX11.so.6 / libX11-xcb.so.1
+      libXext # libXext.so.6 — separate package from libX11 in nixpkgs
+      libXcomposite # libXcomposite.so.1
+      libXdamage # libXdamage.so.1
+      libXfixes # libXfixes.so.3
+      libXrandr # libXrandr.so.2
+      libxkbcommon # libxkbcommon.so.0
     ];
   };
 
