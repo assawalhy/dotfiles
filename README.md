@@ -47,7 +47,7 @@ lua/plugins/*.lua          one file per feature (ui, editor, git, lsp,
                            blink, conform, trouble, dap, treesitter,
                            ufo, neotree, telescope, competitest)
 lua/config/lsp_gate.lua    per-buffer LSP attach gate, shared by the servers
-lua/config/java.lua        jdtls + kotlin_language_server
+lua/config/java.lua        jdtls + kotlin_lsp (mason kls fallback)
 lua/config/memory.lua      RAM guard for the two JVM servers
 after/plugin/lsp.lua       LspAttach native keymaps + diagnostics
 ```
@@ -80,9 +80,10 @@ packages; `_jdk_home` in `~/.config/shell/os.sh` resolves through
 `mise where java`. Maven and Gradle come from the `p2` tier:
 `setup-os --priority p2`.
 
-Both language servers are mason-installed (`ensure_installed` in
-`lua/plugins/lsp.lua`) and gated per buffer by `lua/config/lsp_gate.lua`, so
-oversized files stay LSP-free:
+The servers come from mason (`ensure_installed` in `lua/plugins/lsp.lua`)
+except **kotlin-lsp**, which `setup/steps/67-kotlin-lsp.sh` unpacks
+(sha256-pinned) into `~/.local/share/kotlin-lsp/`; all are gated per buffer
+by `lua/config/lsp_gate.lua`, so oversized files stay LSP-free:
 
 - **jdtls** (`lua/config/java.lua`) is launched as `java` itself — the
   equinox launcher jar plus `-configuration config_linux`/`config_mac` — not
@@ -91,11 +92,18 @@ oversized files stay LSP-free:
   is capped at 768 MB and every project gets its own workspace under
   `stdpath('cache')/jdtls/<name>-<hash>`. Lombok comes from mason's bundled
   `lombok.jar`; set `LOMBOK_JAR` to override.
-- **kotlin_language_server** gets the same heap cap through `_JAVA_OPTIONS`.
+- **kotlin_lsp** is the official JetBrains server (`Kotlin/kotlin-lsp`,
+  IntelliJ-based) — the only one that reads Kotlin 2.3 project metadata.
+  Where it is not installed (macOS, non-x86_64), `java.lua` falls back to
+  the mason **kotlin_language_server**: same 768 MB heap cap through
+  `_JAVA_OPTIONS`, plus `compiler.jvm.target=21` sent via
+  `workspace/didChangeConfiguration` to clear its false "cannot inline"
+  diagnostics. kls bundles Kotlin 2.1.0, so on Kotlin 2.3 projects it still
+  reports `::class.java` as unresolved (fwcd#457).
 
-`lua/config/memory.lua` backs both: no JVM starts below 2 GiB available RAM,
-running ones are stopped below 1.5 GiB (20 s watchdog and on `ExitPre`), and
-JVMs orphaned by a crashed nvim are swept on the next start.
+`lua/config/memory.lua` backs all of them: no JVM starts below 2 GiB
+available RAM, running ones are stopped below 1.5 GiB (20 s watchdog and on
+`ExitPre`), and JVMs orphaned by a crashed nvim are swept on the next start.
 
 Competitive programming: CompetiTest compiles and runs Kotlin
 (`kotlinc` → `java -jar`) as well as Java, and the shell profile grows
