@@ -908,18 +908,21 @@ setup() {
   [[ "$output" != *"ignored.conf"* ]]
 }
 
-@test "audit- herdr plugin installs and runtime files are not [unlinked]" {
+@test "audit- herdr plugin installs, state and plugin config are not [unlinked]" {
   fixture_new au_herdr git
-  mkdir -p "$FIX_REPO/common/.config/herdr/plugins/config/wp"
+  mkdir -p "$FIX_REPO/common/.config/herdr"
   printf 'cfg\n' > "$FIX_REPO/common/.config/herdr/config.toml"
-  printf 'wp\n'  > "$FIX_REPO/common/.config/herdr/plugins/config/wp/config.yml"
   run_link --yes
   [ "$status" -eq 0 ]
 
+  # plugins/ is runtime- and plugin-owned: installs, state and plugin config
+  # alike (stay-awake's config is seeded by its setup step, not linked).
   mkdir -p "$FIX_HOME/.config/herdr/plugins/github/assawalhy.stay-awake-deadbeef/src"
   mkdir -p "$FIX_HOME/.config/herdr/plugins/state/assawalhy.stay-awake"
+  mkdir -p "$FIX_HOME/.config/herdr/plugins/config/assawalhy.stay-awake"
   printf 'plugin\n' > "$FIX_HOME/.config/herdr/plugins/github/assawalhy.stay-awake-deadbeef/src/main.js"
   printf 'state\n'  > "$FIX_HOME/.config/herdr/plugins/state/assawalhy.stay-awake/session.json"
+  printf 'cfg\n'    > "$FIX_HOME/.config/herdr/plugins/config/assawalhy.stay-awake/config.json"
   printf 'x\n' > "$FIX_HOME/.config/herdr/session.json"
   printf 'x\n' > "$FIX_HOME/.config/herdr/plugins.json"
   printf 'x\n' > "$FIX_HOME/.config/herdr/.plugins.lock"
