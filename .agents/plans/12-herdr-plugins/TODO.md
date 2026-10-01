@@ -11,4 +11,4 @@
 - [x] stay-awake installed + config seeded (defaults)
 - [x] auto-title installed (first try hit a transient DNS failure on proxy.golang.org)
 - [x] link-files --fix --yes (links config.env) + audit herdr-clean + full bats 99 ok / 0 not ok
-- [ ] commit + push + PR
+- [x] commit + push + PR #22
