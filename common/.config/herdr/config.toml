@@ -17,3 +17,9 @@ type = "plugin_action"
 command = "assawalhy.stay-awake.open-settings"
 description = "Stay Awake settings"
 
+[[keys.command]]
+key = "prefix+R"
+type = "plugin_action"
+command = "herdr.auto-title.restart"
+description = "restart auto-title"
+
