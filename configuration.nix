@@ -124,6 +124,7 @@ in
       tree
       proton-vpn
       brave
+      firefox
       fzf
       zsh
     ];
@@ -221,6 +222,11 @@ in
     # GNOME 42+ has no desktop icons; this extension restores them (enabled via
     # the org/gnome/shell dconf default below).
     gnomeExtensions.desktop-icons-ng-ding
+    # Keeps browser PiP windows above and on all visible workspaces, working
+    # around the missing always-on-top/sticky hints on Wayland. Detection is
+    # purely by window title — upstream targets Firefox + Clapper ("may work
+    # with few other browsers"); see the dconf note below for the Brave caveat.
+    gnomeExtensions.pip-on-top
 
     ## [dev]
     docker
@@ -296,7 +302,20 @@ in
           xkb-options = [ "caps:escape" ];
         };
         "org/gnome/shell" = {
-          enabled-extensions = [ "ding@rastersoft.com" ];
+          # gsettings/dconf *user* values shadow these profile defaults. Once
+          # GNOME Shell writes /org/gnome/shell/enabled-extensions into
+          # ~/.config/dconf/user, edits here stop taking effect. After a
+          # rebuild, run once:
+          #   dconf reset /org/gnome/shell/enabled-extensions
+          enabled-extensions = [
+            "ding@rastersoft.com"
+            "pip-on-top@rafostar.github.com"
+          ];
+        };
+        # The extension only calls make_above() by default; sticking to all
+        # visible workspaces (its `stick` key) is opt-in and defaults to false.
+        "org/gnome/shell/extensions/pip-on-top" = {
+          stick = true;
         };
       };
     }

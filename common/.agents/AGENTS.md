@@ -134,6 +134,13 @@ record is `PLAN.md` + `TODO.md` under `.agents/plans/<NN>-<slug>/`, not the tran
 Skip the plan only when the change is genuinely trivial (a one-liner, a single-file
 tweak) or when my message already is the plan. When unsure, plan.
 
+## Skills — load them proactively
+
+When a request matches an available skill's description, load and follow that skill before doing
+the work. Do not wait for the user to name it; an explicit skill mention is confirmation, not the
+trigger. Check the available-skills list for every task — if two appear to match, load the closer
+one, not both speculatively.
+
 ## Backend architecture
 
 - **ddd** (`~/.claude/skills/ddd/SKILL.md`) — Domain-Driven Design + Clean Architecture
@@ -149,3 +156,11 @@ and the Notion databases. Read it only when a task concerns my personal life,
 job search, or Notion workspace; do not load it for coding, infrastructure, or
 dotfiles work. It lives in `$HOME` and is not part of this repo, so it is never
 committed.
+
+## Login walls and bot checks
+
+When a site blocks automation with a login wall, a bot check, a captcha, or a
+2FA prompt, stop and ask me to pass it. I sign in or complete the check in the
+browser, then tell you to continue. Do not abandon the site or quietly
+substitute another method, such as web search, for the same information. Wait
+for my go-ahead, then resume from where the run stopped.
