@@ -35,7 +35,12 @@ let
   unstable = import (builtins.fetchTarball {
     url = "https://github.com/NixOS/nixpkgs/archive/4975466d324710c576dc11ad614684e6bd8cad8e.tar.gz";
     sha256 = "1if9h4d8rkgd7a41j978swbixif81iqfd7hk302w0fbd23i9g7y4";
-  }) { system = pkgs.stdenv.hostPlatform.system; };
+  }) {
+    system = pkgs.stdenv.hostPlatform.system;
+    # A separate import does not inherit the system's nixpkgs.config;
+    # obsidian (unlike lazygit) is unfree, so allow it here too.
+    config.allowUnfree = true;
+  };
 in
 {
   imports =
@@ -200,7 +205,12 @@ in
     ## [gui]
     mpv
     syncthing
-    obsidian
+    # Obsidian: 26.05's desktop entry still says StartupWMClass=md.Obsidian,
+    # but Electron 43 (Obsidian 1.13.7) reports md.obsidian.Obsidian on
+    # Wayland, so GNOME can't associate the window with the dash icon. The
+    # pinned unstable rev (see `unstable` above) already has nixpkgs#561709's
+    # fix; switch back to pkgs.obsidian once 26.05 backports it.
+    unstable.obsidian
     typora
     copyq
     # Deferred (2026-09-24): its source build full-clones the MEGAsync repo and
