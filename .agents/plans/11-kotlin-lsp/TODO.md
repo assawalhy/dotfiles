@@ -12,3 +12,4 @@
 - [x] reaper needle validated: server cmdline is `kotlin-lsp/current/bin/intellij-server`
 - [x] `bats tests/link-files.bats`: 99 ok, 0 not ok
 - [x] commits (`setup:`, `nvim:`) + push + PR #20
+- [x] goto-def into deps/JDK: jar/jrt (kotlin-lsp `decompile`) + jdt:// (jdtls `java/classFileContents`) open in a filled buffer; verified on `@SpringBootApplication`
