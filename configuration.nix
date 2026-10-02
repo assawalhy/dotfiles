@@ -108,6 +108,11 @@ in
   # for the GNOME lock screen / GDM fingerprint unlock.
   services.fprintd.enable = true;
 
+  # Sensor firmware updates for the same reader: enrollment aborts with
+  # BMKT_OUT_OF_MEMORY (104) from the device, and this reader family needs a
+  # firmware/IOTA-config update to enroll at all (ArchWiki Laptop/HP).
+  services.fwupd.enable = true;
+
   # Docker engine + CLI (packages.list [dev] "docker").
   virtualisation.docker.enable = true;
 
