@@ -7,6 +7,7 @@
 -- puts every project in its own workspace.
 local memory = require 'config.memory'
 local gate = require 'config.lsp_gate'
+local lsp_sources = require 'config.lsp_sources'
 
 local mason = vim.fn.stdpath 'data' .. '/mason/packages'
 local jdtls_pkg = mason .. '/jdtls'
@@ -188,7 +189,10 @@ function M.setup()
   vim.lsp.config('jdtls', {
     cmd = jdtls_cmd,
     filetypes = { 'java' },
-    init_options = {},
+    -- classFileContentsSupport lets jdtls answer `jdt://` locations with the
+    -- class source; config/lsp_sources.lua reads them back through the
+    -- `java/classFileContents` request.
+    init_options = { extendedClientCapabilities = { classFileContentsSupport = true } },
   })
   gate.gate('jdtls', jdtls_blocked)
 
@@ -198,6 +202,7 @@ function M.setup()
     return kotlin_blocked(kname, bufnr)
   end)
 
+  lsp_sources.setup()
   memory.setup()
 end
 
