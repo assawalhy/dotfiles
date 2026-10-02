@@ -7,6 +7,7 @@
 -- puts every project in its own workspace.
 local memory = require 'config.memory'
 local gate = require 'config.lsp_gate'
+local lsp_sources = require 'config.lsp_sources'
 
 local mason = vim.fn.stdpath 'data' .. '/mason/packages'
 local jdtls_pkg = mason .. '/jdtls'
@@ -114,57 +115,94 @@ local function jdtls_blocked(bufnr)
   return memory.block 'jdtls'
 end
 
+---@param server string
 ---@param bufnr integer
 ---@return string|nil
-local function kotlin_blocked(bufnr)
+local function kotlin_blocked(server, bufnr)
   if vim.b[bufnr].large_file then
     return 'buffer over the size limit'
   end
-  return memory.block 'kotlin_language_server'
+  return memory.block(server)
 end
 
-function M.setup()
-  vim.lsp.config('jdtls', {
-    cmd = jdtls_cmd,
-    filetypes = { 'java' },
-    init_options = {},
-  })
-  gate.gate('jdtls', jdtls_blocked)
+--- The shipped Kotlin specs only list build files, so a bare `.kt` file -
+--- the competitive-programming case this config exists for - never resolves
+--- a root and the server never starts. Walk build files first, then `.git`
+--- as a last resort, mirroring the jdtls spec.
+---@param bufnr integer
+---@param on_dir fun(dir: string)
+local function kotlin_root(bufnr, on_dir)
+  local root = vim.fs.root(bufnr, {
+    'settings.gradle',
+    'settings.gradle.kts',
+    'build.xml',
+    'pom.xml',
+    'build.gradle',
+    'build.gradle.kts',
+  }) or vim.fs.root(bufnr, { '.git' })
+  if root then
+    on_dir(root)
+  end
+end
+
+--- The official JetBrains Kotlin LSP (setup/steps/67-kotlin-lsp.sh) when it
+--- is installed, the mason kotlin_language_server otherwise. kls bundles
+--- Kotlin 2.1.0 and cannot read Kotlin 2.3 project metadata, so on modern
+--- projects `::class.java` stays unresolved there (fwcd#457) - kotlin-lsp
+--- wins whenever present. kls falls back on machines without the step
+--- (macOS, non-x86_64), where the settings below still clear its false
+--- "cannot inline" diagnostics.
+---@return string name, vim.lsp.Config cfg
+local function kotlin_server()
+  local data = vim.env.XDG_DATA_HOME
+  if not data or data == '' then
+    data = vim.fn.expand '~/.local/share'
+  end
+  local intellij = data .. '/kotlin-lsp/current/bin/intellij-server'
+  if vim.uv.fs_stat(intellij) then
+    return 'kotlin_lsp', { cmd = { intellij, '--stdio' }, root_dir = kotlin_root }
+  end
 
   -- The Gradle-generated shim dies when neither JAVA_HOME nor a `java` on
   -- PATH exists - exactly the launcher-started-nvim case the jdtls fallback
   -- above handles - so hand it the JDK explicitly. It ends in `exec`, so the
   -- JVM stays nvim's direct child. _JAVA_OPTIONS is read by the JVM itself,
   -- which is what caps the heap without touching the shim's own opts.
-  local kotlin_env = { _JAVA_OPTIONS = '-Xmx768m -Xms256m' }
+  local env = { _JAVA_OPTIONS = '-Xmx768m -Xms256m' }
   local _, home = jvm()
   if home then
-    kotlin_env.JAVA_HOME = home
+    env.JAVA_HOME = home
   end
 
-  vim.lsp.config('kotlin_language_server', {
-    cmd_env = kotlin_env,
+  return 'kotlin_language_server', {
+    cmd_env = env,
     init_options = { storagePath = vim.fn.stdpath 'cache' .. '/kotlin-language-server' },
-    -- The shipped spec's markers are build files only, so a bare `.kt` file
-    -- - the competitive-programming case this config exists for - never
-    -- resolves a root and the server never starts. Walk build files first,
-    -- then `.git` as a last resort, mirroring the jdtls spec.
-    root_dir = function(bufnr, on_dir)
-      local root = vim.fs.root(bufnr, {
-        'settings.gradle',
-        'settings.gradle.kts',
-        'build.xml',
-        'pom.xml',
-        'build.gradle',
-        'build.gradle.kts',
-      }) or vim.fs.root(bufnr, { '.git' })
-      if root then
-        on_dir(root)
-      end
-    end,
-  })
-  gate.gate('kotlin_language_server', kotlin_blocked)
+    -- Sent via workspace/didChangeConfiguration (nvim ships config.settings
+    -- that way): the bundled compiler otherwise analyzes at jvmTarget 1.8
+    -- and flags every dependency built for 9+ with false "cannot inline".
+    settings = { kotlin = { compiler = { jvm = { target = '21' } } } },
+    root_dir = kotlin_root,
+  }
+end
 
+function M.setup()
+  vim.lsp.config('jdtls', {
+    cmd = jdtls_cmd,
+    filetypes = { 'java' },
+    -- classFileContentsSupport lets jdtls answer `jdt://` locations with the
+    -- class source; config/lsp_sources.lua reads them back through the
+    -- `java/classFileContents` request.
+    init_options = { extendedClientCapabilities = { classFileContentsSupport = true } },
+  })
+  gate.gate('jdtls', jdtls_blocked)
+
+  local kname, kcfg = kotlin_server()
+  vim.lsp.config(kname, kcfg)
+  gate.gate(kname, function(bufnr)
+    return kotlin_blocked(kname, bufnr)
+  end)
+
+  lsp_sources.setup()
   memory.setup()
 end
 

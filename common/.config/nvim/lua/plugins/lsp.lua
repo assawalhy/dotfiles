@@ -29,8 +29,8 @@ return {
       for _, server in ipairs { 'bashls', 'clangd', 'pyright', 'ts_ls', 'eslint', 'biome', 'intelephense', 'html', 'lua_ls' } do
         gate.gate(server)
       end
-      -- jdtls + kotlin_language_server: JVM servers with their own memory
-      -- guard, heap cap and direct-`java` launch (config/java.lua).
+      -- jdtls + Kotlin (kotlin_lsp, mason kls fallback): JVM servers with
+      -- their own memory guard, heap cap and launch details (config/java.lua).
       require('config.java').setup()
     end,
   },

@@ -1,16 +1,21 @@
 -- RAM budget for JVM language servers.
 --
--- jdtls and kotlin_language_server are 0.7-1.5 GiB processes, so both the
--- decision to start one and the decision to keep one live here instead of in
--- each server's config. Servers are gated through config.lsp_gate, which is
--- also what keeps oversized buffers LSP-free.
+-- jdtls and the Kotlin servers (kotlin_lsp, or kotlin_language_server as
+-- its fallback) are 0.7-1.5 GiB processes, so the decision to start one
+-- and the decision to keep one live here instead of in each server's
+-- config. Servers are gated through config.lsp_gate, which is also what
+-- keeps oversized buffers LSP-free.
 local M = {}
 
 local START_BYTES = 2 * 1024 ^ 3 -- need this much to spawn a JVM
 local STOP_BYTES = 1536 * 1024 ^ 2 -- this little and running ones are stopped
+-- kotlin_lsp is the IntelliJ backend: a larger heap ceiling plus a Gradle
+-- import daemon, so dips below STOP_BYTES are routine on a busy box and
+-- stopping there killed the server mid-session on a 16 GiB machine.
+local STOP_FLOORS = { kotlin_lsp = 768 * 1024 ^ 2 }
 local WATCH_INTERVAL_MS = 20000
 
-local watched = { jdtls = true, kotlin_language_server = true }
+local watched = { jdtls = true, kotlin_language_server = true, kotlin_lsp = true }
 local warned = {}
 local timer
 
@@ -51,10 +56,15 @@ function M.block(name)
   return 'not enough free memory'
 end
 
-local function stop_watched(reason, silent)
+---@param reason string
+---@param silent boolean|nil
+---@param floors table<string, integer>|nil per-server RAM floors; nil stops every watched client
+local function stop_watched(reason, silent, floors)
+  local free = M.free()
   local stopped = {}
   for _, client in ipairs(vim.lsp.get_clients()) do
-    if watched[client.name] then
+    local limit = floors and (floors[client.name] or STOP_BYTES) or math.huge
+    if watched[client.name] and free < limit then
       stopped[#stopped + 1] = client.name
       client:stop(true)
     end
@@ -71,9 +81,7 @@ local function start_watch()
   end
   timer = vim.uv.new_timer()
   timer:start(WATCH_INTERVAL_MS, WATCH_INTERVAL_MS, vim.schedule_wrap(function()
-    if M.free() < STOP_BYTES then
-      stop_watched(('below %.1f GiB'):format(STOP_BYTES / 1024 ^ 3))
-    end
+    stop_watched('low RAM', nil, STOP_FLOORS)
   end))
 end
 
@@ -87,6 +95,7 @@ end
 local REAP_NEEDLES = {
   'mason/packages/jdtls/',
   'mason/packages/kotlin-language-server/',
+  'kotlin-lsp/', -- official server; survives as jbr `java` under its install dir
 }
 local ADOPTERS = { systemd = true } -- both init and `systemd --user` report comm "systemd"
 
