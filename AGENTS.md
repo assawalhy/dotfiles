@@ -191,7 +191,8 @@ Two kinds of artifacts, two source-of-truth rules:
   Tools: `context7` (MCP docs), `plannotator` (plan/code review CLI + sem
   sidecar + runtimes, via its official installer), `typescript-lsp`, `graphify`
   (knowledge-graph CLI; the PyPI `graphifyy` package's own `graphify install`
-  handles the per-harness skill copy).
+  handles the per-harness skill copy), `zvec-grep` (local semantic workspace
+  search; npm `@zvec/zvec-grep` + `zg install` writes the per-harness MCP entry).
 
 `setup/agent-skills.sh` modes: `--list` (catalog with installed markers),
 `--all` (install every item), `--dry-run`, `--context` (prints how committed

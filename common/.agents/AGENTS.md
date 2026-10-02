@@ -141,3 +141,11 @@ tweak) or when my message already is the plan. When unsure, plan.
   how to name a class, how to shape an aggregate or bounded context, or whether existing
   structure is correct. It detects the repo's own topology (CQRS split, command-only,
   unsplit layered, flat) and conforms to it rather than imposing one shape.
+
+## Personal memory
+
+`~/MEMORY.md` holds local personal context: daily-life tasks, the job search,
+and the Notion databases. Read it only when a task concerns my personal life,
+job search, or Notion workspace; do not load it for coding, infrastructure, or
+dotfiles work. It lives in `$HOME` and is not part of this repo, so it is never
+committed.

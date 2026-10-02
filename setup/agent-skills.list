@@ -33,6 +33,7 @@ agents-skill|grill-me|Cross-examine plans, ideas and proposals|https://github.co
 agents-skill|grill-with-docs|Grill claims with real documentation evidence|https://github.com/mattpocock/skills.git@skills/engineering/grill-with-docs
 agents-skill|tdd|Test-driven development workflow|https://github.com/mattpocock/skills.git@skills/engineering/tdd
 agents-skill|improve-claude-md|Improve CLAUDE.md instruction adherence|https://github.com/humanlayer/skills.git@plugins/improve-claude-md/skills/improve-claude-md
+agents-skill|zvec|Build with the Zvec embedded vector DB (Python & Node)|https://github.com/zvec-ai/zvec-agent-skills.git@skills/zvec
 
 agent-tool|graphify|Any input to a persistent knowledge graph (PyPI graphifyy: skill + graphify install)|setup/agent-tools.sh install graphify
 
@@ -49,3 +50,4 @@ pi-package|tmustier-pi-extensions|pi-extensions: extensions & skills by tmustier
 agent-tool|context7|Up-to-date library docs via MCP (opencode/codex/cursor/claude/pi)|setup/agent-tools.sh install context7
 agent-tool|plannotator|Plan & code review: opencode/claude plugins, pi extension, codex/kiro/gemini hooks|setup/agent-tools.sh install plannotator
 agent-tool|typescript-lsp|Claude Code LSP speedups (claude-only upstream)|setup/agent-tools.sh install typescript-lsp
+agent-tool|zvec-grep|Local semantic workspace search: zg CLI + MCP in every harness (npm @zvec/zvec-grep)|setup/agent-tools.sh install zvec-grep

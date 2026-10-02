@@ -10,7 +10,8 @@
 #                                         print nothing otherwise; exits 0
 #
 # Tools: context7 (MCP docs), plannotator (plan/code review), typescript-lsp
-# (Claude Code LSP speedups), graphify (knowledge-graph CLI + per-harness skill).
+# (Claude Code LSP speedups), graphify (knowledge-graph CLI + per-harness skill),
+# zvec-grep (local semantic workspace search: zg CLI + per-harness MCP).
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -289,6 +290,78 @@ graphify_status() {
   [ "$missing" -eq 0 ] && [ "$ok" -gt 0 ] && printf '%s\n' "$HOME/.agents/tools/graphify"
 }
 
+# ---- zvec-grep: local semantic workspace search (zg CLI + per-harness MCP) ----
+# Ships as the npm CLI @zvec/zvec-grep (Node 22+); `zg install --target <t>`
+# writes a managed `zvec_grep` MCP entry into the harness config and preserves
+# everything around its ZVEC_GREP_START/END markers. zg supports more targets
+# than we detect (qwen, qoder, copilot, vscode, grok); we wire the intersection
+# with the harnesses above and never touch the rest. Index build/search stay
+# explicit CLI actions -- `zg install` only adds the `zvec_grep_search` tool.
+
+ZVEC_GREP_TARGETS="opencode claude codex cursor"
+
+zvec_grep_bin() { # -> path of the zg binary, empty when not installed
+  if [ -x "$HOME/.local/bin/zg" ]; then printf '%s\n' "$HOME/.local/bin/zg"
+  else command -v zg 2>/dev/null; fi
+}
+
+zvec_grep_bin_install() {
+  [ -n "$(zvec_grep_bin)" ] && return 0
+  command -v npm >/dev/null 2>&1 || { printf '  - zvec-grep: npm missing, cannot install @zvec/zvec-grep\n' >&2; return 1; }
+  printf '  + zvec-grep: npm install -g @zvec/zvec-grep\n'
+  # NixOS: nixpkgs' npm has a read-only global prefix; install into ~/.local
+  # (its bin is already on PATH), mirroring setup-os's NPM_G.
+  if [ -e /etc/NIXOS ]; then
+    env "npm_config_prefix=$HOME/.local" npm install -g @zvec/zvec-grep --no-audit --no-fund || return 1
+  else
+    npm install -g @zvec/zvec-grep --no-audit --no-fund || return 1
+  fi
+  [ -n "$(zvec_grep_bin)" ]
+}
+
+zvec_grep_target_config() { # <target> -> config file zg writes its MCP entry to
+  case "$1" in
+    opencode) opencode_cfg ;;
+    claude)   printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude.json}" ;;
+    codex)    printf '%s\n' "$HOME/.codex/config.toml" ;;
+    cursor)   printf '%s\n' "$HOME/.cursor/mcp.json" ;;
+    *) return 1 ;;
+  esac
+}
+
+zvec_grep_target_install() { # <target>
+  local zg
+  zg="$(zvec_grep_bin)"
+  [ -n "$zg" ] || return 0
+  printf '  + zvec-grep: connecting %s\n' "$1"
+  "$zg" install --target "$1" --yes
+}
+
+zvec_grep_target_status() { # <target>
+  local cfg
+  cfg="$(zvec_grep_target_config "$1")" || return 1
+  [ -f "$cfg" ] && grep -q 'zvec_grep' "$cfg"
+}
+
+zvec_grep_install() {
+  zvec_grep_bin_install || return 1
+  local t
+  for t in $ZVEC_GREP_TARGETS; do
+    harness_present "$t" && zvec_grep_target_install "$t"
+  done
+  return 0
+}
+
+zvec_grep_status() {
+  [ -n "$(zvec_grep_bin)" ] || return 1
+  local ok=0 missing=0 t
+  for t in $ZVEC_GREP_TARGETS; do
+    harness_present "$t" || continue
+    zvec_grep_target_status "$t" && ok=$((ok+1)) || missing=$((missing+1))
+  done
+  [ "$missing" -eq 0 ] && [ "$ok" -gt 0 ] && printf '%s\n' "$HOME/.agents/tools/zvec-grep"
+}
+
 # ---- dispatch ----
 # install failures propagate (agent-skills.sh turns them into "! failed");
 # status always exits 0 per the contract above.
@@ -303,8 +376,10 @@ case "$CMD:$TOOL" in
   status:typescript-lsp) typescript_lsp_status ;;
   install:graphify)      graphify_install; rc=$? ;;
   status:graphify)       graphify_status ;;
+  install:zvec-grep)     zvec_grep_install; rc=$? ;;
+  status:zvec-grep)      zvec_grep_status ;;
   *)
-    printf 'usage: setup/agent-tools.sh <install|status> <context7|plannotator|typescript-lsp|graphify>\n' >&2
+    printf 'usage: setup/agent-tools.sh <install|status> <context7|plannotator|typescript-lsp|graphify|zvec-grep>\n' >&2
     exit 1 ;;
 esac
 
