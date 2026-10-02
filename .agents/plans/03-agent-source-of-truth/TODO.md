@@ -13,6 +13,10 @@
 - [x] Update `AGENTS.md` "Agent Skills & Shared Context" ownership map
 - [x] Run `link-files --fix` (backs up old files) then `link-files --audit` — both context files symlinked; audit green for agent paths
 - [x] Live-check `agent-tools.sh install graphify` — installed to opencode/claude/codex/pi/kiro; status marker prints; CLAUDE.md symlink untouched
+- [x] `.gitignore`: root-anchored `/.claude/` capture exclusion (comment: tool/runtime-owned; `common/.claude/` unaffected)
+- [x] Revert the uncommitted `link-ignore.txt` `.claude/plugins` line (superseded by the `.gitignore` rule)
+- [x] Link the missing `common/.config/nvim/lua/config/lsp_sources.lua` (`--fix`; required by `java.lua`, committed in c92aefa)
+- [x] `--audit` clean on this machine
 - [ ] Fresh-machine dry run: scratch HOME, `agent-skills.sh --list` + `--dry-run` + `link-files --audit`
-- [ ] Run `bats tests/link-files.bats` (full suite green)
-- [ ] Commit with `agents:` scope
+- [x] Run `bats tests/link-files.bats` (full suite green — 99 ok, 0 not ok)
+- [x] Commit with `agents:` scope

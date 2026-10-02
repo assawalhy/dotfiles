@@ -81,3 +81,38 @@ over `~/.agents/AGENTS.md`.
 4. Update docs (step 66, AGENTS.md ownership map).
 5. link-files `--fix` (backups) + audit green.
 6. Fresh-machine dry run in scratch HOME + full bats suite.
+
+## Follow-up (2026-10-03) — `~/.claude` audit boundary
+
+`~/.claude` is a *linked dir* (because `CLAUDE.md` is linked there), so
+`--audit`'s refresh scan treats every real file under it as an `[unlinked]`
+capture candidate. Plugin/tool installs and Claude Code's runtime state keep
+landing there: agents, commands, skills (awesome-agent plugin + agent-tools),
+backups, cache, sessions, telemetry, settings.json.
+
+Decision: scope the whole directory out of capture with a **root-anchored
+`/.claude/` entry in `.gitignore`** (gitignore is already a documented
+capture filter in refresh_scan, covered by tests). Only
+`common/.claude/CLAUDE.md` is committed and linked; everything home-only under
+`~/.claude` becomes invisible to `--refresh`/`--audit` without enumerating
+runtime dirs.
+
+- Root-anchored (`/.claude/`, not `.claude/`): `common/.claude/` stays visible
+  to git, so new authored context files are never silently gitignored
+  (verified in a scratch repo).
+- Rejected: enumerating deny entries in link-ignore.txt — maintenance churn as
+  Claude Code grows new runtime dirs.
+- Rejected: `!` re-include support in link-ignore.txt — core-matcher change,
+  and a forgotten re-include silently unlinks committed files (the audit
+  cannot see ignored repo files).
+- The uncommitted `link-ignore.txt` `.claude/plugins` line is superseded by
+  the `.gitignore` rule and gets reverted (never landed in a commit). The
+  committed herdr-hook entry stays (ownership note, harmless).
+
+Also: `common/.config/nvim/lua/config/lsp_sources.lua` (added in c92aefa,
+`require`d by `java.lua`) is committed but not linked in `$HOME` — `--fix`
+links it.
+
+Milestone 7:
+- `.gitignore`: `/.claude/` + comment; revert the `.claude/plugins` link-ignore line.
+- `link-files --fix` → `--audit` clean → bats suite green → commit.

@@ -13,3 +13,8 @@ __pycache__/
 !.omo/drafts/**
 !.omo/notepads/
 !.omo/notepads/**
+
+# ~/.claude is tool/runtime-owned (plugin installs, Claude Code state, herdr
+# hook). Excluded from link-files capture/audit. Root-anchored: common/.claude/
+# (tracked context) is unaffected.
+/.claude/
