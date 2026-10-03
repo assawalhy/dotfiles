@@ -51,6 +51,7 @@ gh                  pacman:github-cli check:gh p1
 git-delta           apt:-  dnf:-  check:delta        p2  # not packaged on Debian; see [cargo]
 jp check:jp p2
 ffmpeg check:ffmpeg p2
+imagemagick check:magick p2  # nvim image previews + git image textconv downscale
 pandoc check:pandoc p2
 gitui               apt:-  dnf:-  check:gitui        p2  # not in Debian/Ubuntu repos
 lazygit             apt:-  check:lazygit          p2  # not in Debian/Ubuntu repos
