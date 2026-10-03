@@ -237,6 +237,12 @@ in
     # purely by window title — upstream targets Firefox + Clapper ("may work
     # with few other browsers"); see the dconf note below for the Brave caveat.
     gnomeExtensions.pip-on-top
+    # Top-bar system stats (RAM % + CPU package temperature), the GNOME
+    # counterpart of macOS Stats. Sensors read /sys/class/hwmon directly
+    # (coretemp here), so no lm_sensors/libgtop is needed. Presets live in the
+    # org/gnome/shell/extensions/astra-monitor dconf defaults below; enabling
+    # follows the org/gnome/shell enabled-extensions entry there.
+    gnomeExtensions.astra-monitor
 
     ## [dev]
     docker
@@ -320,12 +326,25 @@ in
           enabled-extensions = [
             "ding@rastersoft.com"
             "pip-on-top@rafostar.github.com"
+            "monitor@astraext.github.io"
           ];
         };
         # The extension only calls make_above() by default; sticking to all
         # visible workspaces (its `stick` key) is opt-in and defaults to false.
         "org/gnome/shell/extensions/pip-on-top" = {
           stick = true;
+        };
+        # Astra Monitor presets: RAM % on the bar (its default is a bare bar
+        # with no number) plus the CPU package temperature sensor. The sensor
+        # value is the JSON its prefs dropdown generates: service hwmon, device
+        # `coretemp`, sensor label `Package id 0`, attribute input (temp1_input
+        # in /sys/class/hwmon). Other sensors (nvme, wifi, pch) are one click
+        # away in the extension preferences.
+        "org/gnome/shell/extensions/astra-monitor" = {
+          memory-header-percentage = true;
+          sensors-header-show = true;
+          sensors-header-sensor1 = ''{"service":"hwmon","path":["coretemp","Package id 0","input"]}'';
+          sensors-header-sensor1-show = true;
         };
       };
     }
