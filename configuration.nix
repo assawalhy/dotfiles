@@ -196,6 +196,7 @@ in
     jp
     jq
     ffmpeg
+    imagemagick # magick; nvim image previews + git textconv downscale (in packages.list)
     pandoc
     gitui
     unstable.lazygit # >= 0.64 for git.diffRenderers; see the `unstable` let-binding

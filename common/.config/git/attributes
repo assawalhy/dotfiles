@@ -1,0 +1,16 @@
+# Global gitattributes, wired via core.attributesFile in ~/.gitconfig.
+# Raster images use the "img" textconv driver (git-img-textconv) so diffs
+# carry an inline-image escape instead of "Binary files differ"; the pager
+# (git-img-pager) renders it. SVGs are deliberately absent: their text diff
+# is more useful than a rendered preview.
+*.png diff=img
+*.jpg diff=img
+*.jpeg diff=img
+*.gif diff=img
+*.webp diff=img
+*.bmp diff=img
+*.tiff diff=img
+*.tif diff=img
+*.avif diff=img
+*.heic diff=img
+*.ico diff=img

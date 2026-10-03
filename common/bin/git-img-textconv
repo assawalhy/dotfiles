@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# git textconv for raster images: turn the blob temp file in $1 into an
+# iTerm2 inline-image escape (OSC 1337), which WezTerm renders. git-img-pager
+# keeps these lines away from delta, which strips them (dandavison/delta#1399).
+#
+# ImageMagick downscales the preview when `magick` (or `convert`) is present;
+# without it the original bytes are sent. Blobs above the cap become a short
+# text placeholder so a diff can never balloon to megabytes of base64.
+#
+# Portable base64: BSD/macOS `base64` has no -w flag, so the newlines it emits
+# are stripped with tr.
+
+set -u
+
+file="${1:-}"
+if [ -z "$file" ] || [ ! -f "$file" ]; then
+    exit 0
+fi
+
+# iTerm2 wants the file name in the `name=` parameter base64-encoded.
+name=$(basename "$file" | base64 | tr -d '\n')
+
+max_bytes=$((25 * 1024 * 1024))
+
+preview="$file"
+tmp=""
+magick_cmd=""
+if command -v magick >/dev/null 2>&1; then
+    magick_cmd=magick
+elif command -v convert >/dev/null 2>&1; then
+    magick_cmd=convert
+fi
+
+if [ -n "$magick_cmd" ]; then
+    tmp=$(mktemp) || tmp=""
+    if [ -n "$tmp" ] && "$magick_cmd" "$file" -resize '1000x1000>' "$tmp" 2>/dev/null; then
+        preview="$tmp"
+    else
+        [ -n "$tmp" ] && rm -f "$tmp"
+        tmp=""
+    fi
+fi
+
+size=$(wc -c < "$preview" | tr -d ' ')
+if [ "$size" -gt "$max_bytes" ]; then
+    printf '[image: %s (%s bytes) too large to inline]\n' "$(basename "$file")" "$size"
+    [ -n "$tmp" ] && rm -f "$tmp"
+    exit 0
+fi
+
+printf '\033]1337;File=name=%s;inline=1;height=12;preserveAspectRatio=1:' "$name"
+base64 < "$preview" | tr -d '\n'
+printf '\a\n'
+
+[ -n "$tmp" ] && rm -f "$tmp"
+exit 0

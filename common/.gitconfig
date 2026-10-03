@@ -26,8 +26,12 @@
     autoSetupRemote = true
 
 [core]
-    pager = delta
+    # git-img-pager pipes text through delta and writes image escapes straight
+    # to the terminal -- delta drops them (dandavison/delta#1399). The
+    # fallback keeps diffs working on machines without python3.
+    pager = git-img-pager || delta --paging=never
     excludesFile = ~/.gitignore_global
+    attributesFile = ~/.config/git/attributes
 
 [interactive]
     diffFilter = delta --color-only
@@ -38,10 +42,10 @@
   preloadindex = true
 
 [pager]
-  diff = delta
-  log = delta
-  reflog = delta
-  show = delta
+  diff = git-img-pager || delta --paging=never
+  log = git-img-pager || delta --paging=never
+  reflog = git-img-pager || delta --paging=never
+  show = git-img-pager || delta --paging=never
 
 [status]
   branch = true
@@ -58,3 +62,8 @@
 
 [diff]
     colorMoved = default
+
+# Raster images are diffed as inline-image escapes (see git-img-textconv and
+# git-img-pager); the attribute globs live in ~/.config/git/attributes.
+[diff "img"]
+    textconv = git-img-textconv

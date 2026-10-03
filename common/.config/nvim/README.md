@@ -110,6 +110,19 @@ Leader key: `<space>`
 | `<leader>gd`  | n    | Project diff preview           | vgit         |
 | `<leader>gq`  | n    | Project hunks to quickfix      | vgit         |
 | `<leader>gx`  | n    | Toggle diff preference         | vgit         |
+| `<leader>ip`  | n    | Preview image at cursor        | snacks.image |
+
+## Images & Non-Text Files
+
+- **Images** (`png`, `jpg`, `gif`, `webp`, `svg`, …) are previewed in a
+  floating window by `snacks.image` when opened; `<leader>ip` previews the
+  image path under the cursor. WezTerm has no kitty unicode placeholders, so
+  inline cell-anchored rendering is unavailable and floats are used instead.
+- **Non-text files** (pdf, video, audio, archives, binaries) prompt on open:
+  `Open externally (xdg-open)` (default) or `Keep in Neovim`. Known
+  extensions are intercepted before the file is read; unlisted binaries are
+  caught by a NUL-byte sniff. Cancel leaves an empty non-writable buffer.
+- To bypass the prompt for one file: `:noautocmd edit ++bin <file>`.
 
 ## CompetiTest (`cp` prefix)
 
