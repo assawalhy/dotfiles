@@ -9,7 +9,6 @@
 - [x] verify envfs: `/usr/bin/env` + `/bin/bash` resolve (`fuse envfs` on /usr/bin + /bin; `bash -c` ok)
 - [x] verify opencode image paste with no manual `LD_LIBRARY_PATH` → `[Image 1]`
 - [x] update epic 04 (D5 delivered via this epic)
-- [ ] commit — deferred (working tree holds other epics' staged changes; avoid a mixed commit)
 
 ## Playwright Chromium follow-up (2026-09-28)
 
@@ -31,4 +30,14 @@
 - [x] final verification: `bats tests/link-files.bats` 99 ok / 0 not ok;
       `bats tests/select.bats` all ok; `link-known-issues.bats` still all
       fail by design (4 documented bugs untouched)
-- [ ] commit (with epic 05's deferred commit, or separately)
+
+## OpenCode Desktop AppImage (2026-10-03)
+
+- [x] download 2.0.22 AppImage → `~/Applications/opencode-desktop.AppImage`;
+      sha512 matches updater feed
+- [x] `nix profile install nixpkgs#appimage-run`
+- [x] wrapper `~/.local/bin/opencode-desktop` (executable)
+- [x] `.desktop` entry + icon + `x-scheme-handler/opencode` registered
+- [x] launch smoke: process alive ≥15 s, no missing-lib errors
+- [x] user confirms window opens / GNOME launcher entry
+- [x] final: record installed version + update command in PLAN.md

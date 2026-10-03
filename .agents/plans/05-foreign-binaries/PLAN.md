@@ -142,3 +142,74 @@ Layer 1 (`nix-ld.libraries`) is extended with Chromium's dlopen deps.
 - Transitive `libwayland-client` regresses epic 04 opencode paste.
 - Second-wave dlopen gap (fonts) leaves screenshots blank while navigation passes.
 - `configuration.nix` carries unrelated unstaged edits — keep the diff surgical.
+
+---
+
+# Follow-up: OpenCode Desktop AppImage (2026-10-03)
+
+## Goal
+Install the **latest** OpenCode Desktop (V2) for the current user on this
+NixOS host, launchable from GNOME. No sudo, no system rebuild.
+
+## Findings (verified 2026-10-03)
+- Latest desktop build is **2.0.22** (released 2026-10-02) at
+  `opencode.ai/files/bin/2.0.22/opencode-desktop-linux-x86_64.AppImage`
+  (245,258,790 bytes); the updater feed
+  `https://opencode.ai/update/api/latest/desktop/opencode/latest-linux.yml`
+  publishes its **sha512** (`WF+y1xag…ddqA==`).
+- `opencode.ai/v2/docs` download links are stale (2.0.6); the feed above is
+  authoritative for "latest".
+- nixpkgs is **not** an option for V2: stable 26.05 `opencode-desktop` is
+  1.15.10, unstable/master 1.18.34 — both V1 (extends this epic's existing
+  "V1 downgrade" rejection).
+- The upstream repo flake v2.0.22 exposes `opencode-desktop`, but it builds
+  from source (bun + electron-builder), uncached — heavy local build.
+- `appimage-run` is in nixpkgs; user registry `flake:nixpkgs` → unstable;
+  profile already holds `nix profile` installs (nethogs, unzip, zapfast).
+- `~/.local/bin` and `~/.nix-profile/bin` are on PATH; `zapfast.desktop`
+  shows the local desktop-entry convention.
+- Launch behavior (verified): the app bundles its own CLI
+  (`~/.config/ai.opencode.desktop/cli/2.0.22/opencode-cli serve --service`)
+  and **takes over the shared background service** (port 49374). Each launch
+  restarts the service once; sessions reconnect. Observed 3/3.
+- The AppImage's own desktop entry runs `AppRun --no-sandbox %U`; the wrapper
+  mirrors `--no-sandbox`. Runs as native Wayland (Electron 44, ozone-wayland).
+
+## Decisions
+- **AD1 — Official AppImage at `~/Applications/opencode-desktop.AppImage`,
+  sha512-verified against the feed.** Latest V2, official artifact.
+  *Rejected:* nixpkgs (V1), repo flake build (heavy/uncached), .deb/.rpm
+  (need FHS anyway, no gain), flatpak (not enabled, system rebuild).
+- **AD2 — `nix profile install nixpkgs#appimage-run`.** The FHS escape hatch
+  for GUI apps (this epic's D4); user-scope, no rebuild.
+- **AD3 — User-scope integration:** wrapper
+  `~/.local/bin/opencode-desktop`, desktop entry
+  `~/.local/share/applications/opencode-desktop.desktop` (+
+  `x-scheme-handler/opencode`), icon in hicolor.
+- **AD4 — Updates = re-download latest AppImage + verify sha512.** Whether
+  electron-updater fires under appimage-run is unverified (needs the
+  `APPIMAGE` env var); don't promise it. No helper script yet.
+
+## Update recipe (recorded 2026-10-03, installed 2.0.22)
+```sh
+feed=https://opencode.ai/update/api/latest/desktop/opencode/latest-linux.yml
+ver=$(curl -fsSL "$feed" | awk '/^version:/{print $2}')
+curl -fL -o ~/Applications/opencode-desktop.AppImage \
+  "https://opencode.ai/files/bin/$ver/opencode-desktop-linux-x86_64.AppImage"
+# then compare sha512 to the feed's AppImage entry (base64 -> hex) and relaunch
+```
+
+## Milestones
+1. Download + sha512 verify.
+2. Install appimage-run.
+3. Wrapper + .desktop + icon + scheme handler.
+4. Launch smoke (process alive, no missing-lib errors).
+5. User confirms window/launcher entry.
+
+## Risks
+- Launch hands over the shared service (see Findings) — active TUI/agent
+  sessions reconnect; avoid launching mid-critical-run.
+- Auto-update may not fire under appimage-run — manual re-download documented.
+- 245 MB download + ~245 MB extracted cache (`~/.cache/appimage-run/`).
+- Resolved: sandbox (upstream `--no-sandbox`, mirrored) and Wayland
+  (native ozone-wayland confirmed).

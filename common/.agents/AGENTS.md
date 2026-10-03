@@ -164,3 +164,10 @@ When a site blocks automation with a login wall, a bot check, a captcha, or a
 browser, then tell you to continue. Do not abandon the site or quietly
 substitute another method, such as web search, for the same information. Wait
 for my go-ahead, then resume from where the run stopped.
+
+## Transcription (audio → text)
+
+Use local whisper.cpp for any audio transcription; never upload audio to a cloud service.
+Local models are cached in `~/.cache/whisper.cpp/` and downloaded from HuggingFace.
+Long recordings: run in the background and keep working; do not poll for completion.
+
