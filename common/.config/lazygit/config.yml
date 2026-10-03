@@ -11,3 +11,15 @@ gui:
 git:
   diffRenderers:
     - command: delta --dark --paging=never
+
+# Inline images cannot be drawn inside lazygit panes (its UI library drops
+# unknown OSC sequences), so `I` suspends lazygit and renders the file's diff
+# in the real terminal through the same pager git uses. Works for images and
+# text; untracked images show the file itself. `o` (xdg-open) still opens the
+# file in the GUI.
+customCommands:
+  - key: 'I'
+    context: 'files'
+    command: 'git-img-preview {{.SelectedFile.Name | quote}}'
+    output: 'terminal'
+    description: 'Preview image / diff in terminal'

@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""Image-aware git pager: text through delta, image escapes straight out.
+
+git-img-textconv turns image blobs into iTerm2 inline-image escapes
+(OSC 1337). delta cannot pass those through -- it parses ANSI and drops
+non-SGR elements (dandavison/delta#1399), even with --raw. This wrapper is the
+pager instead: it streams text to a delta child exactly as before, but when a
+diff line carries the image escape it finishes the current delta run and
+writes the escape to the terminal itself, preserving order.
+
+Only the first 4 MiB of input are buffered while hunting for an image escape;
+if none appears, the rest streams through delta unchanged. Non-supporting
+terminals and a missing delta fall back to a plain pass-through.
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+
+DELTA_ARGS = ["delta", "--paging=never"]
+IMAGE_MARK = b"\x1b]1337;File="
+BEL = b"\x07"
+SCAN_LIMIT = 4 * 1024 * 1024
+
+
+def image_supported():
+    if os.environ.get("GIT_IMG_PAGER_FORCE"):
+        return True
+    if os.environ.get("GIT_IMG_PAGER_DISABLE"):
+        return False
+    if not sys.stdout.isatty():
+        return False
+    return (
+        os.environ.get("TERM_PROGRAM") in ("WezTerm", "iTerm.app", "iTerm2")
+        or os.environ.get("LC_TERMINAL") == "iTerm2"
+        or bool(os.environ.get("WEZTERM_PANE"))
+    )
+
+
+def start_delta():
+    """Start delta as the text renderer; None means passthrough."""
+    if not shutil.which("delta"):
+        return None
+    return subprocess.Popen(DELTA_ARGS, stdin=subprocess.PIPE)
+
+
+def feed(proc, data):
+    """Write to the delta child; False once it is gone (user quit)."""
+    if proc is None:
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+        return True
+    try:
+        proc.stdin.write(data)
+        return True
+    except (BrokenPipeError, ValueError):
+        return False
+
+
+def finish(proc):
+    if proc is None:
+        return
+    try:
+        proc.stdin.close()
+    except (BrokenPipeError, ValueError):
+        pass
+    proc.wait()
+
+
+def line_iter(initial, stream):
+    buf = bytearray(initial)
+    while True:
+        nl = buf.find(b"\n")
+        if nl != -1:
+            yield bytes(buf[:nl])
+            del buf[:nl + 1]
+            continue
+        chunk = stream.read1(1 << 16)
+        if not chunk:
+            if buf:
+                yield bytes(buf)
+            return
+        buf.extend(chunk)
+
+
+def image_line(line):
+    """Return (escape, is_removed) for an image diff line, else None."""
+    i = line.find(IMAGE_MARK)
+    if i == -1:
+        return None
+    j = line.find(BEL, i)
+    if j == -1:
+        return None
+    return line[i:j + 1], b"-" in line[:i]
+
+
+def process_images(initial, stream, proc, out):
+    for line in line_iter(initial, stream):
+        found = image_line(line)
+        if found:
+            escape, removed = found
+            finish(proc)
+            proc = None
+            label = b"--- removed ---" if removed else b"+++ added +++"
+            color = b"\x1b[31m" if removed else b"\x1b[32m"
+            try:
+                out.write(color + label + b"\x1b[0m\n" + escape + b"\n")
+                out.flush()
+            except BrokenPipeError:
+                return
+            continue
+        if proc is None:
+            proc = start_delta()
+        if not feed(proc, line + b"\n"):
+            return
+    finish(proc)
+
+
+def main():
+    stream = sys.stdin.buffer
+    out = sys.stdout.buffer
+    buf = bytearray()
+
+    if not image_supported():
+        proc = start_delta()
+        try:
+            while True:
+                chunk = stream.read1(1 << 16)
+                if not chunk:
+                    break
+                if not feed(proc, chunk):
+                    return 0
+        finally:
+            finish(proc)
+        return 0
+
+    while True:
+        chunk = stream.read1(1 << 16)
+        if not chunk:
+            # No image anywhere: plain delta pass-through.
+            proc = start_delta()
+            try:
+                if not feed(proc, bytes(buf)):
+                    return 0
+            finally:
+                finish(proc)
+            return 0
+        buf.extend(chunk)
+        if IMAGE_MARK in buf:
+            process_images(buf, stream, None, out)
+            return 0
+        if len(buf) >= SCAN_LIMIT:
+            # Too much text for an image to show up early; stream the rest.
+            proc = start_delta()
+            try:
+                if not feed(proc, bytes(buf)):
+                    return 0
+                while True:
+                    chunk = stream.read1(1 << 16)
+                    if not chunk:
+                        break
+                    if not feed(proc, chunk):
+                        return 0
+            finally:
+                finish(proc)
+            return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except BrokenPipeError:
+        try:
+            sys.stdout.close()
+        except BrokenPipeError:
+            pass
+        sys.exit(0)
