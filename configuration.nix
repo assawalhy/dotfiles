@@ -212,7 +212,6 @@ in
     # fix; switch back to pkgs.obsidian once 26.05 backports it.
     unstable.obsidian
     typora
-    copyq
     # Deferred (2026-09-24): its source build full-clones the MEGAsync repo and
     # GitHub cancels the long HTTP/2 stream mid-pack ("curl 92 HTTP/2 stream 7
     # reset by server"), blocking the entire switch. Everything else it needs is
@@ -243,6 +242,11 @@ in
     # org/gnome/shell/extensions/astra-monitor dconf defaults below; enabling
     # follows the org/gnome/shell enabled-extensions entry there.
     gnomeExtensions.astra-monitor
+    # Clipboard history / manager (replaces CopyQ). nixpkgs patches this one
+    # (extensionOverrides.nix, PR #469919) to load Gda + GSound from its own
+    # build inputs, so no system-wide libgda6/gsound wiring is required.
+    # Enabled via the org/gnome/shell dconf default below.
+    gnomeExtensions.copyous
 
     ## [dev]
     docker
@@ -327,6 +331,7 @@ in
             "ding@rastersoft.com"
             "pip-on-top@rafostar.github.com"
             "monitor@astraext.github.io"
+            "copyous@boerdereinar.dev"
           ];
         };
         # The extension only calls make_above() by default; sticking to all

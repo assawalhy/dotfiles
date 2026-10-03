@@ -62,7 +62,6 @@ mpv !macos check:mpv p3
 syncthing check:syncthing p3
 obsidian            cask:obsidian  aur:obsidian check:obsidian p3
 typora              cask:typora  aur:typora check:typora p3
-copyq               cask:copyq check:copyq p3
 megasync            cask:megasync  aur:megasync-bin  pacman:-  apt:-  dnf:- check:megasync p4
 zathura             !macos check:zathura p3
 zathura-pdf-mupdf   !macos p3
