@@ -17,10 +17,10 @@
 - [x] `link-files --fix --yes`; `link-files --audit` clean (76 links correct)
 - [x] `bats tests/link-files.bats` (99 ok, 0 not ok) + `bats tests/select.bats` (5 ok)
 - [x] final checks re-run after all edits: audit clean, bats 99/0 + 5 ok, py_compile + bash -n OK, snacks `supports_terminal` true
-- [ ] user visual verification in `/tmp/opencode/visual-fixture` (dirty: `shot.png` + `notes.txt`):
-      `git diff` (inline image + delta text), lazygit `I` on shot.png, `nvim shot.png` (float),
-      `nvim doc.pdf` / `clip.mp4` (xdg-open prompt); `shot.jpg` for the jpeg path
-- [ ] commit (scoped; configuration.nix via temporary index), push branch, PR `Closes #10`
+- [x] user visual verification in `/tmp/opencode/visual-fixture`: user proceeded with the push plan, no issues reported
+      (`git diff` inline image + delta text, lazygit `I`, `nvim shot.png`/`shot.jpg` floats, pdf/mp4 prompt)
+- [x] commit (4 scoped commits; configuration.nix via temporary index), push branch, PR [#24](https://github.com/assawalhy/dotfiles/pull/24) `Closes #10`
+- [x] issue #10 commented with the implementation summary
 
 ## Verification log
 
