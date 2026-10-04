@@ -689,10 +689,14 @@ session_context() {
 # Mirror read_ignores: whole-line comments and blank lines dropped,
 # lines without a "<context>: " pair are malformed and ignored. A missing
 # link-context.txt is an empty neglect list, not an error.
+# Surrounding whitespace is trimmed BEFORE the filters, not merely skipped: an
+# indented "  x11: .Xmodmap" parsed its context as "  x11", so the file was
+# neglected on every session, including its own x11 one.
 read_contexts() {
   CTX_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   [ -f "$CTX_FILE" ] || return 0
-  sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' -e '/: /!d' "$CTX_FILE" \
+  sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+      -e '/^#/d' -e '/^$/d' -e '/: /!d' "$CTX_FILE" \
     > "$CTX_TMP" 2>/dev/null || :
 }
 
