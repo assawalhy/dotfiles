@@ -28,6 +28,10 @@ Choose the evidence source before the retrieval mode.
 
 <!-- ZVEC_GREP_END -->
 
+## General instructions exists in the global AGENTS.md
+
+@~/.agents/AGENTS.md
+
 ## Skills — load them proactively
 
 When a request matches an available skill's description, load and follow that skill before doing
@@ -57,7 +61,7 @@ If the bundled build itself fails to launch with
 `error while loading shared libraries`, that is a host packaging gap, not
 something to work around: tell me which library is missing. On NixOS the fix
 belongs in `programs.nix-ld.libraries` in `configuration.nix`, not in a
-per-command `LD_LIBRARY_PATH` — mixing store paths from different closure
+per-command `LD_LIBinRARY_PATH` — mixing store paths from different closure
 generations pulls in a mismatched glibc.
 
 If a task genuinely needs the desktop app's browser, say so instead of working
