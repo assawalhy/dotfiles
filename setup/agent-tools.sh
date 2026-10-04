@@ -52,8 +52,20 @@ harness_status_print() { [ -n "${1:-}" ] && printf '%s\n' "$1"; }
 # file and never writes when jq cannot parse the existing file.
 jq_add_key() {
   local p="$1" assign="$2" tmp
-  [ -f "$p" ] || { printf '  - %s missing, nothing to edit\n' "$p"; return 0; }
   command -v jq >/dev/null 2>&1 || { printf '  - jq missing, cannot edit %s\n' "$p"; return 0; }
+  # Create the config rather than skipping it. On a fresh machine no config file
+  # exists yet, and bailing out here meant context7/plannotator/zvec-grep wired
+  # nothing at all. Writing `{}` first is safe: setup/steps/68-opencode-config.sh
+  # merges the committed template *underneath* whatever ends up here, so these
+  # keys and the committed defaults both survive.
+  if [ ! -e "$p" ]; then
+    mkdir -p "$(dirname "$p")" 2>/dev/null || true
+    if ! printf '{}\n' > "$p" 2>/dev/null; then
+      printf '  - %s missing and could not be created\n' "$p"
+      return 0
+    fi
+    printf '  + %s: created\n' "$p"
+  fi
   tmp="$(mktemp "${TMPDIR:-/tmp}/agent-tools.XXXXXX")" || return 0
   if ! jq --indent 2 "$assign" "$p" > "$tmp" 2>/dev/null; then
     printf '  - %s: not valid JSON for jq; left unchanged\n' "$p"
@@ -70,7 +82,10 @@ opencode_cfg() {
   for f in "$HOME/.config/opencode/opencode.jsonc" "$HOME/.config/opencode/opencode.json" "$HOME/.config/opencode.jsonc" "$HOME/.config/opencode.json"; do
     [ -f "$f" ] && { printf '%s\n' "$f"; return 0; }
   done
-  return 1
+  # Nothing exists yet (fresh machine). Return the path 68-opencode-config.sh
+  # seeds rather than failing, so the MCP key still gets written; 68 tops the
+  # committed defaults back up underneath it.
+  printf '%s\n' "$HOME/.config/opencode/opencode.json"
 }
 
 context7_opencode_install() {

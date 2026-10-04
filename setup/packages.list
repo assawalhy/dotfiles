@@ -28,6 +28,7 @@
 git check:git p1
 zsh check:zsh p1
 tmux check:tmux p1
+jq check:jq p1  # setup/agent-tools.sh jq_add_key + steps 68/69 patch opencode's JSON configs; without it they silently no-op
 neovim check:nvim p2
 tree-sitter-cli pacman:tree-sitter check:tree-sitter p2  # nvim-treesitter needs it to compile parsers
 unzip                 check:unzip    p2  # mason unpacks .zip packages (kotlin-language-server)
