@@ -13,13 +13,13 @@
 `link-files.bash` is covered by a bats suite in `tests/`. Run it with:
 
 ```bash
-bats tests/link-files.bats          # main suite (expected: 99 ok, 0 not ok)
-bats tests/link-known-issues.bats   # known-bug encodings (expected: all fail)
+bats tests/link-files.bats          # main suite (expected: 112 ok, 0 not ok)
+bats tests/link-known-issues.bats   # known-bug encodings (expected: 3 ok, 1 not ok — #4)
 bats tests/select.bats              # typed multi-select parser (setup-os, agent-skills)
 ```
 
 - **`tests/link-files.bats`** — locks in current behavior: link-, classify-,
-  overlay-, context-, ignore-, refresh-, audit-, picker-, cli-, guard-
+  overlay-, context-, ignore-, refresh-, audit-, picker-, cli-, fix-, guard-
   prefixed tests (filter with `bats --filter '^audit-'`). Tests only the
   committed script; the OS is stubbed (`setup()` stubs `uname` to Linux,
   overlay tests override with `stub_uname Darwin`).
@@ -37,34 +37,43 @@ bats tests/select.bats              # typed multi-select parser (setup-os, agent
   helpers. The helpers run under the bats runner's modern bash; the *script*
   under test must stay bash 3.2 compatible.
 - Session context for neglect filtering via `run_link_sess <wayland|x11|headless>`.
+- The `fix-` tests cover the seventh state, the capture direction (`--refresh`
+  inside `--fix`): into `common` or the OS overlay, `--dry-run` moves nothing,
+  ignored/gitignored candidates never captured, a pattern narrows the scan to
+  the dirs it matches, `--no-capture` stays link-only, a second `--fix` is a
+  no-op, and the `?` other-overlay candidate is reported but never captured.
 - The audit corner-case tests are the regression net: foreign/relative
   symlinks → `[conflict]`, OS-mismatch stales, prefix collisions, dir-prefix
   and `./` ignore entries, pattern narrowing, Xwayland session detection,
-  hard-link/cross-overlay `[relink]`, dir-at-file-path `[conflict]`, and the
-  `--refresh`/`--audit` skip rules.
+  hard-link/cross-overlay `[relink]`, dir-at-file-path `[conflict]`, an
+  ignored+neglected link reported once, and the `--refresh`/`--audit`/`--fix`
+  skip rules.
 
 ## Known Issues
 
-Real bugs encoded as failing tests in `tests/link-known-issues.bats`. Each
+Real bugs encoded as tests in `tests/link-known-issues.bats`. Each
 is a standalone work item: fix `link-files.bash`, the test turns green. The
-file documents the current failure, desired behavior, and where in the code
-the bug lives.
+file documents the failure, the desired behavior, and where in the code
+the bug lives. Fixed entries stay in the file as the regression net.
 
-1. **`--audit --refresh` writes.** `parse_args` only guards `--fix`; `main`
-   checks `is_refresh` before `is_audit`, so `--audit --refresh --yes`
-   silently moves a home file into the repo. Desired: `--audit` is read-only
-   — never write regardless of other flags.
-2. **Leading whitespace in `link-context.txt` breaks neglect.** A
-   `"  x11: .Xmodmap"` line parses the context as `"  x11"` (whitespace
-   kept), so the file is neglected on every session including its own x11.
-   Desired: trim leading whitespace on context lines.
-3. **Ignored + neglected links are double-reported.** A link both in
-   `link-ignore.txt` and neglected for the session is reported as both
-   `i [ignored]` and `x [neglected]`. Desired: report once; `i` wins (the
-   ignore list is explicit config).
+**Fixed** (test green):
+
+1. ~~**`--audit --refresh` writes.**~~ `parse_args` now rejects the pair:
+   `--audit` is read-only by contract, so the combination is contradictory
+   rather than "audit wins".
+2. ~~**Leading whitespace in `link-context.txt` breaks neglect.**~~
+   `read_contexts` trims every line *before* the comment/blank/malformed
+   filters, so an indented `x11: .Xmodmap` keeps its own context.
+3. ~~**Ignored + neglected links are double-reported.**~~ The `x [neglected]`
+   report is skipped for rels already reported as `i [ignored]`
+   (`already_ignored`); the ignore list is explicit config, so it wins.
+
+**Open:**
+
 4. **Non-git repo silently reports zero `[unlinked]`.** (Deliberately
-   unfixed — see Repo Assumptions.) `refresh_scan`'s git error path skips
-   every capture candidate. Kept as documentation only.
+   unfixed — see Repo Assumptions.) In `refresh_scan`, a `git check-ignore`
+   exit status other than 0/1 (i.e. not a repository) empties the kept
+   candidate list. Kept as documentation only.
 
 ## Issue Tracking
 
