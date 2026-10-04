@@ -460,6 +460,35 @@ in
       libXfixes # libXfixes.so.3
       libXrandr # libXrandr.so.2
       libxkbcommon # libxkbcommon.so.0
+
+      # The rest of what playwright-cli's bundled Chromium wants. nix-ld indexes
+      # only the SONAMEs each listed package itself provides, so a package's own
+      # DT_NEEDED entries must be listed too — hence the two groups. Verified
+      # against ~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome: with
+      # these added, `ldd` reports no unresolved libraries.
+      #
+      # Do NOT try to fix this with a per-command LD_LIBRARY_PATH instead. Store
+      # paths from different closure generations get mixed, and a stale
+      # libm.so.6 then fails with `GLIBC_x.y not found` — the exact problem
+      # nix-ld exists to solve. `playwright-cli install-browser --with-deps` is
+      # no help either: it drives apt/dnf, which NixOS does not have.
+      cairo # libcairo.so.2
+      pango # libpango-1.0.so.0
+      cups # libcups.so.2
+      libudev-zero # libudev.so.1
+      # --- required by the four above ---
+      libpng # libpng16.so.16 (cairo)
+      pixman # libpixman-1.so.0 (cairo)
+      libXrender # libXrender.so.1 (cairo)
+      fontconfig # libfontconfig.so.1 (cairo)
+      freetype # libfreetype.so.6 (cairo, pango)
+      fribidi # libfribidi.so.0 (pango)
+      libthai # libthai.so.0 (pango)
+      harfbuzz # libharfbuzz.so.0 (pango)
+      avahi # libavahi-common.so.3 / libavahi-client.so.3 (cups)
+      gnutls # libgnutls.so.30 (cups)
+      zlib # libz.so.1 (cups)
+      # libxcb above already supplies libxcb-render.so.0 and libxcb-shm.so.0.
     ];
   };
 
