@@ -5,7 +5,8 @@
 # Sources are  <repo>/common  and  <repo>/<os>  where <os> is linux or macos.
 # On a path collision the OS overlay file is used. The repo is the source of
 # truth; --refresh captures new files that appeared inside linked dirs back
-# into the repo and symlinks them in place.
+# into the repo and symlinks them in place. --fix resolves every finding
+# --audit reports, capture included, unless --no-capture is given.
 #
 # NOTE: must stay bash 3.2 compatible -- stock macOS /bin/bash is 3.2.57.
 #       No readarray/mapfile, no `declare -A`, no ${v,,}, no globstar.
@@ -82,12 +83,12 @@ log_total() { # registered on collect()'s EXIT: prints whole-run elapsed time
 
 # --------------------------------------------------------------- cli ---
 
-is_help=; is_force=; is_no_backup=; is_dry=; is_yes=; is_refresh=; is_audit=; is_diff=; is_fix=; filter=; pattern_given=
+is_help=; is_force=; is_no_backup=; is_dry=; is_yes=; is_refresh=; is_audit=; is_diff=; is_fix=; is_no_capture=; filter=; pattern_given=
 
 print_help() {
 cat <<EOF
 USAGE:
-  $(basename "$0") [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [--diff] [--fix] [filtering_pattern]
+  $(basename "$0") [--help] [--force] [--no-backup] [--dry-run] [--yes] [--refresh] [--audit] [--diff] [--fix] [--no-capture] [filtering_pattern]
   $(basename "$0") --force '.*nvim/lua.*'
   $(basename "$0") --refresh --dry-run
   $(basename "$0") --audit
@@ -118,10 +119,14 @@ OPTIONS:
                   neglected for the current session context
                   (wayland/x11/headless), same as linking. Exit 0 = clean,
                   1 = findings; never writes, no picker, no prompt
-      --fix       complete linking: remove stale, ignored and session-neglected
-                  links, link missing files, relink and resolve conflicts
-                  (implies --force); cannot be combined with --audit or
-                  --refresh
+      --fix       complete everything --audit reports: remove stale, ignored
+                  and session-neglected links, link missing files, relink,
+                  resolve conflicts (implies --force) and capture new files
+                  that appeared inside linked dirs into the repo (--refresh);
+                  cannot be combined with --audit or --refresh
+      --no-capture
+                  with --fix: repair links only; do not move new files from
+                  $HOME into the repo
   <pattern>       extended regex; only paths matching it are considered
 
 INTERACTIVE SELECTION:
@@ -141,6 +146,8 @@ MARKERS IN THE PREVIEW:
   -  stale link into this repo, will be removed
   i  ignored by link-ignore.txt but still linked; removed by --fix
   x  neglected for the current session but still linked; removed by --fix
+  ?  the other OS overlay owns this path in the repo; never captured, it needs
+     a human decision about which overlay it belongs to
 EOF
 }
 
@@ -154,6 +161,7 @@ parse_args() {
       --refresh)    is_refresh=1; continue ;;
       --audit)      is_audit=1;   continue ;;
       --fix)        is_fix=1; is_force=1; continue ;;
+      --no-capture) is_no_capture=1; continue ;;
       --no-backup)  is_no_backup=1; continue ;;
       --diff)       is_diff=1;      continue ;;
       -r|--reverse)
@@ -178,6 +186,17 @@ parse_args() {
   fi
   if [ -n "$is_fix" ] && { [ -n "$is_audit" ] || [ -n "$is_refresh" ]; }; then
     printf 'error: --fix cannot be combined with --audit or --refresh\n' >&2
+    exit 1
+  fi
+  # --audit is read-only by contract, so the combination is contradictory
+  # rather than "audit wins": main() checks --refresh first, so the pair used
+  # to move home files into the repo without reporting them.
+  if [ -n "$is_audit" ] && [ -n "$is_refresh" ]; then
+    printf 'error: --audit cannot be combined with --refresh (audit never writes)\n' >&2
+    exit 1
+  fi
+  if [ -n "$is_no_capture" ] && [ -z "$is_fix" ]; then
+    printf 'error: --no-capture only applies to --fix\n' >&2
     exit 1
   fi
   [ -n "$filter" ] || filter='.*'
@@ -228,7 +247,7 @@ collect() {
   # run prints its total elapsed time. INT/TERM/HUP only run the EXIT handler
   # (log_total + cleanup); without the explicit `exit 130`, a Ctrl+C during
   # the read prompt does not stop the script.
-  trap 'log_total; rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT
+  trap 'log_total; rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp" "$CAND_TMP" "$KEPT_TMP" "$KEPT_TMP.2" "$BLOCK_TMP" "$OWN_TMP" "$OTHER_TMP" "$GITIGN_TMP" "$IGN_LINKED_TMP"' EXIT
   trap 'exit 130' INT TERM HUP
 
   # Ignore set, built once for all list_root calls: strip any leading ./ and
@@ -554,6 +573,21 @@ find_neglinked() {
   done < "$NEG_RELS"
 }
 
+# `i [ignored]` takes precedence over `x [neglected]`: link-ignore.txt is
+# explicit config, so a link that is both ignored and neglected for the current
+# session is one report, not two. The lookup file is built once, lazily, from
+# the ignored[] set find_stale already filled (home paths, like ignored[]).
+already_ignored() { # $1 = relpath -> 0 when the link is already reported as `i`
+  if [ -z "$IGN_LINKED_TMP" ]; then
+    IGN_LINKED_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+    if [ "${#ignored[@]}" -gt 0 ]; then
+      printf '%s\n' "${ignored[@]}" > "$IGN_LINKED_TMP"
+    fi
+  fi
+  [ -s "$IGN_LINKED_TMP" ] || return 1
+  grep -Fxq "$HOME/$1" "$IGN_LINKED_TMP"
+}
+
 # ---------------------------------------------------------- refresh ---
 
 # --refresh: capture new real files that appeared inside linked dirs into the
@@ -561,9 +595,49 @@ find_neglinked() {
 # symlink them back. One direction only (home -> repo); never touches
 # existing repo files; conflicts and ignored paths are skipped, not resolved.
 rfr_rel=(); rfr_home=(); rfr_dest=(); rfr_root=()
+rfr_blocked_rel=(); rfr_blocked_os=()
+CAND_TMP=; KEPT_TMP=; BLOCK_TMP=; OWN_TMP=; OTHER_TMP=; GITIGN_TMP=; IGN_LINKED_TMP=
 
+# The inactive overlay: the other platform's source root. A relpath it owns
+# belongs to that platform, so a home file at such a path must never be
+# captured into the active overlay -- that gave one file two owners, two links
+# and two edit sites. Such a candidate is reported (`?`) instead.
+other_os_root() {
+  case "$OS" in
+    linux) printf '%s\n' "$REPO/macos" ;;
+    macos) printf '%s\n' "$REPO/linux" ;;
+  esac
+}
+
+# Every relpath under the source root $1, one per line. Files only, like
+# list_root: symlinks are never link sources.
+root_rels() {
+  [ -d "$1" ] || return 0
+  find "$1" -type f 2>/dev/null | awk -v r="$1" '{ print substr($0, length(r) + 2) }'
+}
+
+# --refresh: capture new real files that appeared inside linked dirs into the
+# repo (mirror-root: the OS overlay takes precedence, else common) and
+# symlink them back. One direction only (home -> repo); never touches
+# existing repo files; conflicts and ignored paths are skipped, not resolved.
+#
+# Two stages, so the per-file cost is a `find` read instead of four process
+# spawns (two greps, an awk and a git per candidate: 1243 candidates on this
+# machine cost 8.6 s that way, ~0.2 s batched). Stage 1 collects candidates
+# with in-shell tests only; stage 2 drops them with a single awk (neglect +
+# link-ignore + repo ownership across every overlay root) plus a single batched
+# `git check-ignore --stdin`.
 refresh_scan() {
-  local d rel f ddir dest root
+  local d rel f ddir dest root other
+
+  CAND_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  KEPT_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  BLOCK_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  OWN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  OTHER_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  GITIGN_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+  : > "$CAND_TMP"
+  : > "$BLOCK_TMP"
 
   # Linked dirs = unique dirnames of merged rels that contain a `/`. Top-level
   # rels (parent is $HOME itself) are skipped -- $HOME is never scanned. Nested
@@ -575,50 +649,101 @@ refresh_scan() {
     # find -type f skips symlinks and never descends into symlinked subdirs
     while IFS= read -r f || [ -n "$f" ]; do
       rel="${f#$HOME/}"
-      # neglected for this session -> never captured (link-context.txt)
-      if grep -Fxq "$rel" "$NEG_RELS"; then continue; fi
-      # already in the repo (managed or conflict) -> skip this candidate
-      if grep -Fxq "$f" "$desired"; then continue; fi
-      # link-ignore.txt, exact or under a directory entry (the list_root
-      # ignore rule)
-      if awk -v rel="$rel" \
-          'rel == $0 || index(rel, $0 "/") == 1 { found = 1 } END { exit !found }' \
-          "$IGN_TMP"; then continue; fi
-      # gitignored; a git error (no repo) also skips -- never capture a file
-      # we cannot prove is not ignored (git check-ignore --no-index works
-      # without the index but still needs a repository). The repo is always a
-      # git repo, so this error path only guards an unusual setup.
-      if git -C "$REPO" check-ignore --no-index -q -- "$rel" 2>/dev/null; then
-        continue
-      elif [ $? -ne 1 ]; then
-        continue
-      fi
       case "$rel" in
         */.git/*|.git/*) continue ;;
         *.bak.*)         continue ;;
       esac
       # `=~` RHS must stay unquoted for bash 3.2 (see find_stale)
       [[ $rel =~ $filter ]] || continue
-      # mirror-root rule: OS overlay if the dir exists there, else common
-      ddir="$(dirname "$rel")"
-      if [ -d "$OSDIR/$ddir" ]; then
-        dest="$OSDIR/$rel"; root="$OS"
-      else
-        dest="$COMMON/$rel"; root=common
-      fi
-      rfr_rel+=("$rel"); rfr_home+=("$f"); rfr_dest+=("$dest"); rfr_root+=("$root")
+      printf '%s\n' "$rel" >> "$CAND_TMP"
     done < <(find "$HOME/$d" -type f 2>/dev/null)
   done < <(
     awk -F'\t' '{ r = $2; sub(/\/[^\/]*$/, "", r); if (r != $2) print r }' "$merged" \
       | sort -u \
       | awk '{ if ($0 != prev && index($0, prev "/") != 1) { print; prev = $0 } }'
   )
+
+  [ -s "$CAND_TMP" ] || return 0
+
+  # Repo ownership, complete across overlays. OWN is common + the active
+  # overlay: a relpath there is managed or a conflict, skipped exactly like the
+  # old `$desired` membership test did (and like it, independent of the
+  # filtering pattern). OTHER is the inactive overlay, reported not captured.
+  { root_rels "$COMMON"; root_rels "$OSDIR"; } | sort -u > "$OWN_TMP"
+  other="$(other_os_root)"
+  root_rels "$other" | sort -u > "$OTHER_TMP"
+
+  # One awk for the three membership filters; FILENAME (not NR==FNR) so an
+  # empty input file is harmless. stdout = kept candidates, other-overlay hits
+  # go to their own file.
+  awk -v cand="$CAND_TMP" -v neg="$NEG_RELS" -v ign="$IGN_TMP" \
+      -v own="$OWN_TMP" -v other="$OTHER_TMP" -v blk="$BLOCK_TMP" '
+    FILENAME == cand  { c[$0] = 1; next }
+    FILENAME == neg   { n[$0] = 1; next }
+    FILENAME == ign   { g[$0] = 1; next }
+    FILENAME == own   { o[$0] = 1; next }
+    FILENAME == other { x[$0] = 1; next }
+    END {
+      for (rel in c) {
+        if (rel in n) continue                          # neglected this session
+        skip = 0
+        for (e in g)                                    # link-ignore.txt, exact
+          if (rel == e || index(rel, e "/") == 1) { skip = 1; break }   # or under an entry
+        if (skip) continue
+        if (rel in o) continue                          # already in the repo (managed or conflict)
+        if (rel in x) { print rel > blk; continue }     # the other overlay owns it
+        print rel
+      }
+    }' "$CAND_TMP" "$NEG_RELS" "$IGN_TMP" "$OWN_TMP" "$OTHER_TMP" > "$KEPT_TMP"
+
+  # gitignore, one batched call for the whole list. Never capture a file we
+  # cannot prove is not ignored; rc 1 means "nothing ignored" (normal), any
+  # higher rc is a git error (e.g. not a repository) and drops every candidate
+  # -- the documented limitation in tests/link-known-issues.bats.
+  if git -C "$REPO" check-ignore --no-index --stdin < "$KEPT_TMP" > "$GITIGN_TMP" 2>/dev/null; then
+    :
+  else
+    case "$?" in
+      0|1) : ;;
+      *) : > "$KEPT_TMP" ;;
+    esac
+  fi
+  # git echoes each matched path back verbatim, so a fixed-string whole-line
+  # difference leaves exactly the candidates that are not ignored.
+  if [ -s "$GITIGN_TMP" ] && [ -s "$KEPT_TMP" ]; then
+    if grep -F -x -v -f "$GITIGN_TMP" "$KEPT_TMP" > "$KEPT_TMP.2"; then
+      mv "$KEPT_TMP.2" "$KEPT_TMP"
+    else
+      : > "$KEPT_TMP"   # every remaining candidate was gitignored
+    fi
+  fi
+
+  while IFS= read -r rel || [ -n "$rel" ]; do
+    [ -n "$rel" ] || continue
+    # mirror-root rule: OS overlay if the dir exists there, else common
+    ddir="$(dirname "$rel")"
+    if [ -d "$OSDIR/$ddir" ]; then
+      dest="$OSDIR/$rel"; root="$OS"
+    else
+      dest="$COMMON/$rel"; root=common
+    fi
+    rfr_rel+=("$rel"); rfr_home+=("$HOME/$rel")
+    rfr_dest+=("$dest"); rfr_root+=("$root")
+  done < "$KEPT_TMP"
+  while IFS= read -r rel || [ -n "$rel" ]; do
+    [ -n "$rel" ] || continue
+    rfr_blocked_rel+=("$rel"); rfr_blocked_os+=("${other##*/}")
+  done < "$BLOCK_TMP"
 }
 
 refresh_confirm() {
   local i
 
   if [ "${#rfr_rel[@]}" -eq 0 ]; then
+    for ((i = 0; i < ${#rfr_blocked_rel[@]}; i++)); do
+      printf -- '?  %s [%s overlay owns this path] not captured\n' \
+        "${rfr_blocked_rel[$i]}" "${rfr_blocked_os[$i]}"
+    done
     printf 'Nothing to refresh.\n'
     exit 0
   fi
@@ -626,9 +751,17 @@ refresh_confirm() {
   for ((i = 0; i < ${#rfr_rel[@]}; i++)); do
     printf -- '+  %s [refresh] -> %s\n' "${rfr_rel[$i]}" "${rfr_root[$i]}"
   done
+  for ((i = 0; i < ${#rfr_blocked_rel[@]}; i++)); do
+    printf -- '?  %s [%s overlay owns this path] not captured\n' \
+      "${rfr_blocked_rel[$i]}" "${rfr_blocked_os[$i]}"
+  done
   echo
   printf '   refresh: move %d new file(s) into %s/%s and symlink them back\n' \
     "${#rfr_rel[@]}" "${COMMON#$REPO/}" "${OSDIR#$REPO/}"
+  if [ "${#rfr_blocked_rel[@]}" -gt 0 ]; then
+    printf '   %d file(s) not captured: the other overlay owns those paths\n' \
+      "${#rfr_blocked_rel[@]}"
+  fi
   echo
 
   [ -n "$is_dry" ] && exit 0
@@ -646,6 +779,10 @@ refresh_apply() {
 
   for ((i = 0; i < ${#rfr_rel[@]}; i++)); do
     printf -- '-> mv + ln -s %s\n' "${rfr_rel[$i]}"
+    # A home dir that resolves inside the repo (e.g. ~/.config -> the repo's
+    # common/.config) would make this link self-referential. Refuse before the
+    # user's file is moved, like link_one does.
+    in_repo_guard "$(dirname "${rfr_home[$i]}")"
     mkdir -p "$(dirname "${rfr_dest[$i]}")"
     mv "${rfr_home[$i]}" "${rfr_dest[$i]}"
     # Rollback: a user file must never be left only in the repo.
@@ -682,10 +819,14 @@ session_context() {
 # Mirror read_ignores: whole-line comments and blank lines dropped,
 # lines without a "<context>: " pair are malformed and ignored. A missing
 # link-context.txt is an empty neglect list, not an error.
+# Surrounding whitespace is trimmed BEFORE the filters, not just skipped: an
+# indented "  x11: .Xmodmap" used to parse its context as "  x11", so the file
+# was neglected on every session, including its own x11 one.
 read_contexts() {
   CTX_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
   [ -f "$CTX_FILE" ] || return 0
-  sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' -e '/: /!d' "$CTX_FILE" \
+  sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+      -e '/^#/d' -e '/^$/d' -e '/: /!d' "$CTX_FILE" \
     > "$CTX_TMP" 2>/dev/null || :
 }
 
@@ -720,6 +861,9 @@ audit() {
     findings=$((findings + 1))
   done
   for ((i=0; i<${#neglinked_rel[@]}; i++)); do
+    # `i [ignored]` wins: the ignore list is explicit config, so a link that is
+    # both ignored and neglected for this session is reported once, not twice.
+    if already_ignored "${neglinked_rel[$i]}"; then continue; fi
     printf -- 'x  %-44s %s\n' "${neglinked_rel[$i]}" "[neglected] wanted on: ${neglinked_ctx[$i]}"
     findings=$((findings + 1))
   done
@@ -746,6 +890,14 @@ audit() {
   for ((i = 0; i < ${#rfr_rel[@]}; i++)); do
     rel="${rfr_rel[$i]}"
     printf -- '+  %-44s %s\n' "$rel" '[unlinked]'
+    findings=$((findings + 1))
+  done
+  # other-overlay candidates: real findings (the home file is unlinked and the
+  # repo already has that path on the other platform) but not --fix-able: the
+  # fix is a human decision about which overlay should own it.
+  for ((i = 0; i < ${#rfr_blocked_rel[@]}; i++)); do
+    printf -- '?  %-44s %s\n' "${rfr_blocked_rel[$i]}" \
+      "[not captured: ${rfr_blocked_os[$i]} overlay owns this path]"
     findings=$((findings + 1))
   done
 
@@ -812,6 +964,9 @@ preview() {
     printf -- 'i  %-44s %s\n' "${ignored[$i]#$HOME/}" '[ignored] linked but listed in link-ignore.txt'
   done
   for ((i=0; i<${#neglinked_rel[@]}; i++)); do
+    # `i [ignored]` wins: the ignore list is explicit config, so a link that is
+    # both ignored and neglected is reported once, not twice.
+    if already_ignored "${neglinked_rel[$i]}"; then continue; fi
     printf -- 'x  %-44s %s\n' "${neglinked_rel[$i]}" "[neglected] wanted on: ${neglinked_ctx[$i]}"
   done
   for ((i = 0; i < ${#new_rel[@]}; i++)); do
@@ -825,6 +980,15 @@ preview() {
       "$([ -n "$is_force" ] && echo '~' || echo '!')" \
       "${hard_rel[$i]}" "$(tag_of "${hard_src[$i]}")" "${hard_why[$i]}"
   done
+  # capture candidates (--fix only; the arrays are empty in every other mode
+  # because refresh_scan does not run there)
+  for ((i = 0; i < ${#rfr_rel[@]}; i++)); do
+    printf -- '+  %-44s %s\n' "${rfr_rel[$i]}" "[refresh] -> ${rfr_root[$i]}"
+  done
+  for ((i = 0; i < ${#rfr_blocked_rel[@]}; i++)); do
+    printf -- '?  %-44s %s\n' "${rfr_blocked_rel[$i]}" \
+      "[${rfr_blocked_os[$i]} overlay owns this path] not captured"
+  done
   if [ -n "$is_diff" ]; then
     show_diffs
   fi
@@ -832,7 +996,7 @@ preview() {
 
 confirm() {
   local actionable
-  actionable=$(( ${#stale[@]} + ${#new_rel[@]} + ${#soft_rel[@]} + ${#ignored[@]} + ${#neglinked_rel[@]} ))
+  actionable=$(( ${#stale[@]} + ${#new_rel[@]} + ${#soft_rel[@]} + ${#ignored[@]} + ${#neglinked_rel[@]} + ${#rfr_rel[@]} ))
   [ -n "$is_force" ] && actionable=$(( actionable + ${#hard_rel[@]} ))
 
   if [ "$actionable" -eq 0 ]; then
@@ -841,6 +1005,13 @@ confirm() {
       echo
       printf 'Nothing to do (%d links already correct); ' "$n_same"
       printf 'use --force to resolve %d conflict(s).\n' "${#hard_rel[@]}"
+      exit 0
+    fi
+    if [ ${#rfr_blocked_rel[@]} -gt 0 ]; then
+      preview
+      echo
+      printf 'Nothing to do (%d links already correct); %d file(s) not captured: the other overlay owns those paths.\n' \
+        "$n_same" "${#rfr_blocked_rel[@]}"
       exit 0
     fi
     printf 'Nothing to do (%d links already correct).\n' "$n_same"
@@ -856,6 +1027,14 @@ confirm() {
   fi
   if [ -n "$is_fix" ] && [ ${#hard_rel[@]} -gt 0 ]; then
     printf '   %d conflict(s) will be resolved (backed up)\n' "${#hard_rel[@]}"
+  fi
+  if [ "${#rfr_rel[@]}" -gt 0 ]; then
+    printf '   %d new file(s) will be MOVED into %s/%s and symlinked back\n' \
+      "${#rfr_rel[@]}" "${COMMON#$REPO/}" "${OSDIR#$REPO/}"
+  fi
+  if [ "${#rfr_blocked_rel[@]}" -gt 0 ]; then
+    printf '   %d file(s) not captured: the other overlay owns those paths\n' \
+      "${#rfr_blocked_rel[@]}"
   fi
   if [ -n "$is_fix" ]; then
     [ ${#ignored[@]} -gt 0 ] && printf '   %d ignored link(s) will be removed\n' "${#ignored[@]}"
@@ -989,10 +1168,25 @@ log_start 'neglect scan'
 find_neglinked
 log_done 'neglect scan'
 if [ -n "$is_fix" ]; then
+  # --fix resolves every finding --audit reports, the capture direction
+  # included: refresh_scan runs AFTER find_stale (a link it creates is not in
+  # $desired, so an earlier scan would delete it as stale) and BEFORE confirm,
+  # so one preview covers all seven states. --no-capture keeps the old
+  # link-only behaviour and skips the scan entirely.
+  if [ -z "$is_no_capture" ]; then
+    log_start 'refresh scan'
+    refresh_scan
+    log_done 'refresh scan'
+  fi
   confirm
   log_start 'apply'
   apply
   log_done 'apply'
+  if [ -z "$is_no_capture" ]; then
+    log_start 'refresh apply'
+    refresh_apply
+    log_done 'refresh apply'
+  fi
   exit 0
 fi
 if [ -n "$is_audit" ]; then
