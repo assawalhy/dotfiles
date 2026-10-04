@@ -235,7 +235,7 @@ collect() {
   # run prints its total elapsed time. INT/TERM/HUP only run the EXIT handler
   # (log_total + cleanup); without the explicit `exit 130`, a Ctrl+C during
   # the read prompt does not stop the script.
-  trap 'log_total; rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp"' EXIT
+  trap 'log_total; rm -f "$merged" "$desired" "$IGN_TMP" "$CTX_TMP" "$NEG_RELS" "$menu" "$PICKED_LINKS" "$merged.tmp" "$IGN_LINKED_TMP"' EXIT
   trap 'exit 130' INT TERM HUP
 
   # Ignore set, built once for all list_root calls: strip any leading ./ and
@@ -561,6 +561,21 @@ find_neglinked() {
   done < "$NEG_RELS"
 }
 
+# `i [ignored]` takes precedence over `x [neglected]`: link-ignore.txt is
+# explicit config, so a link that is both ignored and neglected for the current
+# session is one report, not two. The lookup file is built once, lazily, from
+# the ignored[] set find_stale already filled (home paths, like ignored[]).
+already_ignored() { # $1 = relpath -> 0 when the link is already reported as `i`
+  if [ -z "$IGN_LINKED_TMP" ]; then
+    IGN_LINKED_TMP="$(mktemp "${TMPDIR:-/tmp}/link-files.XXXXXX")"
+    if [ "${#ignored[@]}" -gt 0 ]; then
+      printf '%s\n' "${ignored[@]}" > "$IGN_LINKED_TMP"
+    fi
+  fi
+  [ -s "$IGN_LINKED_TMP" ] || return 1
+  grep -Fxq "$HOME/$1" "$IGN_LINKED_TMP"
+}
+
 # ---------------------------------------------------------- refresh ---
 
 # --refresh: capture new real files that appeared inside linked dirs into the
@@ -731,6 +746,9 @@ audit() {
     findings=$((findings + 1))
   done
   for ((i=0; i<${#neglinked_rel[@]}; i++)); do
+    # `i [ignored]` wins: the ignore list is explicit config, so a link that is
+    # both ignored and neglected for this session is reported once, not twice.
+    if already_ignored "${neglinked_rel[$i]}"; then continue; fi
     printf -- 'x  %-44s %s\n' "${neglinked_rel[$i]}" "[neglected] wanted on: ${neglinked_ctx[$i]}"
     findings=$((findings + 1))
   done
@@ -823,6 +841,9 @@ preview() {
     printf -- 'i  %-44s %s\n' "${ignored[$i]#$HOME/}" '[ignored] linked but listed in link-ignore.txt'
   done
   for ((i=0; i<${#neglinked_rel[@]}; i++)); do
+    # `i [ignored]` wins: the ignore list is explicit config, so a link that is
+    # both ignored and neglected is reported once, not twice.
+    if already_ignored "${neglinked_rel[$i]}"; then continue; fi
     printf -- 'x  %-44s %s\n' "${neglinked_rel[$i]}" "[neglected] wanted on: ${neglinked_ctx[$i]}"
   done
   for ((i = 0; i < ${#new_rel[@]}; i++)); do
