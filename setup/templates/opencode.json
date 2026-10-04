@@ -1,0 +1,20 @@
+{
+  "default_agent": "awesome-agent",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/MEMORY.md", "effect": "allow" },
+    { "action": "read", "resource": "~/MEMORY.md", "effect": "allow" },
+    { "action": "edit", "resource": "~/MEMORY.md", "effect": "allow" }
+  ],
+  "mcp": {
+    "zvec_grep": {
+      "type": "local",
+      "command": [
+        "zg",
+        "server",
+        "--stdio"
+      ],
+      "enabled": true,
+      "timeout": 600000
+    }
+  }
+}
