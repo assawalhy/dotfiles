@@ -377,6 +377,51 @@ zvec_grep_status() {
   [ "$missing" -eq 0 ] && [ "$ok" -gt 0 ] && printf '%s\n' "$HOME/.agents/tools/zvec-grep"
 }
 
+# ---- playwright-cli: browser automation CLI for coding agents ----
+# Ships as the npm CLI @playwright/cli. Upstream steers coding agents to the CLI
+# + skill rather than @playwright/mcp: MCP loads ~30 tool schemas plus verbose
+# accessibility trees into the context on every request, while the CLI is driven
+# through `shell` by the `playwright` skill (agents-skill|playwright in
+# setup/agent-skills.list). The skill and the binary are separate catalog rows on
+# purpose, mirroring zvec-grep's zg CLI + MCP pairing.
+
+playwright_cli_bin() { # -> path of the playwright-cli binary, empty when absent
+  if [ -x "$HOME/.local/bin/playwright-cli" ]; then printf '%s\n' "$HOME/.local/bin/playwright-cli"
+  else command -v playwright-cli 2>/dev/null; fi
+}
+
+playwright_cli_bin_install() {
+  [ -n "$(playwright_cli_bin)" ] && return 0
+  command -v npm >/dev/null 2>&1 || { printf '  - playwright-cli: npm missing, cannot install @playwright/cli\n' >&2; return 1; }
+  # NixOS: nixpkgs' npm has a read-only global prefix; install into ~/.local
+  # (its bin is already on PATH), mirroring setup-os's NPM_G.
+  if [ -e /etc/NIXOS ]; then
+    env "npm_config_prefix=$HOME/.local" npm install -g @playwright/cli --no-audit --no-fund || return 1
+  else
+    npm install -g @playwright/cli --no-audit --no-fund || return 1
+  fi
+  [ -n "$(playwright_cli_bin)" ]
+}
+
+playwright_cli_status() {
+  [ -n "$(playwright_cli_bin)" ] || return 1
+  [ -f "$HOME/.agents/skills/playwright/SKILL.md" ] || return 1
+  printf '%s\n' "$HOME/.agents/tools/playwright-cli"
+}
+
+# The skill is a separate catalog row (agents-skill|playwright) that
+# setup/agent-skills.sh clones; the binary alone is not a usable install, so
+# report a missing skill as not-installed rather than half-done.
+playwright_cli_install() {
+  playwright_cli_bin_install || return 1
+  if [ ! -f "$HOME/.agents/skills/playwright/SKILL.md" ]; then
+    printf '  - playwright-cli: binary ok, but ~/.agents/skills/playwright is missing\n'
+    printf '    run: bash setup/agent-skills.sh   (or install the playwright agents-skill entry)\n'
+    return 1
+  fi
+  printf '  + playwright-cli: binary and skill present\n'
+}
+
 # ---- dispatch ----
 # install failures propagate (agent-skills.sh turns them into "! failed");
 # status always exits 0 per the contract above.
@@ -393,8 +438,10 @@ case "$CMD:$TOOL" in
   status:graphify)       graphify_status ;;
   install:zvec-grep)     zvec_grep_install; rc=$? ;;
   status:zvec-grep)      zvec_grep_status ;;
+  install:playwright-cli) playwright_cli_install; rc=$? ;;
+  status:playwright-cli)  playwright_cli_status ;;
   *)
-    printf 'usage: setup/agent-tools.sh <install|status> <context7|plannotator|typescript-lsp|graphify|zvec-grep>\n' >&2
+    printf 'usage: setup/agent-tools.sh <install|status> <context7|plannotator|typescript-lsp|graphify|zvec-grep|playwright-cli>\n' >&2
     exit 1 ;;
 esac
 

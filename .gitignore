@@ -18,3 +18,9 @@ __pycache__/
 # hook). Excluded from link-files capture/audit. Root-anchored: common/.claude/
 # (tracked context) is unaffected.
 /.claude/
+
+# playwright-cli writes page snapshots (.yml) and screenshots (.png) into
+# ./.playwright-cli/ relative to the cwd, so running it from a repo checkout
+# drops artifacts into that repo. Root-anchored so a nested path of the same
+# name is not matched.
+/.playwright-cli/
