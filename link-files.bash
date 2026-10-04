@@ -180,6 +180,13 @@ parse_args() {
     printf 'error: --fix cannot be combined with --audit or --refresh\n' >&2
     exit 1
   fi
+  # --audit is read-only by contract, so the pair is contradictory rather than
+  # "audit wins": main() checks --refresh first, so `--audit --refresh --yes`
+  # used to move a home file into the repo without reporting it.
+  if [ -n "$is_audit" ] && [ -n "$is_refresh" ]; then
+    printf 'error: --audit cannot be combined with --refresh (audit never writes)\n' >&2
+    exit 1
+  fi
   [ -n "$filter" ] || filter='.*'
 }
 
