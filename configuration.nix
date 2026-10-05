@@ -204,6 +204,10 @@ in
     texliveBasic # provides kpsewhich
 
     ## [gui]
+    # Discord: no programs.discord module exists in this nixpkgs, and the
+    # package already wraps GTK3/pulse/wayland itself. Unfree — covered by
+    # nixpkgs.config.allowUnfree above.
+    discord
     mpv
     syncthing
     # Obsidian: 26.05's desktop entry still says StartupWMClass=md.Obsidian,
@@ -424,6 +428,13 @@ in
   };
 
   programs.zsh.enable = true; # interactive zsh support + /etc/shells entry
+
+  # Zoom. Use the NixOS module, NOT a bare `zoom-us` package: it derives
+  # pulseaudioSupport (pipewire + pulse) and gnomeXdgDesktopPortalSupport
+  # (GNOME) from the enabled services and feeds xdg-desktop-portal-{gnome,gtk}
+  # into Zoom's FHS closure — that is what makes screen share work on Wayland.
+  # A raw package gets neither. See .agents/plans/20-zoom-discord.
+  programs.zoom-us.enable = true;
 
   # Foreign (non-Nix) binaries — see .agents/plans/05-foreign-binaries.
   # nix-ld supplies the /lib64/ld-linux interpreter; `libraries` supplies the
