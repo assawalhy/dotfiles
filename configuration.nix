@@ -106,6 +106,45 @@ in
                            "elif b'EBADF' in resp or b'EINVAL' in resp:"
         '';
       });
+
+      # Discord's Electron main process logs via console.warn/info during
+      # startup. If stdout is a pipe whose reader already exited, the write
+      # raises EPIPE (or EIO, when it is a pty whose master is gone) and
+      # Electron shows a modal "A JavaScript error occurred in the main
+      # process" dialog instead of starting. Some desktop launchers hand the
+      # child exactly that.
+      #
+      # The guard goes on line 2 of the wrapper, BEFORE its two --run helpers
+      # (disable-breaking-updates.py, discord-stage-modules): those inherit the
+      # same broken stdout and the Python one dies first with its own
+      # BrokenPipeError, so patching only the final `exec -a "$0"` line is not
+      # enough. `[ -t 1 ]` keeps output intact when a terminal IS attached.
+      # Redirecting to /dev/null costs no diagnostics — Discord still writes
+      # ~/.config/discord/logs/ on its own.
+      #
+      # WORKAROUND for NixOS/nixpkgs#570831 (same one-liner is already on the
+      # Darwin side in #532084). Drop this overlay once either lands.
+      #
+      # NOTE: `sed`, not `substituteInPlace`. In current nixpkgs substituteInPlace
+      # is NOT sed — substituteStream() does a literal bash substring replace
+      # (${var//pattern/replacement}), so a regex like `1s|...|...|` never
+      # matches and --replace-fail aborts the build with "pattern doesn't match
+      # anything". sed is also what actually turns \n into a newline there.
+      # The grep guard keeps the "fail loudly if a Discord bump moves the
+      # shebang" property that --replace-fail gave us.
+      discord = prev.discord.overrideAttrs (old: {
+        postInstall = (old.postInstall or "") + ''
+          f=$out/opt/Discord/Discord
+          grep -q '^#! ' "$f" || {
+            echo "discord overlay: no shebang found in $f" >&2
+            exit 1
+          }
+          # Capture the whole shebang line and re-emit it verbatim, then append
+          # the guard. Anchoring on a bare "#!" would clobber the interpreter
+          # path, which is a store path, not /usr/bin/env.
+          sed -i '1s|^#! \(.*\)$|#! \1\n[ -t 1 ] \|\| exec > /dev/null 2>\&1|' "$f"
+        '';
+      });
     })
   ];
 
