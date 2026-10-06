@@ -44,7 +44,29 @@ run_harness() { # <harness> <binary> <cmd...>
   "$@"
 }
 
-harness_status_print() { [ -n "${1:-}" ] && printf '%s\n' "$1"; }
+# harness_present answers "is this harness installed", not "can it host a
+# package". Those differ for pi: the `pi` on PATH may be the pure-Go port
+# (github.com/sky-valley/pi, setup/packages.list), whose CLI is print mode +
+# REPL + `models` + `sessions` only. Upstream pi installs a package with
+# `pi install <source>` and advertises it in --help; the port has no `install`
+# subcommand at all, so `pi install npm:@plannotator/pi-extension` exits 1 with
+# "no API key found" and the extension directory can never appear.
+#
+# Probe the capability instead of the identity, so the gate stays correct if
+# upstream pi changes or the port ever gains the runtime. pi still loads skills
+# from ~/.pi/agent/skills and ~/.agents/skills, so only the package-shaped legs
+# are gated -- never the skill-shaped ones.
+pi_supports_packages() {
+  command -v pi >/dev/null 2>&1 || return 1
+  pi --help 2>&1 | grep -q 'pi install'
+}
+
+# Per-harness status line on stderr. The marker contract is stdout-only and
+# setup/agent-skills.sh reads stdout with 2>/dev/null, so these lines cost the
+# catalog nothing and turn "status printed nothing" into a one-line answer.
+status_leg() { # <harness> <state> <detail>
+  printf '  %-8s %-8s %s\n' "$1" "$2" "$3" >&2
+}
 
 # jq_add_key <path> <jq-assignment>
 # Adds/overwrites one key in a JSON config with jq, preserving every other
@@ -131,7 +153,12 @@ context7_claude_status() {
 }
 
 context7_pi_install() {
-  run_harness pi pi pi install npm:@upstash/context7-pi 2>/dev/null
+  harness_present pi || return 0
+  if ! pi_supports_packages; then
+    printf '  - pi: no package support (no `pi install`), context7-pi skipped\n'
+    return 0
+  fi
+  run_harness pi pi pi install npm:@upstash/context7-pi
 }
 context7_pi_status() {
   [ -d "$HOME/.pi/agent/npm/node_modules/@upstash/context7-pi" ]
@@ -140,12 +167,19 @@ context7_pi_status() {
 context7_install() { context7_opencode_install; context7_codex_install; context7_cursor_install; context7_claude_install; context7_pi_install; }
 context7_status() {
   local ok=0 missing=0
-  harness_present opencode && { context7_opencode_status && ok=$((ok+1)) || missing=$((missing+1)); }
-  harness_present codex   && { context7_codex_status   && ok=$((ok+1)) || missing=$((missing+1)); }
-  harness_present cursor  && { context7_cursor_status  && ok=$((ok+1)) || missing=$((missing+1)); }
-  harness_present claude  && { context7_claude_status  && ok=$((ok+1)) || missing=$((missing+1)); }
-  harness_present pi      && { context7_pi_status      && ok=$((ok+1)) || missing=$((missing+1)); }
+  harness_present opencode && { context7_opencode_status && { ok=$((ok+1)); status_leg opencode ok mcp; } || { missing=$((missing+1)); status_leg opencode missing mcp; }; }
+  harness_present codex   && { context7_codex_status   && { ok=$((ok+1)); status_leg codex ok mcp_servers; } || { missing=$((missing+1)); status_leg codex missing mcp_servers; }; }
+  harness_present cursor  && { context7_cursor_status  && { ok=$((ok+1)); status_leg cursor ok mcpServers; } || { missing=$((missing+1)); status_leg cursor missing mcpServers; }; }
+  harness_present claude  && { context7_claude_status  && { ok=$((ok+1)); status_leg claude ok plugin; } || { missing=$((missing+1)); status_leg claude missing plugin; }; }
+  if harness_present pi; then
+    if ! pi_supports_packages; then
+      status_leg pi skipped 'no package support'
+    else
+      context7_pi_status && { ok=$((ok+1)); status_leg pi ok npm; } || { missing=$((missing+1)); status_leg pi missing npm; }
+    fi
+  fi
   [ "$missing" -eq 0 ] && [ "$ok" -gt 0 ] && printf '%s\n' "$HOME/.agents/tools/context7"
+  return 0
 }
 
 # ---- plannotator: plan & code review ----
@@ -192,7 +226,12 @@ plannotator_claude_status() {
 }
 
 plannotator_pi_install() {
-  run_harness pi pi pi install npm:@plannotator/pi-extension 2>/dev/null
+  harness_present pi || return 0
+  if ! pi_supports_packages; then
+    printf '  - pi: no package support (no `pi install`), plannotator extension skipped\n'
+    return 0
+  fi
+  run_harness pi pi pi install npm:@plannotator/pi-extension
 }
 plannotator_pi_status() {
   [ -d "$HOME/.pi/agent/npm/node_modules/@plannotator/pi-extension" ]
@@ -209,12 +248,34 @@ plannotator_install() {
   return "$rc"
 }
 plannotator_status() {
-  local bin="$HOME/.local/bin/plannotator" klaus=1
-  { [ -x "$bin" ] || command -v plannotator >/dev/null 2>&1; } || klaus=0
-  harness_present opencode && { plannotator_opencode_status && : || klaus=0; }
-  harness_present claude   && { plannotator_claude_status   && : || klaus=0; }
-  harness_present pi       && { plannotator_pi_status       && : || klaus=0; }
-  [ "$klaus" -eq 1 ] && printf '%s\n' "$HOME/.agents/tools/plannotator"
+  local bin="$HOME/.local/bin/plannotator" ok=1
+  if [ -x "$bin" ] || command -v plannotator >/dev/null 2>&1; then
+    status_leg binary ok "$bin"
+  else
+    ok=0
+    status_leg binary missing "$bin"
+  fi
+  if harness_present opencode; then
+    if plannotator_opencode_status; then status_leg opencode ok plugin; else ok=0; status_leg opencode missing plugin; fi
+  fi
+  if harness_present claude; then
+    if plannotator_claude_status; then status_leg claude ok plugin; else ok=0; status_leg claude missing plugin; fi
+  fi
+  if harness_present pi; then
+    # A pi without a package runtime is not a missing plannotator: the
+    # extension is uninstallable there, so gating on it would make the status
+    # unsatisfiable forever (binary + opencode + claude all fine, still silent).
+    if ! pi_supports_packages; then
+      status_leg pi skipped 'no package support'
+    elif plannotator_pi_status; then
+      status_leg pi ok npm
+    else
+      ok=0
+      status_leg pi missing npm
+    fi
+  fi
+  [ "$ok" -eq 1 ] && printf '%s\n' "$HOME/.agents/tools/plannotator"
+  return 0
 }
 
 # ---- typescript-lsp: Claude Code LSP speedups (claude-only upstream) ----

@@ -44,6 +44,10 @@ agent-tool|graphify|Any input to a persistent knowledge graph (PyPI graphifyy: s
 
 plugin|awesome-agent|assawalhy/awesome-agent: commands, sub-agents and skills (awesome-plan, ddd, pr-description) for every harness|https://github.com/assawalhy/awesome-agent.git
 
+# Requires a pi that can install packages (`pi --help` lists `install`), i.e.
+# upstream earendil-works/pi. The pure-Go port in setup/packages.list has no
+# package runtime, so this entry can never install there and --list keeps
+# showing it as [ ]. Same gate as the pi legs in setup/agent-tools.sh.
 pi-package|tmustier-pi-extensions|pi-extensions: extensions & skills by tmustier (ralph loop, raw-paste, extend-pi, ...)|pi install git:github.com/tmustier/pi-extensions
 
 # Multi-harness tools: install field is handled by setup/agent-tools.sh, which
