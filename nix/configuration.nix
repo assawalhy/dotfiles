@@ -156,9 +156,23 @@ in
       # copyous-terminal-paste/); drop once fixed upstream
       # (boerdereinar/copyous#168, PR #169).
       gnomeExtensions = prev.gnomeExtensions // {
-        copyous = prev.gnomeExtensions.copyous.overrideAttrs (old: {
-          patches = (old.patches or []) ++ [ ./copyous-terminal-paste/terminal-paste.patch ];
-        });
+        # The diff targets EGO v9 (upstream 2.0.1) only. Guard instead of pinning:
+        # a nixpkgs bump must surface as a loud, actionable failure rather than a
+        # cryptic "Hunk #1 FAILED" from `patch` -- and rather than silently
+        # freezing copyous at v9, which would hide the upstream fix landing.
+        copyous =
+          if prev.gnomeExtensions.copyous.version != "9" then
+            throw ''
+              copyous bumped from 9 to ${prev.gnomeExtensions.copyous.version}.
+              Re-check boerdereinar/copyous#168 and PR #169 first: if the terminal
+              auto-paste fix landed upstream, delete nix/copyous-terminal-paste/
+              together with this guard; otherwise re-port terminal-paste.patch
+              against the new version and bump the guard.
+            ''
+          else
+            prev.gnomeExtensions.copyous.overrideAttrs (old: {
+              patches = (old.patches or []) ++ [ ./copyous-terminal-paste/terminal-paste.patch ];
+            });
       };
     })
   ];
