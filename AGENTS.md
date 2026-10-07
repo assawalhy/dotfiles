@@ -138,7 +138,7 @@ rather than left bare.
 
 - **Managers**: `brew cask pacman aur apt dnf zypper cargo go npm pip`
   - On **NixOS** the system-scope managers are skipped (`PM=nixos`, detected
-    via `/etc/NIXOS`): system packages are declared in `configuration.nix`
+    via `/etc/NIXOS`): system packages are declared in `nix/configuration.nix`
     (mapped from `setup/packages.list`), and setup-os only runs user-scope
     installs — `setup/steps` and the `cargo/go/npm/pip` groups. `npm -g` is
     redirected to a writable `~/.local` prefix (nixpkgs' npm prefix is
@@ -169,6 +169,24 @@ setup-os --list --show-installed
 setup-os --dry-run --all
 setup-os --priority p1 -y
 ```
+
+## NixOS Config & Deploy
+
+The NixOS configuration lives in `nix/`, not at the repo root:
+
+- `nix/configuration.nix` — the system config. Relative paths (`./copyous-terminal-paste/…`)
+  resolve against `nix/`, so the whole tree deploys as one unit.
+- `nix/update-nixos.sh` — mirrors `nix/` onto `/etc/nixos` and rebuilds.
+
+```bash
+nix/update-nixos.sh              # sync + sudo nixos-rebuild switch
+nix/update-nixos.sh build        # sync + build only (switch|boot|test|dry-build|dry-activate)
+nix/update-nixos.sh -n           # preview the sync, write nothing
+```
+
+`hardware-configuration.nix` is machine-specific and stays in `/etc/nixos`; the
+script never overwrites or deletes it (or its own timestamped backups). `rsync`
+is declared in `nix/configuration.nix`; if absent the script falls back to `cp -a`.
 
 ## Agent Skills & Shared Context
 

@@ -145,6 +145,21 @@ in
           sed -i '1s|^#! \(.*\)$|#! \1\n[ -t 1 ] \|\| exec > /dev/null 2>\&1|' "$f"
         '';
       });
+
+      # Copyous auto-paste picks its chord from `content_purpose === TERMINAL`;
+      # a terminal that never advertises a purpose (WezTerm) got Shift+Insert,
+      # which pastes the *primary selection* there instead of the clipboard, so
+      # auto-paste inserted stale content for images (always) and text (when
+      # sync-primary was off). The patch uses Ctrl+V / Ctrl+Shift+V, keeps
+      # images on the raw Ctrl+V, and detects terminals from the focused
+      # window's desktop categories. It ships as a sibling of this file (see
+      # copyous-terminal-paste/); drop once fixed upstream
+      # (boerdereinar/copyous#168, PR #169).
+      gnomeExtensions = prev.gnomeExtensions // {
+        copyous = prev.gnomeExtensions.copyous.overrideAttrs (old: {
+          patches = (old.patches or []) ++ [ ./copyous-terminal-paste/terminal-paste.patch ];
+        });
+      };
     })
   ];
 
@@ -203,6 +218,7 @@ in
 
     ## [terminal]
     git
+    rsync # nix/update-nixos.sh mirrors nix/ to /etc/nixos
     zsh
     tmux
     neovim

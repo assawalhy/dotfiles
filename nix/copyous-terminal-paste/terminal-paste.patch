@@ -1,0 +1,91 @@
+diff -ruN co-orig/lib/misc/clipboard.js co-new/lib/misc/clipboard.js
+--- co-orig/lib/misc/clipboard.js	2026-10-07 02:12:48.951683679 +0300
++++ co-new/lib/misc/clipboard.js	2026-10-07 02:12:48.954857110 +0300
+@@ -3,6 +3,7 @@
+ import GObject from 'gi://GObject';
+ import Gio from 'gi://Gio';
+ import Meta from 'gi://Meta';
++import Shell from 'gi://Shell';
+ import St from 'gi://St';
+ 
+ import { Color } from '../common/color.js';
+@@ -55,6 +56,18 @@
+ 	}
+ }
+ 
++function isTerminalWindow(window) {
++	if (!window) return false;
++	try {
++		const app = Shell.WindowTracker.get_default().get_window_app(window);
++		const info = app?.get_app_info();
++		const categories = info?.get_string('Categories');
++		return !!categories && categories.split(';').includes('TerminalEmulator');
++	} catch {
++		return false;
++	}
++}
++
+ let ClipboardManager = class ClipboardManager extends GObject.Object {
+ 	ext;
+ 	tracker;
+@@ -64,6 +77,7 @@
+ 	signalId = -1;
+ 	pasteSignalId = -1;
+ 	prevClipboard = null;
++	savedTerminal = null;
+ 
+ 	constructor(ext, tracker) {
+ 		super();
+@@ -112,23 +126,33 @@
+ 		}
+ 	}
+ 
++	savePasteTarget() {
++		this.savedTerminal =
++			isTerminalWindow(global.display.focus_window) ||
++			this.keyboard.purpose === Clutter.InputContentPurpose.TERMINAL;
++	}
++
+ 	pasteContent(content) {
++		const terminal = this.savedTerminal ?? this.keyboard.purpose === Clutter.InputContentPurpose.TERMINAL;
++		this.savedTerminal = null;
+ 		this.copyContent(content);
+ 		if (this.pasteSignalId >= 0) GLib.source_remove(this.pasteSignalId);
+ 		this.pasteSignalId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+-			// https://github.com/Tudmotu/gnome-shell-extension-clipboard-indicator/blob/89c57703641a9d5d15f899f6e780174641911d95/extension.js#L1094
+-			if (this.keyboard.purpose === Clutter.InputContentPurpose.TERMINAL) {
++			// Terminals paste the clipboard themselves (Ctrl+Shift+V). Images cannot
++			// travel through a terminal paste, so they always get the raw Ctrl+V for
++			// clipboard-reading TUIs. Everything else uses the platform paste.
++			if (terminal && content.type !== ContentType.Image) {
+ 				this.keyboard.press(Clutter.KEY_Control_L);
+ 				this.keyboard.press(Clutter.KEY_Shift_L);
+-				this.keyboard.press(Clutter.KEY_Insert);
+-				this.keyboard.release(Clutter.KEY_Insert);
++				this.keyboard.press(Clutter.KEY_v);
++				this.keyboard.release(Clutter.KEY_v);
+ 				this.keyboard.release(Clutter.KEY_Shift_L);
+ 				this.keyboard.release(Clutter.KEY_Control_L);
+ 			} else {
+-				this.keyboard.press(Clutter.KEY_Shift_L);
+-				this.keyboard.press(Clutter.KEY_Insert);
+-				this.keyboard.release(Clutter.KEY_Insert);
+-				this.keyboard.release(Clutter.KEY_Shift_L);
++				this.keyboard.press(Clutter.KEY_Control_L);
++				this.keyboard.press(Clutter.KEY_v);
++				this.keyboard.release(Clutter.KEY_v);
++				this.keyboard.release(Clutter.KEY_Control_L);
+ 			}
+ 			this.pasteSignalId = -1;
+ 			return GLib.SOURCE_REMOVE;
+diff -ruN co-orig/lib/ui/clipboardDialog.js co-new/lib/ui/clipboardDialog.js
+--- co-orig/lib/ui/clipboardDialog.js	2026-10-07 02:12:48.953382649 +0300
++++ co-new/lib/ui/clipboardDialog.js	2026-10-07 02:12:48.956139072 +0300
+@@ -390,6 +390,7 @@
+ 		if (this.opened) return;
+ 		this._updateCursor = false;
+ 		this._nextCursor = this._cursor;
++		this.ext.clipboardManager?.savePasteTarget();
+ 		const grab = Main.pushModal(this, { actionMode: Shell.ActionMode.SYSTEM_MODAL });
+ 
+ 		// GNOME 50 (Mutter 18) removed get_seat_state()/GrabState in favor of is_revoked()
