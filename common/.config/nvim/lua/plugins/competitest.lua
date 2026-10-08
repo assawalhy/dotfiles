@@ -1,6 +1,9 @@
 -- Requires luafilesystem and luasocket (install with: luarocks install luafilesystem luasocket)
 
-local base_path = string.format('%s/myp/problem-solving', vim.loop.os_homedir())
+-- Was hardcoded as ~/myp/problem-solving, which no longer exists: received
+-- problems were written into a missing directory and the template lookup warned
+-- on every receive. config.cp resolves it.
+local base_path = require('config.cp').root()
 
 local judgesMap = {
   codeforces = 'Codeforces',
@@ -123,7 +126,7 @@ return {
       cpp = { exec = 'g++', args = { '-std=c++23', '-DSAWALHY', '-Wall', '-Wextra', '-fsanitize=address', '-Wconversion', '$(FNAME)', '-o', '$(FNOEXT)' } },
       rust = { exec = 'rustc', args = { '$(FNAME)' } },
       java = { exec = 'javac', args = { '$(FNAME)' } },
-      kotlin = { exec = 'kotlinc', args = { '$(FNAME)', '-include-runtime', '-d', '$(FNOEXT).jar' } },
+      kotlin = { exec = 'kotlinc', args = { '-nowarn', '$(FNAME)', '-include-runtime', '-d', '$(FNOEXT).jar' } },
       go = { exec = 'go', args = { 'build', '-o', '$(FNOEXT)', '$(FNAME)' } },
     },
 
@@ -131,28 +134,47 @@ return {
       go = { exec = './$(FNOEXT)' },
       python = { exec = 'python3', args = { '$(FNAME)' } },
       java = { exec = 'java', args = { '$(FNOEXT)' } },
-      kotlin = { exec = 'java', args = { '-jar', '$(FNOEXT).jar' } },
+      -- -Xss replaces the C++ `code_largestack` snippet: the JVM's default
+      -- 1 MB stack overflows on the deep recursion that graph and divide-and-
+      -- conquer problems rely on. Must precede -jar.
+      --
+      -- SAWALHY_DEBUG=1 makes the template's `dbg` calls print to stderr on every
+      -- local run: the Kotlin counterpart of compiling C++ with -DSAWALHY above.
+      --
+      -- CompetiTest has no `env` field. It spawns with
+      -- `luv.spawn(cmd.exec, { args = ..., cwd = ... })`, which inherits this
+      -- process's environment, so the variable is set by making `env` the
+      -- executable and `java` its first argument.
+      --
+      -- stderr is the right stream on purpose: CompetiTest decides CORRECT vs
+      -- WRONG from stdout alone (runner.lua compares `tc.stdout` with
+      -- `tc.expout`), so dbg lines cannot turn a passing test into a diff.
+      kotlin = { exec = 'env', args = { 'SAWALHY_DEBUG=1', 'java', '-Xss1g', '-jar', '$(FNOEXT).jar' } },
     },
 
-    template_file = '~/myp/problem-solving/template.$(FEXT)',
-    received_files_extension = 'cpp',
+    template_file = require('config.cp').template('$(FEXT)'),
+    received_files_extension = 'kt',
     received_problems_path = full_path,
     received_contests_problems_path = relative_path,
     received_contests_directory = base_path,
 
-    evaluate_template_modifiers = true,
+    -- CompetiTest expands `$(NAME)` receive modifiers and treats any other `$`
+    -- as a hard error: format_string_modifiers returns nil, and the received
+    -- file is written EMPTY. Kotlin string templates are `$`-heavy, so leaving
+    -- this on silently produced blank main.kt files.
+    evaluate_template_modifiers = false,
     received_problems_prompt_path = false,
     received_contests_prompt_directory = false,
     received_contests_prompt_extension = false,
   },
   keys = {
     { 'cpd', ":silent ! g++ -g '%' -o '%:p:r'<CR>", desc = 'Compile cpp file with -g flag' },
-    { 'cpt', ':CompetiTest receive testcases<CR>', desc = 'Receive test cases' },
-    { 'cpp', ':CompetiTest receive problem<CR>', desc = 'Receive a problem' },
-    { 'cpc', ':CompetiTest receive contest<CR>', desc = 'Receive a contest' },
-    { 'cpr', ':CompetiTest run<CR>', desc = 'Run the current file' },
-    { 'cpR', ':CompetiTest run_no_compile<CR>', desc = 'Run the current file without compiling' },
-    { 'cpe', ':CompetiTest edit_testcase<CR>', desc = 'Edit test cases' },
-    { 'cpa', ':CompetiTest add_testcase<CR>', desc = 'Add new test case' },
+    { 'cpt', ':CompetiTest receive testcases<CR>',  desc = 'Receive test cases' },
+    { 'cpp', ':CompetiTest receive problem<CR>',    desc = 'Receive a problem' },
+    { 'cpc', ':CompetiTest receive contest<CR>',    desc = 'Receive a contest' },
+    { 'cpr', ':CompetiTest run<CR>',                desc = 'Run the current file' },
+    { 'cpR', ':CompetiTest run_no_compile<CR>',     desc = 'Run the current file without compiling' },
+    { 'cpe', ':CompetiTest edit_testcase<CR>',      desc = 'Edit test cases' },
+    { 'cpa', ':CompetiTest add_testcase<CR>',       desc = 'Add new test case' },
   },
 }

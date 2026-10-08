@@ -33,12 +33,13 @@ return {
           module = 'blink-cmp-supermaven',
           async = true,
         },
+        -- The snippets registry is keyed by file basename and matched against
+        -- the buffer's filetype, so snippets/cpp.json serves C++ and
+        -- snippets/kotlin.json serves Kotlin. No `filter_snippets` needed: the
+        -- search path is a leaf directory that holds nothing else.
         snippets = {
           opts = {
-            search_paths = { '~/myp/problem-solving' },
-            filter_snippets = function(_, file)
-              return vim.fn.fnamemodify(file, ':t') == 'cpp.json'
-            end,
+            search_paths = { require('config.cp').snippets_dir() },
           },
         },
       },
