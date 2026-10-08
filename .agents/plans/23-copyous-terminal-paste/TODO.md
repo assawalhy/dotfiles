@@ -14,8 +14,8 @@
       patched extension byte-identical to the reference tree)
 - [x] deploy: `nix/update-nixos.sh` (epic 24) — switched to
       `3dxlrq9ykx6jlnkkzd3ibaq5ylyyk53l`, running system extension patched
-- [ ] re-login → extension loads (user-dir copy takes precedence over the system one)
-- [ ] verify: image auto-paste in opencode → `[Image 1]`
-- [ ] verify: `sync-primary=false` text auto-paste → correct item
-- [ ] verify: shell text still pastes; GUI unaffected
+- [x] re-login → extension loads (user-dir copy takes precedence over the system one)
+- [x] verify: image auto-paste in opencode → `[Image 1]` (user-confirmed 2026-10-08)
+- [x] verify: `sync-primary=false` text auto-paste → correct item (user-confirmed)
+- [x] verify: shell text still pastes; GUI unaffected (user-confirmed)
 - [x] commit dotfiles — `3bddf16` (committed ahead of on-device verification)
