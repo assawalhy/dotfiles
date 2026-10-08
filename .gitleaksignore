@@ -1,0 +1,21 @@
+# Pre-existing findings, baselined on 2026-10-07.
+#
+# All five are from 2020-2021 commits and are absent from the current tree
+# (gitleaks over a clean `git archive HEAD` export reports no leaks). They are
+# NOT path-allowlisted in gitleaks.toml on purpose: blanket-banning
+# `*/.gitconfig` or `.npmrc` would hide a real leak committed to those paths
+# tomorrow. Fingerprints are per-commit, so a new commit touching either file
+# still fails CI.
+#
+# The npm token below is revoked (confirmed 2026-10-08), so the baselining is
+# safe rather than a suppression of a live credential. The other four are GPG
+# public-key fingerprints. See .agents/plans/26-gitleaks-ci/PLAN.md.
+
+# npm _authToken in .npmrc, deleted long ago.
+2981af67a973c6b247e7f9a2ddff8433aa370f26:.npmrc:generic-api-key:1
+
+# GPG signingkey in user.signingkey, not a secret (public key fingerprint).
+12c18f2d5e050ef4d50217f7f43b2e6ff394daf3:linux/.gitconfig:generic-api-key:25
+67c1e26e77a7b2fad364fa7f31667a54a6033631:linux/.gitconfig:generic-api-key:25
+a7d4cc6d9aade36bc672cc43b04045c9a294bba6:linux/.gitconfig:generic-api-key:21
+191b6d44c4d77e30ca2b1b10595ad373812ae3be:.gitconfig:generic-api-key:24

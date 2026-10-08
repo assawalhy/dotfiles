@@ -82,6 +82,7 @@ bats                brew:bats-core check:bats      p2  # bash test framework; th
 maven check:mvn p2
 gradle check:gradle p2
 bun                 apt:-  dnf:-  check:bun          p2  # JS runtime; in Arch extra + homebrew-core, not Debian/Ubuntu/Fedora repos
+gitleaks            check:gitleaks                   p2  # secret scanner; same gate runs in CI on every branch push
 
 [fonts]
 noto-fonts-emoji    cask:font-noto-color-emoji p4

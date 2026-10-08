@@ -330,6 +330,7 @@ in
     maven
     gradle
     bun
+    gitleaks # secret scanner; CI gate on every branch push (.github/workflows/gitleaks.yml)
     # VS Code, added as a plain package (NOT via programs.vscode): the module
     # always wraps it with vscode-with-extensions and pins --extensions-dir to a
     # read-only store path, which makes UI extension installs fail with ENOENT.

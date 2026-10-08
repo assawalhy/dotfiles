@@ -1,0 +1,31 @@
+name: gitleaks
+
+# Gate every branch push, not just master — feature branches are where secrets
+# actually land. pull_request is what adds the inline comment on the offending
+# line. No schedule: history is static, and a daily rescan of 2.6 MB adds
+# nothing.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: scan
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 is required — gitleaks reads git history, and a shallow
+      # clone would make it scan nothing.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # v3, not v2: GitHub removes Node 20 actions from hosted runners on
+      # 2026-09-16, which kills gitleaks-action@v2 / checkout@v4.
+      # GITLEAKS_LICENSE is deliberately unset — personal accounts don't need it.
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
