@@ -19,4 +19,8 @@
 *.swo
 .direnv/
 
+# zvec-grep's local search index, and throwaway agent scripts
+.zvec-grep/
+*.tmp.mjs
+
 **/.claude/.cc-writes/

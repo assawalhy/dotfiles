@@ -37,6 +37,7 @@ Choose the evidence source before the retrieval mode.
 - Read `freshness` and `background_refresh` from search results without a status preflight.
 - When results are `served_from_current_index`, use them when sufficient instead of waiting for the background refresh.
 - If the index is missing but exact or regex lookup can answer the task, use `zvec_grep_rg` when it is listed by the current host; otherwise native Grep or `rg`.
-- Creating, rebuilding, or dropping a persistent index requires an explicit user request or authorization; never do so silently.
+- Build a missing workspace index on your own when semantic or cross-file search is needed; no user request required. Pass `--embedding local/potion-multilingual-128m` (already cached) since no default model is configured. Skip building when exact or regex lookup can answer the task.
+- Never drop or rebuild an existing index, and never widen file selection with `--no-ignore`, unless the user asks.
 
 <!-- ZVEC_GREP_END -->

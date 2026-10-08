@@ -45,6 +45,30 @@ validate a change. Select the specific classes touched by the change with `--tes
 Multiple `--tests` filters can be passed to one invocation when the classes live in the same
 source set. Full-suite runs are CI's job, not the local machine's.
 
+This applies to every runner, not only Gradle. Never run a whole suite to validate a change:
+
+```bash
+# wrong — the whole suite, to check a two-file change
+bun run test
+npx vitest run
+pytest
+npm test
+```
+
+Run the files the change touched, plus anything that imports them. For a monorepo, scope to the
+package rather than the workspace:
+
+```bash
+bunx vitest run tests/contexts/access          # the suites under change
+bunx vitest run tests/shared/media/crop-preview.test.ts   # one file
+bunx turbo run test --filter=@bond/web         # one package, not every package
+```
+
+A package-wide run is still too wide when only some of its tests are affected. When a change adds
+tests, runs those new tests, not the ones already passing. Reach for a full suite only when asked,
+or when a change genuinely touches everything — and say which and why before starting it, because
+it is measured in minutes and it competes with everything else on the machine for CPU and memory.
+
 ### 2. Do not generate coverage locally
 
 Do not run `jacocoTestReport`, `jacocoToCobertura`, or any task that depends on them —
@@ -95,8 +119,7 @@ This does not mean terse or incomplete - give the full technical detail, in
 literal words.
 
 Domain vocabulary: use the project's ubiquitous language rather than generic
-synonyms. For Taager backend repos, see
-`.claude/skills/taager-backend-architecture/SKILL.md`.
+synonyms.
 
 ## Comments
 
@@ -171,3 +194,22 @@ Use local whisper.cpp for any audio transcription; never upload audio to a cloud
 Local models are cached in `~/.cache/whisper.cpp/` and downloaded from HuggingFace.
 Long recordings: run in the background and keep working; do not poll for completion.
 
+
+## zvec-grep index policy
+
+Each harness gets a generated `<!-- ZVEC_GREP_START -->` block from `zg install`
+that used to forbid touching the index without asking. That line is now relaxed
+in every harness file and in the `zg install` generator itself, so these are the
+rules of record:
+
+- Build a missing workspace index on your own when semantic or cross-file search
+  is needed. Pass `--embedding local/potion-multilingual-128m` — it is already in
+  `~/.zvec-grep/models` and no default model is configured.
+- Do not build one when exact or regex lookup can answer the task. Check
+  `zg status` or fall back to `rg` first.
+- Never `zg index --rebuild` or `--drop` an existing index, and never pass
+  `--no-ignore`, unless I ask. Those discard work or pull in build output.
+- `zg install` rewrites its managed block unconditionally (`force: true` is
+  hardcoded), so re-apply this policy if it ever reverts. The generator lives in
+  `dist/cli/install.js` of the `@zvec/zvec-grep` package and must be re-patched
+  after an `npm update -g`.
