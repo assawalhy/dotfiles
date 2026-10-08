@@ -218,6 +218,17 @@ in
     export XDG_DATA_DIRS=$XDG_DATA_DIRS''${XDG_DATA_DIRS:+:}${pkgs.gdm}/share/gsettings-schemas/${pkgs.gdm.name}
   '';
 
+  # Put ~/.local/bin on the PATH of the *whole session*, not just login shells.
+  # Without this the graphical session never sees it (GDM does not read
+  # ~/.bash_profile, which is the only thing that adds it), so any .desktop
+  # with a bare `Exec=opencode-desktop` fails to resolve and GNOME silently
+  # does nothing when it is clicked. Also covers the ~/.local/bin tools that
+  # GUI launchers might spawn (claude, ajq, composio, plannotator, zg, ...).
+  # This writes `export PATH="$HOME/.local/bin:$PATH"` into /etc/set-environment,
+  # which the graphical session does inherit (verified: TERMINFO_DIRS, defined
+  # in the same file, is present in `systemctl --user show-environment`).
+  environment.localBinInPath = true;
+
   # Removable NTFS drives: prefer the ntfs-3g FUSE driver over the in-kernel
   # ntfs3. ntfs3 refuses unclean volumes ("volume is dirty and force flag is not
   # set") and its unmount (ntfs3_kill_sb) can hang in D-state, which freezes
