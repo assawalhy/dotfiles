@@ -13,7 +13,11 @@
 #   -h       this help.
 #
 # Environment:
-#   NIXOS_DIR   destination directory (default: /etc/nixos)
+#   NIXOS_DIR     destination directory (default: /etc/nixos)
+#   SUDO_ASKPASS  helper `sudo -A` runs for the password. When there is no TTY
+#                 and we are not root, the script elevates with `sudo -A`
+#                 automatically, defaulting SUDO_ASKPASS to sudo-askpass or
+#                 ssh-askpass on PATH, else a Zenity wrapper.
 #
 # The mirror is `rsync -a --delete`. Excluded from both sync and delete:
 #   - hardware-configuration.nix  (machine-specific, lives only in /etc/nixos)
@@ -39,7 +43,11 @@ Usage:
   -h       this help.
 
 Environment:
-  NIXOS_DIR   destination directory (default: /etc/nixos)
+  NIXOS_DIR     destination directory (default: /etc/nixos)
+  SUDO_ASKPASS  askpass helper for `sudo -A` (used when there is no TTY)
+
+When run without a TTY and not as root, the script elevates with `sudo -A`
+so it never hangs waiting for a password on a terminal that is not there.
 
 The repo is the source of truth: nix/ is mirrored onto /etc/nixos with
 rsync --delete, so configs removed here disappear there. Never touched:
@@ -81,6 +89,32 @@ case "$action" in
     ;;
 esac
 
+# Elevation. With a TTY, plain sudo prompts there. Without one (agents, CI,
+# cron) sudo cannot prompt, so use -A and an askpass helper. As root, no sudo.
+if [ "$(id -u)" -eq 0 ]; then
+  SUDO=()
+elif [ -t 0 ]; then
+  SUDO=(sudo)
+else
+  SUDO=(sudo -A)
+  if [ -z "${SUDO_ASKPASS:-}" ]; then
+    if command -v sudo-askpass >/dev/null 2>&1; then
+      export SUDO_ASKPASS="$(command -v sudo-askpass)"
+    elif command -v ssh-askpass >/dev/null 2>&1; then
+      export SUDO_ASKPASS="$(command -v ssh-askpass)"
+    elif command -v zenity >/dev/null 2>&1; then
+      askpass="$(mktemp -t update-nixos-askpass.XXXXXX)"
+      printf '#!/bin/sh\nexec zenity --password --title "sudo authentication"\n' >"$askpass"
+      chmod 700 "$askpass"
+      export SUDO_ASKPASS="$askpass"
+      trap 'rm -f "$askpass"' EXIT
+    else
+      echo "update-nixos: no TTY and no askpass helper; run in a terminal or set SUDO_ASKPASS." >&2
+      exit 1
+    fi
+  fi
+fi
+
 [ -d "$SRC" ] || {
   echo "update-nixos: missing source directory $SRC" >&2
   exit 1
@@ -120,19 +154,19 @@ fi
 # Keep a timestamped copy of the live config before replacing it.
 if [ -f "$DEST/configuration.nix" ]; then
   ts="$(date +%Y%m%d-%H%M%S)"
-  sudo cp -a "$DEST/configuration.nix" "$DEST/configuration.nix.bak-$ts"
+  "${SUDO[@]}" cp -a "$DEST/configuration.nix" "$DEST/configuration.nix.bak-$ts"
   echo "update-nixos: backed up configuration.nix -> configuration.nix.bak-$ts"
 fi
 
 if command -v rsync >/dev/null 2>&1; then
-  sudo rsync -a --delete -i "${excludes[@]}" "$SRC/" "$DEST/"
+  "${SUDO[@]}" rsync -a --delete -i "${excludes[@]}" "$SRC/" "$DEST/"
 else
-  sudo cp -a "$SRC/." "$DEST/"
+  "${SUDO[@]}" cp -a "$SRC/." "$DEST/"
 fi
 
 echo "update-nixos: running nixos-rebuild $action"
 if [ "${#rebuild_args[@]}" -gt 0 ]; then
-  exec sudo nixos-rebuild "$action" "${rebuild_args[@]}"
+  exec "${SUDO[@]}" nixos-rebuild "$action" "${rebuild_args[@]}"
 else
-  exec sudo nixos-rebuild "$action"
+  exec "${SUDO[@]}" nixos-rebuild "$action"
 fi
