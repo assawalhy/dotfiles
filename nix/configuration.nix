@@ -353,6 +353,10 @@ in
     noto-fonts
     noto-fonts-color-emoji
     noto-fonts-cjk-sans
+    # DejaVu carries both Latin and Arabic; the ONLYOFFICE substitution for
+    # Latin-only template fonts (epic 27) resolves to it. It must be in
+    # fonts.packages so the epic-28 mirror exposes it to the app.
+    dejavu_fonts
     # Arabic fonts: naskh (amiri, scheherazade-new), kufi/misc (kacst) and the
     # Kawkab Mono monospace for Arabic.
     amiri
@@ -542,6 +546,29 @@ in
         </match>
       </fontconfig>
     '';
+  };
+
+  # ONLYOFFICE Desktop builds its font list by scanning ~/.local/share/fonts
+  # and it skips symlinks. Every NixOS font is a symlink into /nix/store, so the
+  # app sees none of them — only its bundled set — and a document that names a
+  # Latin-only face draws .notdef for Arabic. Mirror the system fonts as real
+  # files (NerdFonts are terminal-only, 269 MB, so skip them) and drop the app's
+  # generated font cache so it reindexes on next start.
+  systemd.user.services.onlyoffice-system-fonts = {
+    description = "Mirror system fonts as real files for ONLYOFFICE Desktop";
+    wantedBy = [ "default.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.writeShellScript "onlyoffice-system-fonts" ''
+        set -euo pipefail
+        dst="$HOME/.local/share/fonts/system"
+        mkdir -p "$dst"
+        ${pkgs.rsync}/bin/rsync -aL --delete --exclude 'NerdFonts' \
+          /run/current-system/sw/share/fonts/ "$dst/"
+        rm -rf "$HOME/.local/share/onlyoffice/desktopeditors/data/fonts"
+      ''}";
+    };
   };
 
   system.stateVersion = "26.05";
