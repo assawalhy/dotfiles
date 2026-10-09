@@ -497,6 +497,49 @@ in
             <string>Kawkab Mono</string>
           </edit>
         </match>
+        <!-- ONLYOFFICE Desktop ships only its own fonts (see its AllFonts.js) and
+             never sets lang=ar on the font pattern, so a document naming a
+             Latin-only face — Word's default complex-script font is often Arial
+             — draws .notdef for Arabic. It also uses one font per run, so an
+             Arabic-only face would box the Latin in the same run. Substitute a
+             both-script face, scoped by prgname so the rest of the system keeps
+             Arial → Liberation Sans. DejaVu Sans is the same face Gotenberg
+             already falls back to for Arabic in the generated PDF. -->
+        <match target="pattern">
+          <test name="prgname"><string>DesktopEditors</string></test>
+          <test name="family"><string>Arial</string></test>
+          <edit name="family" mode="prepend" binding="strong"><string>DejaVu Sans</string></edit>
+        </match>
+        <match target="pattern">
+          <test name="prgname"><string>DesktopEditors</string></test>
+          <test name="family"><string>Helvetica</string></test>
+          <edit name="family" mode="prepend" binding="strong"><string>DejaVu Sans</string></edit>
+        </match>
+        <match target="pattern">
+          <test name="prgname"><string>DesktopEditors</string></test>
+          <test name="family"><string>Segoe UI</string></test>
+          <edit name="family" mode="prepend" binding="strong"><string>DejaVu Sans</string></edit>
+        </match>
+        <match target="pattern">
+          <test name="prgname"><string>DesktopEditors</string></test>
+          <test name="family"><string>Tahoma</string></test>
+          <edit name="family" mode="prepend" binding="strong"><string>DejaVu Sans</string></edit>
+        </match>
+        <match target="pattern">
+          <test name="prgname"><string>DesktopEditors</string></test>
+          <test name="family"><string>Calibri</string></test>
+          <edit name="family" mode="prepend" binding="strong"><string>DejaVu Sans</string></edit>
+        </match>
+        <match target="pattern">
+          <test name="prgname"><string>DesktopEditors</string></test>
+          <test name="family"><string>Times New Roman</string></test>
+          <edit name="family" mode="prepend" binding="strong"><string>DejaVu Serif</string></edit>
+        </match>
+        <match target="pattern">
+          <test name="prgname"><string>DesktopEditors</string></test>
+          <test name="family"><string>Courier New</string></test>
+          <edit name="family" mode="prepend" binding="strong"><string>DejaVu Sans Mono</string></edit>
+        </match>
       </fontconfig>
     '';
   };
