@@ -60,6 +60,33 @@ in
   # Compress the initrd to save space on the tiny EFI partition
   boot.initrd.compressor = "zstd";
 
+  # Swap. This box has 31 GiB RAM and, before this, no swap at all, so when
+  # memory filled (Docker + Electron + browsers) the kernel had nothing to
+  # evict and OOM-killed Brave (its oom_score_adj=300 makes it first). Two
+  # tiers: zram compresses cold anonymous pages in RAM (fast, no disk wear);
+  # a bounded disk swapfile catches what compression cannot. See epic 29.
+  zramSwap = {
+    enable = true;
+    # Module defaults used as-is: memoryPercent=50, zstd, priority=5. zram's
+    # priority is above the disk device below, so the kernel fills it first.
+    # The 50% is the *stored* cap, not RAM use — real usage is the compressed
+    # size (~1/2–1/3 for browser/Electron pages).
+  };
+
+  # 16 GiB overflow on the root ext4 (199 GiB free). Bounded on purpose: a
+  # huge file turns an OOM into SSD thrashing. The default priority is
+  # negative, so it stays below zram. Created automatically on activation
+  # when missing or a different size.
+  swapDevices = [
+    { device = "/var/swapfile"; size = 16384; }
+  ];
+
+  # Drop cold anonymous pages while zram still has room — reclaim is cheap
+  # there, which is the whole point of preventing the OOM kill. Rejected 60
+  # (too timid for a zram-first box) and 180 (too aggressive now that a disk
+  # tier exists). See epic 29.
+  boot.kernel.sysctl."vm.swappiness" = 100;
+
   networking.hostName = "nixos";
 
   networking.networkmanager.enable = true;
