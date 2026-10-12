@@ -63,8 +63,9 @@ EXAMPLES:
   montag -i <uri> --audio --split 00:30:00 podcast.mp3
 
 NOTES:
-  Downloading a video is done primarly by ffmpeg but will use yt-dlp to
-  extract the links to be provided to ffmpeg directly.
+  A video given as a URL is read by ffmpeg itself: yt-dlp only resolves the
+  stream urls and the headers they need, then ffmpeg seeks with HTTP range
+  requests and cuts the clip in the same pass that encodes it.
 
   When --split is used, parts are written under "<output-name>/<output-name>_NNN.<ext>".
   
@@ -198,16 +199,51 @@ print-and-run-cmd() {
     eval "$quoted"
 }
 
-get-file-name-from-url() {
-    [ ! "$thumb" ] && [ "$is_thumb" ] && return 0
-    local output
-    echo-debug Getting the file name from a url
-    output="$(print-and-run-cmd yt-dlp "${ytdl_options[@]}" --no-playlist -O '%(title)s.%(ext)s' "$1")"
-    output="${output/\//_}"
-    echo "$output"
+# Parse the marked lines of the resolver call. Sets resolved_title, input_urls
+# and ua, and fails when no stream url came back.
+parse-resolver-output() { # text
+    local line rest
+    resolved_title=''
+    input_urls=()
+    ua=''
+
+    while IFS= read -r line; do
+        rest="${line#MONTAG-}"
+        case "$rest" in
+            TITLE:*) resolved_title="${rest#TITLE:}" ;;
+            URL:NA|URL:) : ;;
+            URL:*) input_urls+=("${rest#URL:}") ;;
+            HDR:*) [ "$rest" = HDR:NA ] || [ -n "$ua" ] \
+                || ua="$(printf '%s' "${rest#HDR:}" | sed -n 's/.*"User-Agent": *"\([^"]*\)".*/\1/p')" ;;
+        esac
+    done <<< "$1"
+
+    [ ${#input_urls[@]} -gt 0 ]
+}
+
+# yt-dlp resolves the title, the stream urls and the headers those urls need.
+# The media itself is never downloaded by yt-dlp: ffmpeg reads the urls, seeks
+# into them and encodes once.
+resolve-url-input() { # url
+    resolved_title=''
+    input_urls=()
+    ua=''
+
+    echo-debug "🔗 ... resolve the url with yt-dlp"
+    parse-resolver-output "$(yt-dlp "${ytdl_options[@]}" --no-playlist \
+        -O 'MONTAG-TITLE:%(title)s.%(ext)s' \
+        -O 'MONTAG-URL:%(requested_formats.0.url)s' \
+        -O 'MONTAG-URL:%(requested_formats.1.url)s' \
+        -O 'MONTAG-URL:%(url)s' \
+        -O 'MONTAG-HDR:%(requested_formats.0.http_headers)j' \
+        -O 'MONTAG-HDR:%(http_headers)j' "$1")"
 }
 
 temp_files=()
+
+# ffmpeg reads a googlevideo url at about 67 KB/s with one long request and at
+# 619 KB/s once the reads are split into 1 MB range requests.
+http_request_size=1048576
 
 get-temp-file() {
     mkdir -p /tmp/montag
@@ -248,8 +284,17 @@ prepare-input-and-output() {
             done
         fi
 
-        if [ ! "$output" ]; then
-            output=$(get-file-name-from-url "$input")
+        # --thumb without a value asks yt-dlp to write the thumbnail itself,
+        # so no media stream has to be resolved in that case.
+        needs_streams=true
+        [ "$is_thumb" ] && [ ! "$thumb" ] && needs_streams=false
+
+        if [ "$needs_streams" ]; then
+            resolve-url-input "$input" || {
+                echo-debug 'error: yt-dlp did not return a stream url'
+                clear-and-exit 1
+            }
+            [ "$output" ] || output="${resolved_title/\//_}"
         fi
     elif [ ! "$output" ]; then
         # the extension matches the input; the base name gains a -montaged suffix
@@ -263,93 +308,38 @@ prepare-input-and-output() {
     fi
 }
 
-build-ytdlp-download-section() {
-    if [ "$start_point" ] && { [ "$duration" ] || [ "$end_point" ]; }; then
-        local section_arg="*${start_point}"
-        
-        if [ "$duration" ]; then
-            local start_seconds=$(time-to-seconds "$start_point")
-            local duration_seconds=$(time-to-seconds "$duration")
-            local end_seconds=$((start_seconds + duration_seconds))
-            local end_time=$(seconds-to-time "$end_seconds")
-            section_arg+="-$end_time"
-        elif [ "$end_point" ]; then
-            section_arg+="-$end_point"
-        fi
-        
-        echo "$section_arg"
-    fi
-}
-
-time-to-seconds() {
-    local time_str="$1"
-    if [[ "$time_str" =~ ^[0-9]+$ ]]; then
-        echo "$time_str"
-    elif [[ "$time_str" =~ ^([0-9]+):([0-9]+)$ ]]; then
-        local minutes=${BASH_REMATCH[1]}
-        local seconds=${BASH_REMATCH[2]}
-        echo $((minutes * 60 + seconds))
-    elif [[ "$time_str" =~ ^([0-9]+):([0-9]+):([0-9]+)$ ]]; then
-        local hours=${BASH_REMATCH[1]}
-        local minutes=${BASH_REMATCH[2]}
-        local seconds=${BASH_REMATCH[3]}
-        echo $((hours * 3600 + minutes * 60 + seconds))
-    else
-        echo "$time_str"
-    fi
-}
-
-seconds-to-time() {
-    local total_seconds=$1
-    local hours=$((total_seconds / 3600))
-    local minutes=$(( (total_seconds % 3600) / 60 ))
-    local seconds=$((total_seconds % 60))
-    printf "%02d:%02d:%02d" $hours $minutes $seconds
-}
-
-# YouTube throttles ffmpeg's HTTP reader to about 55 KB/s. yt-dlp's downloader
-# is about 15 times faster, so URLs are downloaded to a temp file first.
-download-url() { # url dir
-    local url="$1" dir="$2"
-    local opts=("${ytdl_options[@]}")
-
-    [ ${#opts[@]} -eq 0 ] && opts=(-S 'res:720')
-
-    if [ "$url_download_section" ]; then
-        opts+=(--download-sections "$url_download_section" --force-keyframes-at-cuts)
-    fi
-
-    echo-debug "⬇️  ... download with yt-dlp (ffmpeg direct-URL is throttled)"
-    yt-dlp --no-playlist -o "$dir/input.%(ext)s" "${opts[@]}" "$url" >&2
-
-    find "$dir" -maxdepth 1 -type f ! -name '*.part' | head -n1
-}
-
 get-input-args() {
     set -e
     local argv=("$@")
     local input="${argv[-1]}"
     unset 'argv[-1]'
 
-    if [[ "$input" =~ ^https?:// ]] && { [[ "$is_thumb" && "$thumb" ]] || [ ! "$is_thumb" ]; }; then
-        local dir file
-        dir="/tmp/montag/dl_$RANDOM"
-        mkdir -p "$dir"
-        temp_files+=("$dir")
-        file="$(download-url "$input" "$dir")" || true
-        if [ ! "$file" ] || [ ! -f "$file" ]; then
-            echo-debug 'error: yt-dlp produced no file'
-            clear-and-exit 1
-        fi
+    if [[ "$input" =~ ^https?:// ]] && { [ ! "$is_thumb" ] || [ "$thumb" ]; }; then
+        # ffmpeg must present the User-Agent yt-dlp used, and it reads far
+        # slower without -request_size: 67 KB/s became 619 KB/s on YouTube.
+        local http_args=(-request_size "$http_request_size")
+        [ "$ua" ] && http_args=(-user_agent "$ua" "${http_args[@]}")
+
+        local url
+        for url in "${input_urls[@]}"; do
+            cmd+=("${argv[@]}" "${http_args[@]}" -i "$url")
+        done
+
+        # the thumbnail is appended as its own input, then every input is mapped
         if [ "$thumb" ]; then
-            cmd+=("${argv[@]}" -i "$file" -i "$thumb" -map 0 -map 1 -c copy -disposition:v:1 attached_pic)
-        else
-            cmd+=("${argv[@]}" -i "$file")
+            cmd+=(-i "$thumb")
+            local index
+            for ((index = 0; index < ${#input_urls[@]}; index++)); do
+                cmd+=(-map "$index")
+            done
+            cmd+=(-map "${#input_urls[@]}" -c copy -disposition:v:1 attached_pic)
         fi
         return 0
     fi
 
-    cmd+=("$@")
+    # a local input needs -i: -t and -to before a bare path would make ffmpeg
+    # read that path as the output file
+    cmd+=("${argv[@]}" -i "$input")
 }
 
 get-final-cmd() {
@@ -400,17 +390,7 @@ build-ffmpeg-command() {
         [ "$duration"  ] && cut_args+=(-t "$duration")
         [ "$end_point" ] && cut_args+=(-to "$end_point")
 
-        if [[ "$input" =~ ^https?:// ]]; then
-            # fetch only the requested section: yt-dlp does the trimming, so
-            # ffmpeg must not seek into the already-trimmed file
-            url_download_section="$(build-ytdlp-download-section)"
-        fi
-
-        if [ "$url_download_section" ]; then
-            get-input-args "$input"
-        else
-            get-input-args "${cut_args[@]}" "$input"
-        fi
+        get-input-args "${cut_args[@]}" "$input"
     else
         get-input-args "$input"
     fi
@@ -480,6 +460,7 @@ build-ffmpeg-command() {
         exclusive=1
         echo-debug "🗣️  ... convert the video to text"
         output="$(get-temp-file "$(basename "$output")")"
+        output_target="$output" # whisper reads what ffmpeg writes
         whisper_cmd+=("$output" --verbose False --model medium --output_format txt --output_dir "$(dirname "$output")")
     fi
 
@@ -490,6 +471,21 @@ build-ffmpeg-command() {
         && [ ! "$is_text" ] && [ ! "$is_thumb" ]; then
         echo-debug "📼 ... no filters or cuts, stream copy"
         cmd+=(-c copy)
+    elif [ "${cmd[0]}" = ffmpeg ] && [ ! "$is_audio_only" ] \
+        && [ ! "$is_gif" ] && [ ! "$is_thumb" ]; then
+        # Re-encoding: faster settings for the container. libvpx-vp9 without
+        # -row-mt is single thread bound (0.6x realtime on 12 threads) and
+        # libx264 medium is about 10x slower than veryfast.
+        case "$output_target" in
+            *.webm)
+                echo-debug "🔧 ... encode vp9 with -row-mt 1 -cpu-used 4"
+                cmd+=(-c:v libvpx-vp9 -row-mt 1 -cpu-used 4)
+                ;;
+            *.mp4|*.mov)
+                echo-debug "🔧 ... encode x264 with -preset veryfast -crf 23"
+                cmd+=(-c:v libx264 -preset veryfast -crf 23)
+                ;;
+        esac
     fi
 
     if [ "$split_period" ] && [ "${cmd[0]}" = ffmpeg ]; then
