@@ -16,6 +16,7 @@
 bats tests/link-files.bats          # main suite (expected: 99 ok, 0 not ok)
 bats tests/link-known-issues.bats   # known-bug encodings (expected: all fail)
 bats tests/select.bats              # typed multi-select parser (setup-os, agent-skills)
+bats tests/montag.bats              # resolver parser and --language (montag), expected: 16 ok
 ```
 
 - **`tests/link-files.bats`** — locks in current behavior: link-, classify-,
@@ -28,6 +29,14 @@ bats tests/select.bats              # typed multi-select parser (setup-os, agent
   `setup/agent-skills.sh` and checks comma/space/ranges plus `a`/`n`/empty.
   Keep `expand_selection` top-level with a bare `}` at column 0 or the awk
   extractor breaks.
+- **`tests/montag.bats`** — no network, no yt-dlp, no ffmpeg: `eval`s the real
+  `parse-resolver-output`, `build-language-format` and `is-language-code` extracted
+  from `common/bin/montag`, and feeds the parser the marked lines a `yt-dlp --print`
+  call produces (merged selection, single format, missing headers, no url, empty).
+  The language tests cover the video and audio selectors, a region code, the
+  `default_resolution` cap, accepted and rejected codes, plus three offline CLI
+  runs for the `--language` conflict errors. Keep every function under test
+  top-level with a bare `}` at column 0 or the awk extractor breaks.
 - **`tests/helpers.bash`** — `fixture_new <name> [git]` builds a throwaway
   fixture repo + fake `$HOME` under `$BATS_TEST_TMPDIR` (auto-cleaned); the
   real `$HOME` is never touched. Each fixture copies the real script, so

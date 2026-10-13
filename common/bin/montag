@@ -31,6 +31,7 @@ print-help () {
 │  │ --width     │ Width of the output (aspect ratio is preserved)
 │  │ --fps       │ Frames persecond
 ├──┼─────────────┼───────────────────────────────────────────────────┄┄┄┄┄┄┄┄┄
+│-l│ --language  │ Audio language of the track to download, e.g. ar, en-US, pt-BR
 │  │ --ytdl      │ yt-dlp additional args
 │  │ --ydi       │ yt-dlp interactive mode, requires whiptail
 └──┴─────────────┴───────────────────────────────────────────────────┄┄┄┄┄┄┄┄┄
@@ -52,6 +53,9 @@ EXAMPLES:
   # get the specified range of the video from "--start" to "--to" and speed up
   montag -i my-input-video.mp4 --start 00:10:21 --t 00:11:30 --speed 2
   montag -i my-input-video.mp4 -s 00:10:21 -t 00:11:30 -x 2 --ytdl "-u username -p password"
+
+  # cut a part of the video in a specific dubbed audio language
+  montag -i <uri> -s 00:10:00 -d 300 --language ar lecture3-ar.mp4
 
   # get a transcription of a part of a video
   montag -i <uri> -s 00:10:11 -d 30 --text --whisper "--language auto" | clip
@@ -85,6 +89,7 @@ collect-arg-and-validate() {
             --ydi) is_ydi=1 ;;
             --ytdl) ytdl_options=("$1") && shift ;; # TODO: how to parse arguments with spaces
             --input|-i) input="$1"; shift ;;
+            --language|-l) language="$1"; shift ;;
             --start|-s) start_point="$1"; shift ;;
             --duration|-d) duration="$1"; shift ;;
             --to|-t) end_point="$1"; shift ;;
@@ -154,6 +159,14 @@ collect-arg-and-validate() {
         exit 2
     fi
 
+    # ---- language ----
+    # the code lands in an unquoted yt-dlp argument, so reject anything that is
+    # not a plain code before it can inject filter syntax
+    if [ "$language" ] && ! is-language-code "$language"; then
+        echo-debug error\(language\): invalid language code "[$language]"
+        exit 2
+    fi
+
     # ----- IO -----
 
     prepare-input-and-output
@@ -197,6 +210,38 @@ print-and-run-cmd() {
     echo-debug "$quoted"
     # eval runs the assembled string, so pipes and && chains work in it
     eval "$quoted"
+}
+
+# The height the format selectors cap at: the default sort and --language read
+# the same variable so the two cannot drift apart.
+default_resolution=720
+
+# yt-dlp language codes are two or three letters, optionally with a region.
+is-language-code() { # code
+    [[ "$1" =~ ^[A-Za-z]{2,3}(-[A-Za-z]{2,4})?$ ]]
+}
+
+# yt-dlp format selector for one audio language. h264 video with an m4a audio
+# track is the pair the mp4 encode is fastest with; the second alternative covers
+# a video with no h264 stream, or no m4a track, in that language. There is no
+# fallback to the original language: a clip in the wrong language is worse than
+# an error.
+build-language-format() { # language media(video|audio)
+    if [ "$2" = audio ]; then
+        echo "bestaudio[language=$1][abr<=128k]"
+    else
+        echo "bv*[height<=$default_resolution][ext=mp4][vcodec^=avc1]+ba[language=$1][ext=m4a]/bv*[height<=$default_resolution]+ba[language=$1]"
+    fi
+}
+
+# The codes the video offers, for the error when the requested one is not there.
+# yt-dlp -F tags every dubbed or subtitled track with its code.
+list-language-codes() { # url
+    local codes
+    codes="$(yt-dlp "${ytdl_options[@]}" --no-playlist -F "$1" 2>/dev/null \
+        | grep -oE '\[[A-Za-z]{2,3}(-[A-Za-z]{2,4})?\]' | tr -d '[]' | sort -u | tr '\n' ' ')"
+    [ "$codes" ] || codes='none listed'
+    echo "$codes"
 }
 
 # Parse the marked lines of the resolver call. Sets resolved_title, input_urls
@@ -261,7 +306,26 @@ prepare-input-and-output() {
             ytdl_options+=("${quality_settings[@]}")
         fi
 
-        if [ ${#ytdl_options[@]} = 0 ]; then
+        # --language owns -f, so it cannot be combined with the other two ways
+        # of setting one. Both come last in the argv and would win silently.
+        if [ "$language" ]; then
+            if [ "$is_ydi" ]; then
+                echo-debug error\(language\): --language and --ydi both set the format
+                exit 2
+            fi
+            if [[ " ${ytdl_options[*]} " =~ (^|[[:space:]])-f ]]; then
+                echo-debug error\(language\): --language and the -f in --ytdl both set the format
+                exit 2
+            fi
+
+            if [ "$is_text" ] || [ "$is_audio_only" ]; then
+                media=audio
+            else
+                media=video
+            fi
+            ytdl_options+=(-f "$(build-language-format "$language" "$media")")
+            echo-debug "🌐 ... audio language set to $language"
+        elif [ ${#ytdl_options[@]} = 0 ]; then
             if [ "$is_text" ]; then
                 ytdl_options+=(-f 'bestaudio[abr<=128k]' --extract-audio --audio-format mp3 --audio-quality 5)
             elif [ "$is_audio_only" ]; then
@@ -269,7 +333,7 @@ prepare-input-and-output() {
             else
                 # Progressive formats that combine video and audio are gone
                 # from YouTube. -S picks separate streams and yt-dlp merges them.
-                ytdl_options+=(-S "res:720")
+                ytdl_options+=(-S "res:$default_resolution")
             fi
         fi
 
@@ -291,11 +355,18 @@ prepare-input-and-output() {
 
         if [ "$needs_streams" ]; then
             resolve-url-input "$input" || {
-                echo-debug 'error: yt-dlp did not return a stream url'
+                if [ "$language" ]; then
+                    echo-debug "error: no audio track in language [$language], this video offers: $(list-language-codes "$input")"
+                else
+                    echo-debug 'error: yt-dlp did not return a stream url'
+                fi
                 clear-and-exit 1
             }
             [ "$output" ] || output="${resolved_title/\//_}"
         fi
+    elif [ "$language" ]; then
+        echo-debug error\(language\): --language needs a URL input
+        exit 2
     elif [ ! "$output" ]; then
         # the extension matches the input; the base name gains a -montaged suffix
         output="$(echo "$input" | sed -e 's/^\(.*\)\.\(.*\)$/\1-montaged.\2/')"
