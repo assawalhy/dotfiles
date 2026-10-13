@@ -271,6 +271,9 @@ in
     ## [terminal]
     git
     rsync # nix/update-nixos.sh mirrors nix/ to /etc/nixos
+    # CLI only. Nothing on this host compiles against libssl, so the headers
+    # stay out of a system profile; stdenv.cc covers the build side.
+    openssl
     zsh
     tmux
     neovim
