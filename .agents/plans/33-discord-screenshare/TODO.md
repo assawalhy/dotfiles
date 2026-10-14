@@ -1,0 +1,11 @@
+# TODO 33 Discord screen share
+
+- [x] 1 Restart the portal frontend, re-read `AvailableCursorModes` (expect 7), confirm the mechanism and give an immediate workaround (check: frontend 7/7, 2026-10-13 11:23)
+- [x] 2 Write `nix/xdg-portal-cursor-modes/available-cursor-modes.patch` (check: `patch -p1` dry-run OK on the 1.20.4 store source; three hunks, live validator read)
+- [x] 3 Add the `xdg-desktop-portal` override to `nix/configuration.nix` (check: `nix-instantiate --parse` OK, version guard matches 1.20.4, channel patches preserved via `(old.patches or [])`)
+- [x] 4 Build only, no activation (check: staged `nix-build '<nixpkgs/nixos>'` from a copy of `/etc/nixos` plus the package alone; `hax27l0nn4fw6spvwbz2p712sjbdg9hh-xdg-desktop-portal-1.20.4` builds and the patch applies)
+- [x] 5 Deploy: `nix/update-nixos.sh` run by the user, portal frontend restarted, unit points at the patched store path (check: `hax27l0nn4fw6spvwbz2p712sjbdg9hh-...` in ExecStart, patch present in `/etc/nixos/xdg-portal-cursor-modes/`)
+- [ ] 6 Race verification: FAILED with this patch. `live-race-test.sh` reproduces the race (mask plus stop the backend, restart the frontend, expect 0/0, start the backend) and the patched frontend still answers `InvalidArgument: Unavailable cursor mode 2`. The impl proxy cache is never refilled, so the live read is 0 too and the patch is a no-op in the racing state. Root cause and retracted claims are in PLAN.md.
+- [x] 7 User acceptance: sharing works from Discord started plainly, no launch flag (check: user confirmed twice, 2026-10-13; this is the restart workaround, not the patch, and it will not survive the next login)
+- [ ] 8 Replace the patch with one that refreshes on `notify::g-name-owner`: on a new owner, `GetAll` the impl properties into the proxy cache with `g_dbus_proxy_set_cached_properties`, re-read `impl_version`, then run both syncs. Fixes validation and the advertised 0/0 together. Awaiting approval, then rebuild, redeploy and rerun `live-race-test.sh`.
+- [ ] 9 Record the final outcome and the nixpkgs bump note in PLAN.md

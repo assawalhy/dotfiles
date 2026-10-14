@@ -98,13 +98,9 @@ elif [ -t 0 ]; then
 else
   SUDO=(sudo -A)
   if [ -z "${SUDO_ASKPASS:-}" ]; then
-    if command -v sudo-askpass >/dev/null 2>&1; then
-      export SUDO_ASKPASS="$(command -v sudo-askpass)"
-    elif command -v ssh-askpass >/dev/null 2>&1; then
-      export SUDO_ASKPASS="$(command -v ssh-askpass)"
-    elif command -v zenity >/dev/null 2>&1; then
+    if command -v zenity >/dev/null 2>&1; then
       askpass="$(mktemp -t update-nixos-askpass.XXXXXX)"
-      printf '#!/bin/sh\nexec zenity --password --title "sudo authentication"\n' >"$askpass"
+      printf '#!/bin/sh\nexec zenity --password --title "sudo passwd to update nix"\n' >"$askpass"
       chmod 700 "$askpass"
       export SUDO_ASKPASS="$askpass"
       trap 'rm -f "$askpass"' EXIT

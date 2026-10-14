@@ -201,6 +201,46 @@ in
               patches = (old.patches or []) ++ [ ./copyous-terminal-paste/terminal-paste.patch ];
             });
       };
+
+      # 1.20.4 advertises AvailableCursorModes=0 to clients while the GNOME
+      # backend reports 7, so the frontend rejects every cursor mode before a
+      # picker can open: Discord gets
+      # `org.freedesktop.portal.Error.InvalidArgument: Unavailable cursor mode 2`
+      # and "Share Your Screen" appears to do nothing at all. Chromium clients
+      # omit `cursor_mode` and never notice, so the bug is system-wide and not
+      # Discord-specific.
+      #
+      # The frontend copies the backend proxy's cursor modes into a file-static
+      # snapshot at startup. At login the proxy resolves before the backend owns
+      # its bus name, so the snapshot is 0, and the resync signal
+      # (`notify::supported-cursor-modes`) names a property the generated proxy
+      # does not have, which makes the 0 permanent. The patch drops the
+      # snapshot and validates against the proxy instead; glib refills that
+      # cache eagerly once the backend claims its name, so by the time a client
+      # calls SelectSources the live read is correct. Upstream 1.22.0 reads the
+      # live value too.
+      #
+      # Known leftover, same as upstream: the frontend still advertises 0/0
+      # after a racing login, because the per-property notify does not fire on
+      # that owner change. `systemctl --user restart xdg-desktop-portal`
+      # restores 7/7 until the next login.
+      # Logs: ~/.config/discord/logs/discord-webrtc_1.
+      xdg-desktop-portal =
+        if prev.xdg-desktop-portal.version != "1.20.4" then
+          throw ''
+            xdg-desktop-portal bumped from 1.20.4 to ${prev.xdg-desktop-portal.version}.
+            Re-check src/screen-cast.c first: if validate_cursor_mode() reads the
+            mode live (or the impl proxy is bound), the upstream fix landed --
+            delete nix/xdg-portal-cursor-modes/ together with this guard.
+            Otherwise re-port available-cursor-modes.patch against the new
+            version and bump the guard.
+          ''
+        else
+          prev.xdg-desktop-portal.overrideAttrs (old: {
+            patches = (old.patches or []) ++ [
+              ./xdg-portal-cursor-modes/available-cursor-modes.patch
+            ];
+          });
     })
   ];
 
@@ -255,6 +295,24 @@ in
   # which the graphical session does inherit (verified: TERMINFO_DIRS, defined
   # in the same file, is present in `systemctl --user show-environment`).
   environment.localBinInPath = true;
+
+  # Prisma's CLI (dukkan-BE, POS-BE) downloads its engines on first use and
+  # publishes none for `linux-nixos`, so `schema-engine.gz` 404s and the command
+  # dies. That breaks `bun install` outright: its `postinstall` is
+  # `prisma generate`, which needs the engine, and without the client every
+  # later Prisma command fails too.
+  #
+  # The variable goes in /etc/set-environment rather than each project's `.env`,
+  # so the graphical session inherits it and no terminal needs a manual export.
+  # `.env` would also work (prisma.config.ts does `import 'dotenv/config'`, which
+  # `postinstall` goes through), but it is gitignored and the value is a store
+  # path that changes on every channel bump, so it rots silently.
+  #
+  # `prisma-engines_7` is 7.8.0 on nixos-26.05 while the projects pin Prisma
+  # 7.10.0. Prisma does not reject the skew: `generate`, `migrate deploy` and
+  # `migrate diff` were all verified against 7.8.0. `migrate dev` authoring a new
+  # migration is the one path not exercised.
+  environment.variables.PRISMA_SCHEMA_ENGINE_BINARY = "${pkgs.prisma-engines_7}/bin/schema-engine";
 
   # Removable NTFS drives: prefer the ntfs-3g FUSE driver over the in-kernel
   # ntfs3. ntfs3 refuses unclean volumes ("volume is dirty and force flag is not
@@ -371,6 +429,7 @@ in
     maven
     gradle
     bun
+    bruno
     gitleaks # secret scanner; CI gate on every branch push (.github/workflows/gitleaks.yml)
     # VS Code, added as a plain package (NOT via programs.vscode): the module
     # always wraps it with vscode-with-extensions and pins --extensions-dir to a
@@ -651,6 +710,9 @@ in
       libXdamage # libXdamage.so.1
       libXfixes # libXfixes.so.3
       libXrandr # libXrandr.so.2
+      libxi # libXi.so.6 — hermes-agent's cua-driver (computer-use tool).
+           # Its own DT_NEEDED (libX11, libXext, libxcb, libXau, libXdmcp)
+           # all resolve already, so this one package is the whole gap.
       libxkbcommon # libxkbcommon.so.0
 
       # The rest of what playwright-cli's bundled Chromium wants. nix-ld indexes

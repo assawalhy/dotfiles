@@ -213,3 +213,96 @@ curl -fL -o ~/Applications/opencode-desktop.AppImage \
 - 245 MB download + ~245 MB extracted cache (`~/.cache/appimage-run/`).
 - Resolved: sandbox (upstream `--no-sandbox`, mirrored) and Wayland
   (native ozone-wayland confirmed).
+
+---
+
+# Follow-up: Hermes Agent install failures (2026-10-11)
+
+## Goal
+Finish the `NousResearch/hermes-agent` install that failed at the `products`
+stage on 2026-10-08, and install the `cua-driver` tool that failed
+verification. Same Layer 1 / Layer 2 mechanism as this epic.
+
+## Findings (verified 2026-10-11)
+
+Two independent failures. Receipt:
+`~/.hermes/telemetry/shared_metrics/pending_installs/4417def8….json` reads
+`outcome: failed`, `failed_stage: products`. The Python side installed fine
+(`hermes --version` → `v0.21.6+130.g25a71a7`); `node_modules/` is absent, so
+the TUI and web products were never built.
+
+**F-H1 — `products` stage: envfs phantom `/bin/npm`.**
+`scripts/build/node-deps.mjs:19` walks every `PATH` entry and calls
+`realpathSync(bin)` unguarded on any `npm` where `existsSync(bin)` passed.
+On this host `/bin` and `/usr/bin` are `envfs` FUSE mounts (epic-05 D2). Their
+name index reports `/bin/npm`, `/bin/node`, `/bin/git`, `/bin/python`, `/bin/ls`
+as existing while `realpathSync` on them throws ENOENT, so the build died:
+
+```
+Error: ENOENT: no such file or directory, lstat '/bin/npm'
+    at realpathSync (node:fs:3315:29)
+    at npmCommand (node-deps.mjs:19:30)
+```
+
+It is not a blanket FUSE lie: `existsSync('/bin/zzz-not-a-real-binary')` is
+`false` and `existsSync('/bin/nonexistentdir/file')` is `false`, so the index
+holds real names whose targets no longer resolve. `readdirSync('/bin')` returns
+0 entries. A working npm exists at `/run/current-system/sw/bin/npm` →
+`…nodejs-slim-24.21.0-npm/…/npm-cli.js`. Nothing in the hermes build code adds
+`/bin` to PATH (`scripts/build/launchers.py:43` only prepends its own tool
+dirs), so the entry came from the environment the Oct-8 installer inherited.
+
+**F-H2 — `cua-driver`: `libXi.so.6` missing.** Reproduced exactly through the
+nix-ld interpreter: `/lib64/ld-linux-x86-64.so.2 <cua-driver> --version` →
+`error while loading shared libraries: libXi.so.6`. Plain `ldd` reports
+`libX11.so.6`, `libXi.so.6` and `libxkbcommon.so.0` as not found, but that is
+misleading here: there is no `/etc/ld.so.conf`, and nix-ld resolves through
+`/run/current-system/sw/share/nix-ld/lib`, where `libX11` and `libxkbcommon`
+already are present. `libXi` is the only real gap. Proven by running the
+cached tarball's binary with the store `libxi` on the path: `cua-driver 0.21.0`.
+libXi's own `DT_NEEDED` (`libX11`, `libXext`, `libxcb`, `libXau`, `libXdmcp`)
+all resolve through nix-ld today, so one package closes it.
+
+**Not a bug:** `~/.hermes/.hermes-update-in-progress.lock` is a sidecar the
+checkout never deletes; `tests/scripts/desktop_update/test_desktop_update_posix_marker_corpus.py:90`
+asserts it survives.
+
+## Decisions
+- **HD1 — Add `libxi` to `programs.nix-ld.libraries`.** Same additive Layer 1
+  edit as the Chromium follow-up (F-D1); no `dev` output, no new rebuild
+  beyond the one we need anyway. *Rejected:* `LD_LIBRARY_PATH` wrapper (this
+  epic's own F-D5 / Risks note: mixed store generations pull a mismatched
+  glibc), `nix-alien-ld` (D3 already rejected as per-binary triage), skipping
+  the tool outright (drops a default tool `hermes setup` asked for).
+- **HD2 — Fix `products` by rebuilding it, not by patching `node-deps.mjs`.**
+  The checkout is under `hermes update` management, which does
+  `git reset --hard origin/main`, so a local patch to `node-deps.mjs` would be
+  silently reverted. Re-running the install from a shell whose PATH has no
+  `/bin` avoids the phantom entirely, and the current shell already has none.
+- **HD3 — envfs stays enabled; revisit only if the phantom recurs.** Disabling
+  it is the durable kill for F-H1, but epic-05 D2 made it load-bearing for
+  hardcoded `#!/usr/bin/env` and `/bin/bash` shebangs in foreign binaries, and
+  epics 04 and 17 depend on that layer. Trading those for a build-time
+  workaround is the wrong default. **Open decision for the user** — see the
+  approval ask.
+- **HD4 — Report the `node-deps.mjs` bug upstream.** `realpathSync` at line 19
+  needs a try/catch so an unresolvable PATH entry is skipped like any other.
+  NousResearch/hermes-agent. Informational; not a blocker.
+
+## Milestones
+1. `nix/configuration.nix`: add `libxi`; `nix-instantiate --parse` both copies.
+2. `nix/update-nixos.sh` rebuild.
+3. Verify `libXi.so.6` in `/run/current-system/sw/share/nix-ld/lib` and that
+   `libwayland-client*` is still absent (epic-04 D5 guard).
+4. `hermes pm install cua-driver`; verify the staged entry passes.
+5. Re-run the installer to a clean `products` stage; verify `node_modules/`
+   exists and the TUI launches.
+6. Report F-H1 upstream.
+
+## Risks
+- Rebuild needs sudo (zenity askpass) and may interrupt.
+- `libxi` transitively exposing `libwayland-client` would regress epic-04
+  opencode paste — checked at step 3, same guard as F-D3.
+- Step 5 runs a full `npm ci` (large download, minutes). Queued through `ajq`.
+- If `/bin` reappears on PATH in a future shell, the phantom returns and
+  `hermes update` fails the same way. HD3 leaves that unfixed by choice.

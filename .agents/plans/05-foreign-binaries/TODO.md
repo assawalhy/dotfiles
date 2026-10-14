@@ -41,3 +41,23 @@
 - [x] launch smoke: process alive ≥15 s, no missing-lib errors
 - [x] user confirms window opens / GNOME launcher entry
 - [x] final: record installed version + update command in PLAN.md
+
+## Hermes Agent install failures (2026-10-11)
+
+- [x] `configuration.nix`: add `libxi` to `programs.nix-ld.libraries`
+- [x] `nix-instantiate --parse configuration.nix` (repo + /etc/nixos)
+- [x] rebuild (`nix/update-nixos.sh`, sudo/zenity askpass)
+- [x] verify `libXi.so.6` in `/run/current-system/sw/share/nix-ld/lib`
+- [x] verify `libwayland-client*` still ABSENT there (epic 04 D5 guard)
+- [x] `hermes pm install cua-driver` — staged entry passes verification
+- [x] verify `node_modules/` exists — 421M, 348 entries, receipt written
+      (installed by driving `prepare_source_dependencies` directly; the installer
+      still cannot complete because `npmCommand()` at node-deps.mjs:109 runs
+      before the `--reuse` short-circuit at :143)
+- [ ] re-run installer → `products` stage passes. **BLOCKED, premise wrong.**
+      `hermes_cli/gateway.py:24-30` appends `/bin:/sbin:/usr/bin:/usr/sbin` to
+      `os.environ["PATH"]` at import time, so a clean outer PATH is undone
+      inside the process. Verified by importing the module directly. Needs a
+      decision: remount envfs / disable envfs / patch node-deps.mjs.
+- [ ] report the `node-deps.mjs:19` unguarded `realpathSync` upstream
+- [ ] final verification: `bats tests/link-files.bats` 99 ok / 0 not ok
