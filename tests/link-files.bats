@@ -627,6 +627,47 @@ setup() {
   [ ! -e "$FIX_REPO/common/.config/mpv/extra.conf" ]
 }
 
+@test "refresh- a candidate owned by the other overlay is reported, not captured" {
+  # relpath exists only in macos/, while .config/maconly/ is a linked dir on
+  # linux because common/ has a file there. Capturing it would give one file
+  # two owners (macos/ + the active overlay) and two links.
+  fixture_new rf_other git
+  mkdir -p "$FIX_REPO/common/.config/maconly" "$FIX_REPO/macos/.config/maconly"
+  printf 'common\n' > "$FIX_REPO/common/.config/maconly/common.conf"
+  printf 'macos\n'  > "$FIX_REPO/macos/.config/maconly/only.conf"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'macos-home\n' > "$FIX_HOME/.config/maconly/only.conf"
+  printf 'extra\n' > "$FIX_HOME/.config/mpv/extra.conf"
+
+  run_link --refresh --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"?  .config/maconly/only.conf"* ]]
+  [[ "$output" == *"[macos overlay owns this path] not captured"* ]]
+  [[ "$output" == *"1 file(s) not captured: the other overlay owns those paths"* ]]
+  # the mixed batch still captures what it may
+  [ -f "$FIX_REPO/common/.config/mpv/extra.conf" ]
+  assert_link .config/mpv/extra.conf "$FIX_REPO/common/.config/mpv/extra.conf"
+  [ ! -e "$FIX_REPO/linux/.config/maconly/only.conf" ]
+  [ ! -e "$FIX_REPO/common/.config/maconly/only.conf" ]
+  [ -f "$FIX_HOME/.config/maconly/only.conf" ] && [ ! -L "$FIX_HOME/.config/maconly/only.conf" ]
+}
+
+@test "refresh- only other-overlay candidates: Nothing to refresh, still reported" {
+  fixture_new rf_other2 git
+  mkdir -p "$FIX_REPO/common/.config/maconly" "$FIX_REPO/macos/.config/maconly"
+  printf 'common\n' > "$FIX_REPO/common/.config/maconly/common.conf"
+  printf 'macos\n'  > "$FIX_REPO/macos/.config/maconly/only.conf"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'macos-home\n' > "$FIX_HOME/.config/maconly/only.conf"
+
+  run_link --refresh --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"?  .config/maconly/only.conf"* ]]
+  [[ "$output" == *"Nothing to refresh."* ]]
+}
+
 # ============================================================== audit- ===
 
 @test "audit- all-correct home is clean (exit 0)" {
@@ -940,6 +981,22 @@ setup() {
   output_has_finding .config/herdr/real-new.conf
 }
 
+@test "audit- an other-overlay candidate is a finding (exit 1), not [unlinked]" {
+  fixture_new au_other git
+  mkdir -p "$FIX_REPO/common/.config/maconly" "$FIX_REPO/macos/.config/maconly"
+  printf 'common\n' > "$FIX_REPO/common/.config/maconly/common.conf"
+  printf 'macos\n'  > "$FIX_REPO/macos/.config/maconly/only.conf"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'macos-home\n' > "$FIX_HOME/.config/maconly/only.conf"
+
+  run_link --audit
+  [ "$status" -eq 1 ]
+  grep -qE '^\?  \.config/maconly/only\.conf ' <<< "$output"
+  [[ "$output" == *"[not captured: macos overlay owns this path]"* ]]
+  output_not_has_finding .config/maconly/only.conf   # the `?` marker, not `+`
+}
+
 # ============================================================= picker- ===
 
 @test "picker- fallback menu 'a' (all) then confirm links everything" {
@@ -1021,6 +1078,20 @@ setup() {
   [[ "$output" == *"error: --no-backup requires --force"* ]]
 }
 
+@test "cli- --no-capture without --fix exits 1" {
+  fixture_new cli_nocapture
+  run_link --no-capture --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"error: --no-capture only applies to --fix"* ]]
+}
+
+@test "cli- --audit --refresh exits 1 (audit never writes)" {
+  fixture_new cli_auditrefresh git
+  run_link --audit --refresh --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"error: --audit cannot be combined with --refresh"* ]]
+}
+
 @test "cli- two filtering patterns exits 1" {
   fixture_new cli_two
   run_link foo bar
@@ -1049,7 +1120,7 @@ setup() {
 
 # ================================================================ fix- ===
 
-@test "fix- six-state resolution: missing, wrong-source, conflict, stale, ignored, neglinked" {
+@test "fix- six-state link resolution: missing, wrong-source, conflict, stale, ignored, neglinked" {
   fixture_new fx_six
   run_link --yes
   [ "$status" -eq 0 ]
@@ -1091,7 +1162,7 @@ setup() {
   [[ "$output" == *"Audit clean"* ]]
 }
 
-@test "fix- dry-run previews all six markers and changes nothing" {
+@test "fix- dry-run previews all six link markers and changes nothing" {
   fixture_new fx_dry
   run_link --yes
   [ "$status" -eq 0 ]
@@ -1170,6 +1241,148 @@ setup() {
   assert_link .zshrc "$FIX_REPO/common/.zshrc"
   [ -f "$FIX_HOME/.zshrc.bak."* ]
   cmp "$FIX_HOME/.zshrc.bak."* <(printf 'MYDATA\n')
+}
+
+# ---- capture: the seventh state (--refresh inside --fix) ---------------
+
+@test "fix- a new file in a linked dir is captured into the repo and symlinked back" {
+  fixture_new fx_capture git
+  # a relpath the inactive overlay owns: reported, never captured
+  mkdir -p "$FIX_REPO/common/.config/maconly" "$FIX_REPO/macos/.config/maconly"
+  printf 'common\n' > "$FIX_REPO/common/.config/maconly/common.conf"
+  printf 'macos\n'  > "$FIX_REPO/macos/.config/maconly/only.conf"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'extra\n' > "$FIX_HOME/.config/mpv/extra.conf"
+  printf 'macos-home\n' > "$FIX_HOME/.config/maconly/only.conf"
+
+  run_link --fix --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"+  .config/mpv/extra.conf"* ]]
+  [[ "$output" == *"[refresh] -> common"* ]]
+  [[ "$output" == *"1 new file(s) will be MOVED into common/linux"* ]]
+  # captured into the repo with its content, and linked back
+  [ -f "$FIX_REPO/common/.config/mpv/extra.conf" ]
+  [ "$(cat "$FIX_REPO/common/.config/mpv/extra.conf")" = "extra" ]
+  assert_link .config/mpv/extra.conf "$FIX_REPO/common/.config/mpv/extra.conf"
+  # the other overlay's path is reported, never duplicated into this one
+  [[ "$output" == *"?  .config/maconly/only.conf"* ]]
+  [[ "$output" == *"[macos overlay owns this path] not captured"* ]]
+  [ ! -e "$FIX_REPO/linux/.config/maconly/only.conf" ]
+  [ ! -e "$FIX_REPO/common/.config/maconly/only.conf" ]
+  [ -f "$FIX_HOME/.config/maconly/only.conf" ] && [ ! -L "$FIX_HOME/.config/maconly/only.conf" ]
+}
+
+@test "fix- a captured file lands in the OS overlay when it has the dir" {
+  fixture_new fx_capture_os git
+  mkdir -p "$FIX_REPO/linux/.config/mpv"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'extra\n' > "$FIX_HOME/.config/mpv/extra.conf"
+
+  run_link --fix --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[refresh] -> linux"* ]]
+  [ -f "$FIX_REPO/linux/.config/mpv/extra.conf" ]
+  assert_link .config/mpv/extra.conf "$FIX_REPO/linux/.config/mpv/extra.conf"
+}
+
+@test "fix- after the capture --audit is clean and a second --fix changes nothing" {
+  fixture_new fx_capture_idem git
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'extra\n' > "$FIX_HOME/.config/mpv/extra.conf"
+  run_link --fix --yes
+  [ "$status" -eq 0 ]
+
+  run_link --audit
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Audit clean"* ]]
+
+  cp -a "$FIX_REPO/common" "$BATS_TEST_TMPDIR/common.snap"
+  run_link --fix --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Nothing to do"* ]]
+  run diff -rq --no-dereference "$BATS_TEST_TMPDIR/common.snap" "$FIX_REPO/common"
+  [ "$status" -eq 0 ]
+}
+
+@test "fix- --dry-run previews the capture and moves nothing" {
+  fixture_new fx_capture_dry git
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'extra\n' > "$FIX_HOME/.config/mpv/extra.conf"
+  cp -a "$FIX_HOME" "$BATS_TEST_TMPDIR/home.snap"
+
+  run_link --fix --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"+  .config/mpv/extra.conf"* ]]
+  [[ "$output" == *"[refresh] -> common"* ]]
+  [[ "$output" == *"1 new file(s) will be MOVED into common/linux"* ]]
+  [ ! -e "$FIX_REPO/common/.config/mpv/extra.conf" ]
+  run diff -rq --no-dereference "$BATS_TEST_TMPDIR/home.snap" "$FIX_HOME"
+  [ "$status" -eq 0 ]
+}
+
+@test "fix- an ignored new file is never captured" {
+  fixture_new fx_capture_ign git
+  printf '.config/mpv/ignoreme.conf\n' >> "$FIX_REPO/link-ignore.txt"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'nope\n' > "$FIX_HOME/.config/mpv/ignoreme.conf"
+
+  run_link --fix --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"[refresh]"* ]]
+  [[ "$output" != *"ignoreme.conf"* ]]
+  [ -f "$FIX_HOME/.config/mpv/ignoreme.conf" ] && [ ! -L "$FIX_HOME/.config/mpv/ignoreme.conf" ]
+  [ ! -e "$FIX_REPO/common/.config/mpv/ignoreme.conf" ]
+}
+
+@test "fix- a gitignored new file is never captured" {
+  fixture_new fx_capture_git git
+  printf '.config/mpv/secret.conf\n' > "$FIX_REPO/.gitignore"
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'secret\n' > "$FIX_HOME/.config/mpv/secret.conf"
+
+  run_link --fix --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"[refresh]"* ]]
+  [ -f "$FIX_HOME/.config/mpv/secret.conf" ] && [ ! -L "$FIX_HOME/.config/mpv/secret.conf" ]
+  [ ! -e "$FIX_REPO/common/.config/mpv/secret.conf" ]
+}
+
+@test "fix- a pattern narrows the capture to the dirs it matches" {
+  fixture_new fx_capture_pat git
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'mpv\n'  > "$FIX_HOME/.config/mpv/extra-mpv.conf"
+  printf 'nvim\n' > "$FIX_HOME/.config/nvim/extra-nvim.lua"
+
+  # the pattern scopes the linked dirs the scan walks, so .config/nvim is not
+  # even scanned and its new file is left alone
+  run_link --fix --yes '.*mpv.*'
+  [ "$status" -eq 0 ]
+  [ -f "$FIX_REPO/common/.config/mpv/extra-mpv.conf" ]
+  assert_link .config/mpv/extra-mpv.conf "$FIX_REPO/common/.config/mpv/extra-mpv.conf"
+  [ ! -e "$FIX_REPO/common/.config/nvim/extra-nvim.lua" ]
+  [ -f "$FIX_HOME/.config/nvim/extra-nvim.lua" ] && [ ! -L "$FIX_HOME/.config/nvim/extra-nvim.lua" ]
+}
+
+@test "fix- --no-capture repairs links but never moves new files" {
+  fixture_new fx_nocapture git
+  run_link --yes
+  [ "$status" -eq 0 ]
+  printf 'extra\n' > "$FIX_HOME/.config/mpv/extra.conf"
+  printf 'new\n' > "$FIX_REPO/common/.newfile"
+
+  run_link --fix --no-capture --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"[refresh]"* ]]
+  assert_link .newfile "$FIX_REPO/common/.newfile"          # links still repaired
+  [ ! -e "$FIX_REPO/common/.config/mpv/extra.conf" ]        # nothing captured
+  [ -f "$FIX_HOME/.config/mpv/extra.conf" ] && [ ! -L "$FIX_HOME/.config/mpv/extra.conf" ]
 }
 
 # ============================================================== guard- ===
