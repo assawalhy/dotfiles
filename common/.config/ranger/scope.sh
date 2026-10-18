@@ -52,8 +52,8 @@ handle_extension() {
         ## Archive
         a|ace|alz|arc|arj|bz|bz2|cab|cpio|deb|gz|jar|lha|lz|lzh|lzma|lzo|\
         rpm|rz|t7z|tar|tbz|tbz2|tgz|tlz|txz|tZ|tzo|war|xpi|xz|Z|zip)
-            atool --list -- "${FILE_PATH}" && exit 5
-            bsdtar --list --file "${FILE_PATH}" && exit 5
+            ## Listing via file-preview: atool, bsdtar, unzip, zipinfo, tar or 7z.
+            file-preview --text "${FILE_PATH}" && exit 5
             exit 1;;
         rar)
             ## Avoid password prompt by providing empty password
@@ -81,17 +81,14 @@ handle_extension() {
 
         ## OpenDocument
         odt|ods|odp|sxw)
-            ## Preview as text conversion
-            odt2txt "${FILE_PATH}" && exit 5
-            ## Preview as markdown conversion
-            pandoc -s -t markdown -- "${FILE_PATH}" && exit 5
+            ## Text via file-preview: pandoc, odt2txt, xlsx2csv, python zipfile.
+            file-preview --text "${FILE_PATH}" && exit 5
             exit 1;;
 
         ## XLSX
         xlsx)
-            ## Preview as csv conversion
-            ## Uses: https://github.com/dilshod/xlsx2csv
-            xlsx2csv -- "${FILE_PATH}" && exit 5
+            ## Text via file-preview: xlsx2csv, ssconvert, python zipfile.
+            file-preview --text "${FILE_PATH}" && exit 5
             exit 1;;
 
         ## HTML
@@ -140,34 +137,24 @@ handle_image() {
 
         ## Image
         image/*)
-            local orientation
-            orientation="$( identify -format '%[EXIF:Orientation]\n' -- "${FILE_PATH}" )"
-            ## If orientation data is present and the image actually
-            ## needs rotating ("1" means no rotation)...
-            if [[ -n "$orientation" && "$orientation" != 1 ]]; then
-                ## ...auto-rotate the image according to the EXIF data.
-                convert -- "${FILE_PATH}" -auto-orient "${IMAGE_CACHE_PATH}" && exit 6
-            fi
-
-            ## `w3mimgdisplay` will be called for all images (unless overriden
-            ## as above), but might fail for unsupported types.
-            exit 7;;
+            ## Raster images and SVG: file-preview picks the first available
+            ## renderer (magick/convert, rsvg-convert, inkscape, cairosvg),
+            ## applies EXIF orientation and resizes to fit. It writes a PNG
+            ## copy to the cache path; ranger decodes it with PIL.
+            file-preview --render-out "${IMAGE_CACHE_PATH}" "${FILE_PATH}" && exit 6
+            exit 1;;
 
         ## Video
         video/*)
-            # Thumbnail
-            ffmpegthumbnailer -i "${FILE_PATH}" -o "${IMAGE_CACHE_PATH}" -s 0 && exit 6
+            ## First frame via ffmpegthumbnailer, magick or ffmpeg.
+            file-preview --render-out "${IMAGE_CACHE_PATH}" "${FILE_PATH}" && exit 6
             exit 1;;
 
         ## PDF
         application/pdf)
-            pdftoppm -f 1 -l 1 \
-                     -scale-to-x "${DEFAULT_SIZE%x*}" \
-                     -scale-to-y -1 \
-                     -singlefile \
-                     -jpeg -tiffcompression jpeg \
-                     -- "${FILE_PATH}" "${IMAGE_CACHE_PATH%.*}" \
-                && exit 6 || exit 1;;
+            ## Page 1 via pdftoppm, pdftocairo, magick, gs or mutool.
+            file-preview --render-out "${IMAGE_CACHE_PATH}" "${FILE_PATH}" && exit 6
+            exit 1;;
 
 
         ## ePub, MOBI, FB2 (using Calibre)
@@ -182,24 +169,10 @@ handle_image() {
 
         ## Font
         application/font*|application/*opentype)
-            preview_png="/tmp/$(basename "${IMAGE_CACHE_PATH%.*}").png"
-            if fontimage -o "${preview_png}" \
-                         --pixelsize "120" \
-                         --fontname \
-                         --pixelsize "80" \
-                         --text "  ABCDEFGHIJKLMNOPQRSTUVWXYZ  " \
-                         --text "  abcdefghijklmnopqrstuvwxyz  " \
-                         --text "  0123456789.:,;(*!?') ff fl fi ffi ffl  " \
-                         --text "  The quick brown fox jumps over the lazy dog.  " \
-                         "${FILE_PATH}";
-            then
-                convert -- "${preview_png}" "${IMAGE_CACHE_PATH}" \
-                    && rm "${preview_png}" \
-                    && exit 6
-            else
-                exit 1
-            fi
-            ;;
+            ## Specimen sheet via fontimage, else exiftool/otfinfo/fc-scan text.
+            file-preview --render-out "${IMAGE_CACHE_PATH}" "${FILE_PATH}" && exit 6
+            file-preview --text "${FILE_PATH}" && exit 5
+            exit 1;;
 
         ## Preview archives using the first image inside.
         ## (Very useful for comic book collections for example.)
@@ -267,26 +240,23 @@ handle_mime() {
     case "${mimetype}" in
         ## RTF and DOC
         text/rtf|*msword)
-            ## Preview as text conversion
-            ## note: catdoc does not always work for .doc files
-            ## catdoc: http://www.wagner.pp.ru/~vitus/software/catdoc/
-            catdoc -- "${FILE_PATH}" && exit 5
+            ## Text via file-preview: pandoc, antiword, catdoc.
+            file-preview --text "${FILE_PATH}" && exit 5
             exit 1;;
 
         ## DOCX, ePub, FB2 (using markdown)
         ## You might want to remove "|epub" and/or "|fb2" below if you have
         ## uncommented other methods to preview those formats
         *wordprocessingml.document|*/epub+zip|*/x-fictionbook+xml)
-            ## Preview as markdown conversion
-            pandoc -s -t markdown -- "${FILE_PATH}" && exit 5
+            ## Text via file-preview: pandoc, else python zipfile.
+            file-preview --text "${FILE_PATH}" && exit 5
             exit 1;;
 
         ## XLS
         *ms-excel)
-            ## Preview as csv conversion
-            ## xls2csv comes with catdoc:
-            ##   http://www.wagner.pp.ru/~vitus/software/catdoc/
-            xls2csv -- "${FILE_PATH}" && exit 5
+            ## Text via file-preview: xlsx2csv, ssconvert, in2csv, libreoffice,
+            ## else python zipfile.
+            file-preview --text "${FILE_PATH}" && exit 5
             exit 1;;
 
         ## Text
@@ -320,26 +290,34 @@ handle_mime() {
 
         ## Image
         image/*)
-            ## Preview as text conversion
-            # img2txt --gamma=0.6 --width="${PV_WIDTH}" -- "${FILE_PATH}" && exit 4
-            exiftool "${FILE_PATH}" && exit 5
+            ## Text rendering via chafa/viu/timg/img2txt/catimg, else a typed
+            ## placeholder line. Reached when image previews are disabled.
+            file-preview --text "${FILE_PATH}" && exit 5
             exit 1;;
 
         ## Video and audio
         video/* | audio/*)
-            mediainfo "${FILE_PATH}" && exit 5
-            exiftool "${FILE_PATH}" && exit 5
+            ## Metadata via mediainfo/exiftool/ffprobe, else the placeholder.
+            file-preview --text "${FILE_PATH}" && exit 5
             exit 1;;
     esac
 }
 
 handle_fallback() {
-    echo '----- File Type Classification -----' && file --dereference --brief -- "${FILE_PATH}" && exit 5
+    ## Typed placeholder: file-preview names the detected type when its own
+    ## families have no renderer or extractor for this file.
+    file-preview --text "${FILE_PATH}" && exit 5
     exit 1
 }
 
 
-MIMETYPE="$( file --dereference --brief --mime-type -- "${FILE_PATH}" )"
+## MIMETYPE drives the image and mime handlers below. `file` is the accurate
+## source; python mimetypes is the fallback so previews still work on a machine
+## without libmagic installed.
+MIMETYPE="$( file --dereference --brief --mime-type -- "${FILE_PATH}" 2>/dev/null || true )"
+if [[ -z "${MIMETYPE}" ]] && command -v python3 >/dev/null 2>&1; then
+    MIMETYPE="$( python3 -c 'import mimetypes,sys; print(mimetypes.guess_type(sys.argv[1])[0] or "")' "${FILE_PATH}" 2>/dev/null || true )"
+fi
 if [[ "${PV_IMAGE_ENABLED}" == 'True' ]]; then
     handle_image "${MIMETYPE}"
 fi
