@@ -1,0 +1,25 @@
+# TODO — file preview (video, PDF, office, placeholder)
+
+- [x] epic files created (this dir)
+- [x] `common/bin/file-preview`: type detection (extension + `file --mime-type` + python `mimetypes`), tool-chain picker, render raster/video/pdf/ps, extract office text (pandoc, odt2txt, catdoc, xlsx2csv, python zipfile), archive listing, audio metadata + cover, font preview, placeholder line, `--raw` and `--render-out` modes, 25 MiB cap, always exit 0 (except `--render-out`)
+- [x] `file-preview --render-out`: verify each chain picks the first available tool and writes a real raster (raster, video, pdf)
+- [x] `file-preview --raw`: verify placeholder for a zip/unknown, text for text, extracted markdown for docx, csv for xlsx
+- [x] `common/.config/git/attributes`: rename driver to `preview`, add video/audio/pdf/ps/eps/office globs
+- [x] `common/.gitconfig`: `diff.preview.textconv`
+- [x] `common/bin/git-img-textconv`: thin wrapper on `file-preview --raw`
+- [x] `common/bin/git-img-preview`: delegate to `file-preview` (drop hardcoded raster list)
+- [x] W1 verify: pty git diff for a png, mp4 and pdf emits one OSC 1337 escape each; docx diff shows markdown text; text diff unchanged; mixed diff through git-img-pager = 2 escapes with removed/added labels plus delta-styled text
+- [x] `common/.config/ranger/scope.sh`: image/video/pdf via `file-preview --render-out` + exit 6, office/archive/unknown via `file-preview --text`, mime fallback to python mimetypes when `file` is absent
+- [x] W2 verify: scope.sh by hand on png/svg/mp4/pdf (exit 6, PNG in cache), docx/xlsx (exit 5 extracted text), tar (listing), unknown binary (placeholder), text (highlight), images disabled (placeholder)
+- [x] nvim `lua/plugins/images.lua`: add pdf, mp4, mov, avi, mkv, webm, m4v, wmv, flv to `formats`, comment updated
+- [x] nvim `lua/config/nontext.lua`: drop pdf/video (snacks owns them), fill the buffer from `file-preview --text`, keep the xdg-open/keep select, cancel keeps the read-only preview
+- [x] nvim `README.md`: preview section rewritten for snacks pdf/video floats, the preview buffer and the placeholder
+- [x] W3 verify: headless nvim (u NONE, nontext.lua only) fills a docx with extracted markdown, a tar with its listing, an unlisted binary with the placeholder; BufReadCmd patterns carry docx/ttf/zip/ps and no longer pdf/mp4/mkv; both edited lua files loadfile clean and the full config starts headless with no error
+- [x] `nix/configuration.nix` + `setup/packages.list`: add `file`, `ghostscript_headless`, `ffmpegthumbnailer`
+- [ ] W4 verify: rebuild (needs sudo, user runs `nix/update-nixos.sh`), then `command -v file`, `gs`, `ffmpegthumbnailer`, `magick 'x.pdf[0]'` succeeds
+- [x] `link-files --fix --yes 'bin/file-preview'` (scoped to this task's file); `--audit` then reported 5 unrelated capture candidates, now excluded per the user: `link-ignore.txt` gained `.config/opencode/commands/` (plannotator, installed by `setup/agent-tools.sh`), `.config/opencode/opencode.json.before-figma.bak`, and `.config/shell/secrets.sh` (machine-local secrets sourced by `.bash_profile`); re-audit: `Audit clean (80 links correct)`
+- [x] `bats tests/link-files.bats` 99 ok / 0 not ok, `tests/select.bats` 5 ok, `tests/montag.bats` 16 ok, `tests/link-known-issues.bats` still 4/4 failing as documented
+- [x] `file-preview --raw` on a directory, a missing file, a broken symlink, a fifo, a 40 MiB blob and a 180 MB raster: placeholder or render, never a hang
+- [x] classifies by mime when the extension is missing or unknown (tested with the store's libmagic: an extension-less png renders, an extension-less docx/xlsx extracts)
+- [x] end-to-end git in a pty with the linked scripts: raster, video, pdf and docx diffs each render or extract with `--- removed ---` / `+++ added +++` labels, text still goes through delta, `git-img-preview` covers both the diff and the no-diff path
+- [ ] user visual pass (needs a real terminal): the snacks float for pdf/video and the nvim preview buffer, the git diff and lazygit `I` on a video/pdf/docx, and a ranger pane. The pdf/video floats and the ranger pane want the rebuild first, since `file`, `ffmpegthumbnailer` and `gs` land on PATH with it
