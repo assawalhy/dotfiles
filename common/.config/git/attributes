@@ -1,16 +1,47 @@
 # Global gitattributes, wired via core.attributesFile in ~/.gitconfig.
-# Raster images use the "img" textconv driver (git-img-textconv) so diffs
-# carry an inline-image escape instead of "Binary files differ"; the pager
-# (git-img-pager) renders it. SVGs are deliberately absent: their text diff
-# is more useful than a rendered preview.
-*.png diff=img
-*.jpg diff=img
-*.jpeg diff=img
-*.gif diff=img
-*.webp diff=img
-*.bmp diff=img
-*.tiff diff=img
-*.tif diff=img
-*.avif diff=img
-*.heic diff=img
-*.ico diff=img
+# Non-text files use the "preview" textconv driver (git-img-textconv ->
+# file-preview) so a diff carries an inline-image escape for renderables, or
+# extracted text / a typed placeholder line instead of "Binary files differ";
+# the pager (git-img-pager) renders the escapes. SVGs are deliberately absent:
+# their text diff is more useful than a rendered preview. Archives are absent
+# too: a package listing is noise in a diff.
+*.png diff=preview
+*.jpg diff=preview
+*.jpeg diff=preview
+*.gif diff=preview
+*.webp diff=preview
+*.bmp diff=preview
+*.tiff diff=preview
+*.tif diff=preview
+*.avif diff=preview
+*.heic diff=preview
+*.ico diff=preview
+*.mp4 diff=preview
+*.mkv diff=preview
+*.webm diff=preview
+*.avi diff=preview
+*.mov diff=preview
+*.m4v diff=preview
+*.wmv diff=preview
+*.flv diff=preview
+*.mp3 diff=preview
+*.wav diff=preview
+*.flac diff=preview
+*.ogg diff=preview
+*.opus diff=preview
+*.m4a diff=preview
+*.aac diff=preview
+*.pdf diff=preview
+*.ps diff=preview
+*.eps diff=preview
+*.doc diff=preview
+*.docx diff=preview
+*.odt diff=preview
+*.rtf diff=preview
+*.epub diff=preview
+*.xls diff=preview
+*.xlsx diff=preview
+*.ods diff=preview
+*.ppt diff=preview
+*.pptx diff=preview
+*.odp diff=preview

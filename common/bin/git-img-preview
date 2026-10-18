@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # lazygit helper: render a file's diff in the real terminal (custom command
 # with `output: terminal`, so lazygit suspends and the images actually show).
-# Images go through git-img-pager; non-images fall back to a plain text diff.
-# With no diff at all (untracked or unchanged), the file itself is shown.
-
+# Non-text files go through git-img-pager; with no diff at all (untracked or
+# unchanged) the file itself is shown through file-preview, which renders,
+# extracts text, or prints a typed placeholder.
 set -u
 
 path="${1:-}"
@@ -25,15 +25,7 @@ if [ -n "$diff" ]; then
 fi
 
 if [ -f "$path" ]; then
-    # Untracked or unchanged: show the file itself (images inline, text via delta).
-    case "$path" in
-        *.png|*.PNG|*.jpg|*.JPG|*.jpeg|*.JPEG|*.gif|*.GIF|*.webp|*.WEBP|*.bmp|*.BMP|*.tiff|*.TIFF|*.tif|*.TIF|*.avif|*.AVIF|*.heic|*.HEIC)
-            git-img-textconv "$path"
-            ;;
-        *)
-            delta --paging=never < "$path" 2>/dev/null || cat "$path"
-            ;;
-    esac
+    file-preview "$path"
     exit 0
 fi
 

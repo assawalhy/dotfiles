@@ -63,7 +63,8 @@
 [diff]
     colorMoved = default
 
-# Raster images are diffed as inline-image escapes (see git-img-textconv and
-# git-img-pager); the attribute globs live in ~/.config/git/attributes.
-[diff "img"]
+# Non-text files are diffed as inline-image escapes or extracted text (see
+# git-img-textconv and git-img-pager); the attribute globs live in
+# ~/.config/git/attributes.
+[diff "preview"]
     textconv = git-img-textconv

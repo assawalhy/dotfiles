@@ -1,0 +1,557 @@
+#!/usr/bin/env bash
+# One preview path for non-text files: raster images, video frames, PDF pages,
+# office text, archive listings, audio metadata and cover art, fonts. Anything
+# else becomes a typed placeholder line. Each family walks a chain of popular
+# tools and uses the first one that actually works, so the same script works on a
+# machine that has only one renderer.
+#
+# Modes:
+#   (default)            human preview: inline OSC 1337 escape for renderables,
+#                        delta for text, extracted text for office
+#   --raw                no delta, no colour: escapes for renderables, text
+#                        otherwise. Used by the git textconv and lazygit helper.
+#   --text               never emits an escape: text rendering only. Used by
+#                        ranger's fallback and the nvim non-text buffer.
+#   --render-out FILE    write the best raster renderer's output to FILE; exit 0
+#                        on success, 1 on failure. Used by ranger's image cache.
+#
+# The escape line must stay a single line starting with ESC ]1337;File= and
+# ending with BEL: git-img-pager scans for exactly that (dandavison/delta#1399).
+set -u
+
+MAX_BYTES=$((25 * 1024 * 1024))
+MAX_SOURCE=$((512 * 1024 * 1024))
+MAX_PIXELS=${FILE_PREVIEW_MAX_PIXELS:-1600}
+TEXT_WIDTH=${FILE_PREVIEW_WIDTH:-80}
+
+mode=inline
+out=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --raw) mode=raw; shift ;;
+        --text) mode=text; shift ;;
+        --render-out)
+            mode=render-out
+            out="${2:-}"
+            [ -n "$out" ] || { echo "file-preview: --render-out needs a path" >&2; exit 2; }
+            shift 2
+            ;;
+        --) shift; break ;;
+        -*) echo "file-preview: unknown option $1" >&2; exit 2 ;;
+        *) break ;;
+    esac
+done
+
+src="${1:-}"
+if [ -z "$src" ]; then
+    echo "usage: file-preview [--raw|--text|--render-out FILE] <path>" >&2
+    exit 2
+fi
+
+tmpdir=""
+cleanup() { [ -n "$tmpdir" ] && rm -rf "$tmpdir"; }
+trap cleanup EXIT
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+newtmp() {
+    [ -n "$tmpdir" ] || tmpdir=$(mktemp -d 2>/dev/null) || return 1
+    printf '%s/preview.png' "$tmpdir"
+}
+
+base=$(basename -- "$src")
+name_b64=$(printf '%s' "$base" | base64 | tr -d '\n')
+
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+ext_of() {
+    local b
+    b=$(basename -- "$1")
+    case "$b" in
+        *.*) lower "${b##*.}" ;;
+        *) printf '' ;;
+    esac
+}
+
+mime_of() {
+    local f="$1" m=""
+    if have file; then
+        m=$(file --brief --mime-type --dereference -- "$f" 2>/dev/null)
+    fi
+    if [ -z "$m" ] && have python3; then
+        m=$(python3 -c 'import mimetypes,sys;print(mimetypes.guess_type(sys.argv[1])[0] or "")' "$f" 2>/dev/null)
+    fi
+    printf '%s' "$m"
+}
+
+emit_inline() {
+    local f="$1" size
+    [ -s "$f" ] || return 1
+    size=$(wc -c < "$f" | tr -d ' ')
+    if [ "$size" -gt "$MAX_BYTES" ]; then
+        printf '[preview: %s rendered larger than %s bytes, not inlined]\n' "$base" "$MAX_BYTES"
+        return 0
+    fi
+    printf '\033]1337;File=name=%s;inline=1;height=12;preserveAspectRatio=1:' "$name_b64"
+    base64 < "$f" | tr -d '\n'
+    printf '\a\n'
+}
+
+placeholder() {
+    local mime="${1:-}"
+    [ -n "$mime" ] || mime=unknown
+    printf '[file: %s, type: %s, no preview]\n' "$base" "$mime"
+}
+
+too_large() {
+    printf '[file: %s, type: %s, %s bytes, too large to preview]\n' "$base" "${1:-unknown}" "$2"
+}
+
+# ---------------------------------------------------------------- renderers
+
+render_raster() {
+    local src="$1" out="$2" t
+    for t in magick convert; do
+        have "$t" || continue
+        "$t" "${src}[0]" -resize "${MAX_PIXELS}x${MAX_PIXELS}>" "$out" 2>/dev/null && [ -s "$out" ] && return 0
+    done
+    return 1
+}
+
+render_svg() {
+    local src="$1" out="$2" t
+    for t in magick rsvg-convert inkscape cairosvg; do
+        have "$t" || continue
+        case "$t" in
+            magick) "$t" -density 192 -background none "${src}[0]" -resize "${MAX_PIXELS}x${MAX_PIXELS}>" "$out" 2>/dev/null ;;
+            rsvg-convert) "$t" --keep-aspect-ratio --width "$MAX_PIXELS" "$src" -o "$out" 2>/dev/null ;;
+            inkscape) "$t" --export-type=png --export-filename="$out" --export-width="$MAX_PIXELS" "$src" >/dev/null 2>&1 ;;
+            cairosvg) "$t" -o "$out" -W "$MAX_PIXELS" "$src" 2>/dev/null ;;
+        esac
+        [ -s "$out" ] && return 0
+    done
+    return 1
+}
+
+render_video() {
+    local src="$1" out="$2" t
+    for t in ffmpegthumbnailer magick ffmpeg; do
+        have "$t" || continue
+        case "$t" in
+            ffmpegthumbnailer) "$t" -i "$src" -o "$out" -s "$MAX_PIXELS" 2>/dev/null ;;
+            magick) "$t" "${src}[0]" -resize "${MAX_PIXELS}x${MAX_PIXELS}>" "$out" 2>/dev/null ;;
+            ffmpeg) "$t" -y -loglevel error -ss 0 -i "$src" -frames:v 1 -vf "scale='min(${MAX_PIXELS},iw)':-2" "$out" 2>/dev/null ;;
+        esac
+        [ -s "$out" ] && return 0
+    done
+    return 1
+}
+
+render_pdf() {
+    local src="$1" out="$2" t
+    for t in pdftoppm pdftocairo; do
+        have "$t" || continue
+        "$t" -f 1 -l 1 -r 100 -singlefile -png -- "$src" "${out%.*}" 2>/dev/null
+        [ -s "$out" ] && return 0
+    done
+    for t in magick gs mutool; do
+        have "$t" || continue
+        case "$t" in
+            magick) "$t" -density 150 "${src}[0]" -background white -alpha remove -resize "${MAX_PIXELS}x${MAX_PIXELS}>" "$out" 2>/dev/null ;;
+            gs) "$t" -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=png16m -dFirstPage=1 -dLastPage=1 -r100 -sOutputFile="$out" "$src" 2>/dev/null ;;
+            mutool) "$t" draw -o "$out" -F png -r 100 "$src" 1 2>/dev/null ;;
+        esac
+        [ -s "$out" ] && return 0
+    done
+    return 1
+}
+
+render_ps() {
+    local src="$1" out="$2" t
+    for t in magick gs; do
+        have "$t" || continue
+        case "$t" in
+            magick) "$t" -density 150 "${src}[0]" -background white -alpha remove -resize "${MAX_PIXELS}x${MAX_PIXELS}>" "$out" 2>/dev/null ;;
+            gs) "$t" -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=png16m -r100 -sOutputFile="$out" "$src" 2>/dev/null ;;
+        esac
+        [ -s "$out" ] && return 0
+    done
+    return 1
+}
+
+render_font() {
+    local src="$1" out="$2"
+    have fontimage || return 1
+    fontimage -o "$out" --pixelsize 120 --text "  ABCDEFGHIJKLMNOPQRSTUVWXYZ  " \
+        --text "  abcdefghijklmnopqrstuvwxyz  " \
+        --text "  0123456789.:,;(*!?') ff fl fi ffi ffl  " "$src" 2>/dev/null
+    [ -s "$out" ]
+}
+
+render_audio_cover() {
+    local src="$1" out="$2" t
+    for t in ffmpeg; do
+        have "$t" || continue
+        "$t" -y -loglevel error -i "$src" -an -map 0:v:0 -frames:v 1 "$out" 2>/dev/null
+        [ -s "$out" ] && return 0
+    done
+    return 1
+}
+
+render_image_text() {
+    local src="$1" t tmp
+    tmp=$(newtmp) || return 1
+    for t in chafa viu timg img2txt catimg jp2; do
+        have "$t" || continue
+        : > "$tmp"
+        case "$t" in
+            chafa) "$t" --size "${TEXT_WIDTH}x" -- "$src" > "$tmp" 2>/dev/null ;;
+            viu) "$t" -w "$TEXT_WIDTH" -- "$src" > "$tmp" 2>/dev/null ;;
+            timg) "$t" -g "${TEXT_WIDTH}x" -- "$src" > "$tmp" 2>/dev/null ;;
+            img2txt) "$t" -W "$TEXT_WIDTH" -- "$src" > "$tmp" 2>/dev/null ;;
+            catimg) "$t" -w "$TEXT_WIDTH" -H -- "$src" > "$tmp" 2>/dev/null ;;
+            jp2) "$t" "$src" > "$tmp" 2>/dev/null ;;
+        esac
+        if [ -s "$tmp" ]; then
+            cat "$tmp"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# ---------------------------------------------------------------- extractors
+
+# Print the first tool's output that succeeds; a failing tool's partial output
+# never reaches stdout, so a wrong-tool attempt on a tar does not leak unzip's
+# error banner.
+extract_chain() {
+    local src="$1" tmp t
+    shift
+    tmp=$(newtmp) || return 1
+    for t in "$@"; do
+        have "$t" || continue
+        : > "$tmp"
+        case "$t" in
+            atool) "$t" -l -- "$src" > "$tmp" 2>/dev/null ;;
+            bsdtar) "$t" -tf "$src" > "$tmp" 2>/dev/null ;;
+            unzip) "$t" -l -- "$src" > "$tmp" 2>/dev/null ;;
+            zipinfo) "$t" -1 -- "$src" > "$tmp" 2>/dev/null ;;
+            tar) "$t" -tf "$src" > "$tmp" 2>/dev/null ;;
+            7z) "$t" l -- "$src" > "$tmp" 2>/dev/null ;;
+            mediainfo) "$t" -- "$src" > "$tmp" 2>/dev/null ;;
+            exiftool) "$t" -- "$src" > "$tmp" 2>/dev/null ;;
+            ffprobe) "$t" -hide_banner -- "$src" > "$tmp" 2>&1 ;;
+            otfinfo) "$t" -i -- "$src" > "$tmp" 2>/dev/null ;;
+            fc-scan) "$t" --format '%{family}\n%{style}\n%{fullname}\n' "$src" > "$tmp" 2>/dev/null ;;
+            *) "$t" -- "$src" > "$tmp" 2>/dev/null ;;
+        esac
+        if [ $? -eq 0 ] && [ -s "$tmp" ]; then
+            cat "$tmp"
+            return 0
+        fi
+    done
+    return 1
+}
+
+extract_archive() { extract_chain "$1" atool bsdtar unzip zipinfo tar 7z; }
+extract_audio_meta() { extract_chain "$1" mediainfo exiftool ffprobe; }
+extract_font_meta() { extract_chain "$1" exiftool otfinfo fc-scan; }
+
+extract_office() {
+    local src="$1" e="$2" t d tmp
+    case "$e" in
+        docx|doc|odt|rtf|epub|fb2|sxw)
+            for t in pandoc odt2txt antiword catdoc; do
+                have "$t" || continue
+                case "$t" in
+                    pandoc)
+                        case "$e" in
+                            docx|odt|rtf|epub|fb2) "$t" -f "$e" -t markdown -- "$src" 2>/dev/null && return 0 ;;
+                            *) "$t" -t markdown -- "$src" 2>/dev/null && return 0 ;;
+                        esac
+                        ;;
+                    odt2txt) "$t" -- "$src" 2>/dev/null && return 0 ;;
+                    antiword) "$t" "$src" 2>/dev/null && return 0 ;;
+                    catdoc) "$t" -- "$src" 2>/dev/null && return 0 ;;
+                esac
+            done
+            ;;
+        xlsx|xlsm|xls|ods)
+            for t in xlsx2csv ssconvert in2csv libreoffice soffice; do
+                have "$t" || continue
+                case "$t" in
+                    xlsx2csv) "$t" -- "$src" 2>/dev/null && return 0 ;;
+                    ssconvert) "$t" --export-type=Gnumeric_stf:stf_csv -- "$src" fd://1 2>/dev/null && return 0 ;;
+                    in2csv) "$t" -- "$src" 2>/dev/null && return 0 ;;
+                    libreoffice|soffice)
+                        d=$(mktemp -d 2>/dev/null) || continue
+                        "$t" --headless --convert-to csv --outdir "$d" "$src" >/dev/null 2>&1
+                        tmp="$d/$(basename "${src%.*}").csv"
+                        if [ -s "$tmp" ]; then
+                            cat "$tmp"
+                            rm -rf "$d"
+                            return 0
+                        fi
+                        rm -rf "$d"
+                        ;;
+                esac
+            done
+            ;;
+    esac
+    have python3 || return 1
+    python3 - "$src" "$e" <<'PY' 2>/dev/null
+import re, sys, zipfile
+from xml.etree import ElementTree as ET
+
+src, ext = sys.argv[1], sys.argv[2]
+
+
+def tag(el):
+    return el.tag.rsplit('}', 1)[-1]
+
+
+def texts(root, name):
+    return [el.text for el in root.iter() if tag(el) == name and el.text]
+
+
+def local(n):
+    return int(re.findall(r'\d+', n)[-1])
+
+
+with zipfile.ZipFile(src) as z:
+    names = z.namelist()
+    if ext == 'docx':
+        print('\n'.join(texts(ET.fromstring(z.read('word/document.xml')), 't')))
+    elif ext == 'pptx':
+        slides = sorted((n for n in names if re.match(r'ppt/slides/slide\d+\.xml$', n)), key=local)
+        for i, name in enumerate(slides, 1):
+            print('## slide %d' % i)
+            print('\n'.join(texts(ET.fromstring(z.read(name)), 't')))
+    elif ext in ('xlsx', 'xlsm'):
+        shared = []
+        if 'xl/sharedStrings.xml' in names:
+            shared = texts(ET.fromstring(z.read('xl/sharedStrings.xml')), 't')
+        sheets = sorted((n for n in names if re.match(r'xl/worksheets/sheet\d+\.xml$', n)), key=local)
+        for i, name in enumerate(sheets, 1):
+            print('## sheet %d' % i)
+            for row in ET.fromstring(z.read(name)).iter():
+                if tag(row) != 'row':
+                    continue
+                cells = []
+                for cell in row:
+                    if tag(cell) != 'c':
+                        continue
+                    value = None
+                    for child in cell:
+                        if tag(child) == 'v':
+                            value = child.text
+                        elif tag(child) == 'is':
+                            value = ''.join(texts(child, 't'))
+                    if value is not None and cell.get('t') == 's':
+                        try:
+                            value = shared[int(value)]
+                        except (ValueError, IndexError):
+                            pass
+                    cells.append(value or '')
+                print(','.join(cells))
+    else:
+        root = ET.fromstring(z.read('content.xml'))
+        for el in root.iter():
+            if tag(el) == 'p':
+                line = ''.join(el.itertext()).strip()
+                if line:
+                    print(line)
+PY
+}
+
+# ---------------------------------------------------------------- classify
+
+family=""
+ext=""
+if [ -f "$src" ]; then
+    ext=$(ext_of "$src")
+    case "$ext" in
+        png|jpg|jpeg|gif|webp|bmp|tiff|tif|avif|heic|ico|jxl|jp2|ppm|pgm|pbm|pnm|xbm|xpm) family=raster ;;
+        svg|svgz) family=svg ;;
+        mp4|mkv|webm|avi|mov|m4v|wmv|flv|mpg|mpeg|3gp|ogv|ts|m2ts) family=video ;;
+        mp3|wav|flac|ogg|oga|opus|m4a|aac|wma|aiff|aif|ape|wv) family=audio ;;
+        pdf) family=pdf ;;
+        ps|eps) family=ps ;;
+        docx|doc|odt|rtf|epub|fb2|sxw) family=doc ;;
+        xlsx|xlsm|xls|ods) family=sheet ;;
+        pptx|ppt|odp) family=slides ;;
+        zip|tar|gz|tgz|tbz2|bz2|xz|zst|lz|7z|rar|jar|war|deb|rpm|apk|iso|cpio) family=archive ;;
+        ttf|otf|ttc|woff|woff2) family=font ;;
+    esac
+fi
+
+mime=""
+if [ -f "$src" ]; then
+    mime=$(mime_of "$src")
+    if [ -z "$family" ]; then
+        case "$mime" in
+            image/svg+xml) family=svg ;;
+            image/*) family=raster ;;
+            video/*) family=video ;;
+            audio/*) family=audio ;;
+            application/pdf) family=pdf ;;
+            application/postscript) family=ps ;;
+            application/zip|application/x-tar|application/x-7z-compressed|application/x-rar|application/gzip|application/x-bzip2|application/x-xz|application/x-zstd) family=archive ;;
+            application/x-compressed-tar|application/x-bzip-compressed-tar|application/x-bzip2-compressed-tar|application/x-xz-compressed-tar) family=archive ;;
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document|application/msword|application/vnd.oasis.opendocument.text|application/rtf|text/rtf|application/epub+zip|application/x-mobipocket-ebook|application/x-fictionbook+xml) family=doc ;;
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet|application/vnd.ms-excel|application/vnd.oasis.opendocument.spreadsheet) family=sheet ;;
+            application/vnd.openxmlformats-officedocument.presentationml.presentation|application/vnd.ms-powerpoint|application/vnd.oasis.opendocument.presentation) family=slides ;;
+            font/*|application/font-sfnt|application/x-font-ttf|application/x-font-otf|application/vnd.ms-opentype|application/font-woff) family=font ;;
+            text/*) family=text ;;
+        esac
+    fi
+    # Office extraction is keyed on the extension, so derive one from the mime
+    # type when the file has no extension of its own.
+    if [ -z "$ext" ]; then
+        case "$mime" in
+            *wordprocessingml.document) ext=docx ;;
+            application/msword) ext=doc ;;
+            *opendocument.text) ext=odt ;;
+            application/rtf|text/rtf) ext=rtf ;;
+            application/epub+zip) ext=epub ;;
+            application/x-fictionbook+xml) ext=fb2 ;;
+            *spreadsheetml.sheet) ext=xlsx ;;
+            application/vnd.ms-excel) ext=xls ;;
+            *opendocument.spreadsheet) ext=ods ;;
+            *presentationml.presentation) ext=pptx ;;
+            application/vnd.ms-powerpoint) ext=ppt ;;
+            *opendocument.presentation) ext=odp ;;
+        esac
+    fi
+fi
+
+# ---------------------------------------------------------------- dispatch
+
+render_to() {
+    local out="$1"
+    case "$family" in
+        raster) render_raster "$src" "$out" ;;
+        svg) render_svg "$src" "$out" ;;
+        video) render_video "$src" "$out" ;;
+        pdf) render_pdf "$src" "$out" ;;
+        ps) render_ps "$src" "$out" ;;
+        font) render_font "$src" "$out" ;;
+        audio) render_audio_cover "$src" "$out" ;;
+        *) return 1 ;;
+    esac
+}
+
+if [ ! -f "$src" ]; then
+    if [ "$mode" = render-out ]; then exit 1; fi
+    if [ -d "$src" ]; then
+        printf '[directory: %s, %s entries]\n' "$base" "$(ls -A -- "$src" 2>/dev/null | wc -l | tr -d ' ')"
+    elif [ -L "$src" ]; then
+        printf '[file: %s, broken symlink, no preview]\n' "$base"
+    elif [ ! -e "$src" ]; then
+        printf '[file: %s, not found]\n' "$base"
+    else
+        printf '[file: %s, not a regular file, no preview]\n' "$base"
+    fi
+    exit 0
+fi
+
+if [ "$mode" = render-out ]; then
+    tmp=$(newtmp) || exit 1
+    render_to "$tmp" && [ -s "$tmp" ] && cp -- "$tmp" "$out" 2>/dev/null && exit 0
+    exit 1
+fi
+
+size=$(wc -c < "$src" | tr -d ' ')
+
+case "$family" in
+    raster|svg|video|pdf|ps)
+        if [ "$mode" = text ]; then
+            if [ "$family" = raster ] && render_image_text "$src"; then
+                exit 0
+            elif [ "$family" = video ] && extract_audio_meta "$src"; then
+                # No image terminal: stream metadata beats a bare placeholder.
+                exit 0
+            fi
+            placeholder "$mime"
+        elif [ "$size" -gt "$MAX_SOURCE" ]; then
+            too_large "$mime" "$size"
+        else
+            tmp=$(newtmp)
+            if [ -n "$tmp" ] && render_to "$tmp" && [ -s "$tmp" ]; then
+                emit_inline "$tmp"
+            elif [ "$family" = raster ] && [ "$size" -gt 0 ] && [ "$size" -le "$MAX_BYTES" ]; then
+                # No renderer: pass the original raster bytes through.
+                emit_inline "$src"
+            elif [ "$size" -gt "$MAX_BYTES" ]; then
+                too_large "$mime" "$size"
+            else
+                placeholder "$mime"
+            fi
+        fi
+        ;;
+    audio)
+        if [ "$mode" = text ]; then
+            extract_audio_meta "$src" || placeholder "$mime"
+        else
+            tmp=$(newtmp)
+            if [ -n "$tmp" ] && render_to "$tmp" && [ -s "$tmp" ]; then
+                extract_audio_meta "$src" 2>/dev/null | head -5
+                emit_inline "$tmp"
+            else
+                extract_audio_meta "$src" || placeholder "$mime"
+            fi
+        fi
+        ;;
+    doc|sheet|slides)
+        tmp=$(newtmp)
+        if [ -z "$tmp" ]; then
+            extract_office "$src" "$ext" || placeholder "$mime"
+        elif extract_office "$src" "$ext" > "$tmp"; then
+            if [ -s "$tmp" ]; then
+                printf '[preview: text extracted from %s]\n' "$base"
+                cat "$tmp"
+            else
+                placeholder "$mime"
+            fi
+        else
+            placeholder "$mime"
+        fi
+        ;;
+    archive)
+        extract_archive "$src" || placeholder "$mime"
+        ;;
+    font)
+        if [ "$mode" = text ]; then
+            extract_font_meta "$src" || placeholder "$mime"
+        else
+            tmp=$(newtmp)
+            if [ -n "$tmp" ] && render_to "$tmp" && [ -s "$tmp" ]; then
+                emit_inline "$tmp"
+            else
+                extract_font_meta "$src" || placeholder "$mime"
+            fi
+        fi
+        ;;
+    text)
+        if [ "$mode" = inline ] && have delta; then
+            delta --paging=never < "$src" 2>/dev/null && exit 0
+        fi
+        cat -- "$src"
+        ;;
+    *)
+        if [ "$size" -gt "$MAX_BYTES" ]; then
+            too_large "$mime" "$size"
+        elif [ "$mode" != text ] && have python3 && python3 -c '
+import sys
+data = open(sys.argv[1], "rb").read(8192)
+sys.exit(0 if b"\0" not in data else 1)' "$src" 2>/dev/null; then
+            cat -- "$src"
+        else
+            placeholder "$mime"
+        fi
+        ;;
+esac
+
+exit 0
