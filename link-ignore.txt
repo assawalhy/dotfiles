@@ -8,6 +8,8 @@
 # Comments and blank lines must be on their own line.
 # An entry added while its file is still linked is reported by --audit as
 # `i [ignored]` and removed by --fix.
+# An entry also keeps a $HOME-only file (one with no repo counterpart) out of
+# the --refresh capture candidates, so tool-owned state stays out of the repo.
 
 # repo tooling for the bin/ scripts, not a dotfile
 bin/.github
@@ -55,6 +57,9 @@ bin/.github
 #   agents/, command/,       owned by the awesome-agent plugin, which installs
 #   skills/                  them into every harness itself. Its writes would
 #                            fight a link, exactly like ~/.agents/AGENTS.md did.
+#   commands/                opencode command files dropped by tool installers,
+#                            here plannotator through setup/agent-tools.sh. The
+#                            installer owns and rewrites them.
 #   plugins/, herdr-opencode/, herdr-tui-session.js
 #                            herdr's opencode integration; plugin-owned.
 #   tui.jsonc                terminal plugin state.
@@ -65,6 +70,18 @@ bin/.github
 .config/opencode/herdr-tui-session.js
 .config/opencode/agents/
 .config/opencode/command/
+.config/opencode/commands/
 .config/opencode/skills/
 .config/opencode/plugins/
 .config/opencode/herdr-opencode/
+
+# A one-off backup left in $HOME by a hand edit of opencode.json. The script
+# already skips the `.bak.<timestamp>` names `--force` creates, but this name
+# carries no timestamp, so it needs its own line.
+.config/opencode/opencode.json.before-figma.bak
+
+# Machine-local secrets, sourced by common/.bash_profile when it exists
+# (`[ -f "$HOME/.config/shell/secrets.sh" ] && . ...`). It lives only in $HOME
+# and must never be captured into the repo, so it is excluded here instead of
+# being left as a standing --refresh capture candidate.
+.config/shell/secrets.sh
