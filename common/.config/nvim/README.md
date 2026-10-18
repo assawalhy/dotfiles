@@ -114,14 +114,12 @@ Leader key: `<space>`
 
 ## Images & Non-Text Files
 
-- **Images** (`png`, `jpg`, `gif`, `webp`, `svg`, …) are previewed in a
-  floating window by `snacks.image` when opened; `<leader>ip` previews the
-  image path under the cursor. WezTerm has no kitty unicode placeholders, so
-  inline cell-anchored rendering is unavailable and floats are used instead.
-- **Non-text files** (pdf, video, audio, archives, binaries) prompt on open:
-  `Open externally (xdg-open)` (default) or `Keep in Neovim`. Known
-  extensions are intercepted before the file is read; unlisted binaries are
-  caught by a NUL-byte sniff. Cancel leaves an empty non-writable buffer.
+Previewing is shared with the git diff and ranger: one `file-preview` script picks the first available tool for the file type.
+
+- **Images, PDF and video** (`png`, `jpg`, `gif`, `webp`, `svg`, `pdf`, `mp4`, `mkv`, `webm`, `mov`, `avi`, `m4v`, `wmv`, `flv`, …) open as a floating window from `snacks.image`; `<leader>ip` previews the image path under the cursor. A PDF shows page 1 and a video shows the first frame, both converted through `magick`.
+- **Other non-text files** (office, archives, audio, fonts, disc images, binaries) get a preview in the buffer, then a prompt: `Open externally (xdg-open)` or `Keep in Neovim`. The preview text comes from `file-preview --text`: extracted text for office files, a listing for archives, metadata for audio, a typed placeholder line when nothing can read the file.
+- The preview buffer is `nofile` and read-only, so cancelling the prompt leaves the preview and cannot overwrite the file.
+- Known extensions are intercepted before the file is read; unlisted binaries are caught by a NUL-byte sniff in the first 8 KiB.
 - To bypass the prompt for one file: `:noautocmd edit ++bin <file>`.
 
 ## CompetiTest (`cp` prefix)

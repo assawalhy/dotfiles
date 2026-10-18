@@ -1,8 +1,10 @@
--- Non-text files (pdf, video, archives, binaries) open with xdg-open instead
--- of loading binary data into a buffer. Known extensions are intercepted
--- before the read (BufReadCmd); anything else whose first 8 KiB contain a NUL
--- byte gets the same prompt after loading (BufReadPost). Images are excluded:
--- snacks.image previews those (see plugins/images.lua).
+-- Non-text files (office, archives, audio, fonts, binaries) open with a
+-- `file-preview --text` preview in the buffer, plus a prompt offering xdg-open
+-- (through the real application) or a normal reload. Known extensions are
+-- intercepted before the read (BufReadCmd); anything else whose first 8 KiB
+-- contain a NUL byte gets the same treatment after loading (BufReadPost).
+-- Images, pdf and video are excluded: snacks.image previews those as floating
+-- windows (see plugins/images.lua).
 --
 -- "Keep in Neovim" reloads normally by removing this group's BufReadCmd for
 -- the reload and registering it again afterwards. To bypass the prompt for a
@@ -27,7 +29,6 @@ local image_exts = {
 
 local nontext_exts = {
   -- documents
-  pdf = true,
   ps = true,
   eps = true,
   epub = true,
@@ -41,15 +42,6 @@ local nontext_exts = {
   odt = true,
   ods = true,
   odp = true,
-  -- video
-  mp4 = true,
-  mkv = true,
-  webm = true,
-  avi = true,
-  mov = true,
-  m4v = true,
-  wmv = true,
-  flv = true,
   -- audio
   mp3 = true,
   wav = true,
@@ -123,6 +115,8 @@ end
 
 local function keep_nvim(buf, file)
   vim.api.nvim_clear_autocmds { group = group, event = 'BufReadCmd' }
+  vim.bo[buf].buftype = ''
+  vim.bo[buf].modifiable = true
   local ok, err = pcall(vim.api.nvim_buf_call, buf, function()
     vim.cmd 'silent! edit!'
   end)
@@ -132,25 +126,54 @@ local function keep_nvim(buf, file)
   end
 end
 
+-- Fill the buffer with `file-preview --text` output: extracted office text, an
+-- archive listing, media metadata or the typed placeholder. The buffer is
+-- scratch (nofile, no swap, wiped when left) so the real file is never written.
+local function preview_into(buf, file, done)
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'wipe'
+  vim.bo[buf].swapfile = false
+  if vim.fn.executable 'file-preview' ~= 1 then
+    done()
+    return
+  end
+  vim.system({ 'file-preview', '--text', file }, { text = true }, function(res)
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(buf) then return end
+      local out = (res.stdout or ''):gsub('\n+$', '')
+      local lines = vim.split(out, '\n', { plain = true })
+      if out == '' then
+        lines = { ('[file-preview produced no output for %s]'):format(vim.fn.fnamemodify(file, ':t')) }
+      end
+      vim.bo[buf].modifiable = true
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      vim.bo[buf].modifiable = false
+      vim.bo[buf].modified = false
+      done()
+    end)
+  end)
+end
+
 local function ask(buf, file, on_keep)
   local name = vim.fn.fnamemodify(file, ':t')
-  vim.ui.select({ 'Open externally (xdg-open)', 'Keep in Neovim' }, {
-    prompt = ('%s is not a text file'):format(name),
-  }, function(choice)
-    if choice == 'Open externally (xdg-open)' then
-      open_external(buf, file)
-    elseif choice == 'Keep in Neovim' then
-      on_keep()
-    else
-      -- Cancelled: leave an empty, non-writable placeholder rather than a
-      -- buffer that could silently overwrite the file.
-      if vim.api.nvim_buf_is_valid(buf) then
-        vim.bo[buf].buftype = 'nofile'
-        vim.bo[buf].bufhidden = 'wipe'
-        vim.bo[buf].modifiable = false
+  preview_into(buf, file, function()
+    if not vim.api.nvim_buf_is_valid(buf) then return end
+    vim.ui.select({ 'Open externally (xdg-open)', 'Keep in Neovim' }, {
+      prompt = ('%s is not a text file'):format(name),
+    }, function(choice)
+      if choice == 'Open externally (xdg-open)' then
+        open_external(buf, file)
+      elseif choice == 'Keep in Neovim' then
+        on_keep()
+      else
+        -- Cancelled: the preview stays, read-only, so nothing can overwrite
+        -- the file through this buffer.
+        if vim.api.nvim_buf_is_valid(buf) then
+          vim.bo[buf].modifiable = false
+        end
+        notify(('%s: preview only'):format(name))
       end
-      notify(('%s not opened'):format(name))
-    end
+    end)
   end)
 end
 
