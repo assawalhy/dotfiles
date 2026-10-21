@@ -439,7 +439,7 @@ in
     # read-only store path, which makes UI extension installs fail with ENOENT.
     # This way extensions install into ~/.vscode/extensions.
     vscode.fhs
-    stdenv.cc # compiler wrapper: cargo invokes `cc`, cgo invokes `gcc` (rmem, pi)
+    stdenv.cc # compiler wrapper: cargo invokes `cc` (rmem)
 
     ## [fonts]
     noto-fonts
@@ -467,7 +467,7 @@ in
 
     ## [go]
     glow
-    go # toolchain for `go install` (pi)
+    go # toolchain for `go install` (glow)
 
     ## [npm]
     codex

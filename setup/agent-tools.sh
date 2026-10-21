@@ -45,17 +45,9 @@ run_harness() { # <harness> <binary> <cmd...>
 }
 
 # harness_present answers "is this harness installed", not "can it host a
-# package". Those differ for pi: the `pi` on PATH may be the pure-Go port
-# (github.com/sky-valley/pi, setup/packages.list), whose CLI is print mode +
-# REPL + `models` + `sessions` only. Upstream pi installs a package with
-# `pi install <source>` and advertises it in --help; the port has no `install`
-# subcommand at all, so `pi install npm:@plannotator/pi-extension` exits 1 with
-# "no API key found" and the extension directory can never appear.
-#
-# Probe the capability instead of the identity, so the gate stays correct if
-# upstream pi changes or the port ever gains the runtime. pi still loads skills
-# from ~/.pi/agent/skills and ~/.agents/skills, so only the package-shaped legs
-# are gated -- never the skill-shaped ones.
+# package": a pi with no `install` in --help (the old pure-Go port) cannot take
+# a package at all. Probe the capability, not the identity. The skill-shaped
+# legs stay ungated: pi reads ~/.pi/agent/skills and ~/.agents/skills either way.
 pi_supports_packages() {
   command -v pi >/dev/null 2>&1 || return 1
   pi --help 2>&1 | grep -q 'pi install'

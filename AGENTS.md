@@ -168,7 +168,7 @@ rather than left bare.
   least one exists — e.g. `02-paru.sh` requires `pacman`).
 
 Coding agents: `opencode`/`claude` install via dedicated steps
-(`setup/steps/61-opencode.sh`, `62-claude-code.sh`), `pi` via `[go]`,
+(`setup/steps/61-opencode.sh`, `62-claude-code.sh`), `pi` via `[npm]`,
 `codex`/`kilo` via `[npm]`.
 
 Useful commands:

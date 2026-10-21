@@ -55,8 +55,8 @@ ffmpeg check:ffmpeg p2
 ffmpegthumbnailer check:ffmpegthumbnailer p2  # video first-frame thumbnails
 imagemagick check:magick p2  # nvim image previews + git image textconv downscale
 ghostscript check:gs p2  # magick reads and writes PDF through the gs CLI
-pandoc check:pandoc p2
 file check:file p1  # libmagic; ranger mime type + the preview placeholder type line
+pandoc check:pandoc p2
 gitui               apt:-  dnf:-  check:gitui        p2  # not in Debian/Ubuntu repos
 lazygit             apt:-  check:lazygit          p2  # not in Debian/Ubuntu repos
 texlive             cask:basictex  pacman:texlive-core  apt:texlive  dnf:texlive check:kpsewhich p4
@@ -70,6 +70,8 @@ typora              cask:typora  aur:typora check:typora p3
 megasync            cask:megasync  aur:megasync-bin  pacman:-  apt:-  dnf:- check:megasync p4
 zathura             !macos check:zathura p3
 zathura-pdf-mupdf   !macos p3
+# PDF text extraction and rasterising, for agents that cannot take PDF input.
+poppler-utils       brew:poppler check:pdftotext p3
 okular              !macos check:okular            p3  # KDE document viewer
 feh                 !macos check:feh                p3  # X11 image viewer
 skim                !linux  cask:skim check:displayline  p3  # macOS PDF viewer, the zathura stand-in
@@ -102,10 +104,10 @@ sd check:sd p1
 
 [go]
 glow               go:github.com/charmbracelet/glow  check:glow  p2
-pi                 go:github.com/sky-valley/pi/cmd/pi  check:pi  p2
 
 [npm]
 codex              npm:@openai/codex  check:codex  p2
+pi                 npm:@earendil-works/pi-coding-agent  check:pi  p2  # upstream TS harness; the Go port cannot host a custom provider (no models.json)
 kilo               npm:@kilocode/cli  check:kilo  p2
 biome              npm:@biomejs/biome  check:biome  p2  # fmt+lint LSP via `biome lsp-proxy`
 nodemon            npm:nodemon  check:nodemon  p2  # backs the w*/watch helpers in .bash_profile

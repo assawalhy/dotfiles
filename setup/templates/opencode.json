@@ -16,5 +16,38 @@
       "enabled": true,
       "timeout": 600000
     }
+  },
+  "providers": {
+    "runanywhere": {
+      "name": "RunAnywhere",
+      "env": ["RUNANYWHERE_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://inference.runanywhere.ai/v1",
+        "apiKey": "{file:~/.secrets/runanywhere-api-key}"
+      },
+      "models": {
+        "glm-5.3-flash": {
+          "name": "GLM 5.3 Flash",
+          "limit": { "context": 1048576, "output": 131072 },
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"],
+            "reasoning": { "supported": true, "toggle": true, "effort": ["low", "high", "max"] }
+          }
+        },
+        "deepseek-v4.1-flash": {
+          "name": "DeepSeek V4.1 Flash",
+          "limit": { "context": 1048576, "output": 262144 },
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"],
+            "reasoning": { "supported": true, "toggle": true, "effort": ["low", "high", "xhigh", "max"] }
+          }
+        }
+      }
+    }
   }
 }
