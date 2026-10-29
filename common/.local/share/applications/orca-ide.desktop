@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Orca
+Comment=Next-gen IDE for parallel agentic development
+Exec=sh -c 'exec "$HOME/Applications/orca-linux.AppImage" "$@"' orca %U
+Icon=orca-ide
+StartupWMClass=orca
+Terminal=false
+MimeType=x-scheme-handler/orca;
+Categories=Development;IDE;

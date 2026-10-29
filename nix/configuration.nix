@@ -495,6 +495,9 @@ in
     # pinned unstable rev (see `unstable` above) already has nixpkgs#561709's
     # fix; switch back to pkgs.obsidian once 26.05 backports it.
     unstable.obsidian
+    # Claude Desktop: not in nixpkgs; built from Anthropic's Linux beta .deb.
+    # No in-app updater on Linux; bump with nix/claude-desktop/update.sh.
+    (callPackage ./claude-desktop { })
     typora
     # Deferred (2026-09-24): its source build full-clones the MEGAsync repo and
     # GitHub cancels the long HTTP/2 stream mid-pack ("curl 92 HTTP/2 stream 7
