@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OpenPencil
+Comment=Design editor for .fig and .pen files
+Exec=sh -c 'exec "$HOME/Applications/open-pencil.AppImage" "$@"' open-pencil %U
+Icon=open-pencil
+StartupWMClass=OpenPencil
+Terminal=false
+MimeType=application/x-pencil-pen;application/x-figma;x-scheme-handler/openpencil;
+Categories=Graphics;
