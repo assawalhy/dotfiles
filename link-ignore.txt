@@ -22,10 +22,10 @@ bin/.github
 .agents/.skill-lock.json
 
 # herdr runtime state + plugin installs. Rebuilt by herdr at runtime; plugin
-# sources come from setup/steps/64-herdr-auto-title.sh and
-# 65-herdr-stay-awake.sh. plugins/ is entirely runtime- and plugin-owned: no
-# committed plugin config lives there (stay-awake's config is seeded by its
-# step, then written by the plugin).
+# sources come from setup/steps/63-herdr.sh, which installs the herdr binary and
+# all three plugins. plugins/ is entirely runtime- and plugin-owned: no committed
+# plugin config lives there (stay-awake's config is seeded by that step, then
+# written by the plugin).
 .config/herdr/herdr-client.log
 .config/herdr/herdr-server.log
 .config/herdr/plugins.json

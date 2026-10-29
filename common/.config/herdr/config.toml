@@ -4,12 +4,24 @@ show_agent_labels_on_pane_borders = true
 
 agent_panel_sort = "spaces"
 status_indicators = "symbols"
+
+# herdr-ports badge rows. Plugins cannot inject sidebar rows (herdr plugin v1),
+# so they are declared here, and the two built-in rows are repeated because the
+# rows key replaces them. herdr drops a token without a value, so Spaces with no
+# listener look unchanged. Installed by setup/steps/63-herdr.sh.
+[ui.sidebar.spaces]
+rows = [["state_icon", "workspace", "$ports"], ["branch", "git_status", "$portlist"]]
 [theme]
 name = "catppuccin"
 auto_switch = false
 
 [ui.toast]
 delivery = "system"
+
+# herdr's default previous_tab is prefix+p; the ports popup takes that key, so
+# tab back-navigation moves one key over.
+[keys]
+previous_tab = "prefix+["
 
 [[keys.command]]
 key = "prefix+a"
@@ -23,3 +35,11 @@ type = "plugin_action"
 command = "herdr.auto-title.restart"
 description = "restart auto-title"
 
+[[keys.command]]
+key = "prefix+p"
+type = "plugin_action"
+command = "numbered.ports.open"
+description = "ports popup"
+
+[terminal]
+kitty_graphics = true
