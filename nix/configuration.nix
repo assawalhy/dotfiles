@@ -27,6 +27,15 @@ let
     };
   };
 
+  # binfmt_misc interpreter for type 2 AppImages. writeShellApplication adds its
+  # own shebang and a PATH for runtimeInputs, so the repo copy keeps a shebang
+  # for direct testing and it is dropped here.
+  appimage-binfmt = pkgs.writeShellApplication {
+    name = "appimage-binfmt";
+    runtimeInputs = with pkgs; [ appimage-run binutils squashfsTools ];
+    text = lib.removePrefix "#!/usr/bin/env bash\n" (builtins.readFile ./appimage-binfmt.sh);
+  };
+
   # lazygit from a pinned nixpkgs-unstable revision. The nixos-26.05 channel
   # pins 0.61.1, but common/.config/lazygit/config.yml uses `git.diffRenderers`,
   # which needs >= 0.64 (the old `git.paging` was removed then). Only this one
@@ -795,6 +804,38 @@ in
   # into Zoom's FHS closure — that is what makes screen share work on Wayland.
   # A raw package gets neither. See .agents/plans/20-zoom-discord.
   programs.zoom-us.enable = true;
+
+  # Run AppImages directly (binfmt). Orca lives as a self-updating
+  # ~/Applications/orca-linux.AppImage, outside the Nix store, so its
+  # electron-updater can replace the file in place.
+  #
+  # The module's own binfmt stays off: it points at appimage-run, which forwards
+  # every argument to AppRun, so `<appimage> --appimage-extract` launches the app
+  # instead of unpacking it. Orca registers its CLI and unpacks its updates that
+  # way, so both fail. The registrations below keep the same magic and mask and
+  # send type 2 through a wrapper that answers the runtime flags.
+  # See .agents/plans/42-orca-appimage-extract.
+  programs.appimage = {
+    enable = true;
+    binfmt = false;
+  };
+
+  boot.binfmt.registrations.appimage_type_2 = {
+    recognitionType = "magic";
+    offset = 0;
+    magicOrExtension = ''\x7fELF....AI\x02'';
+    mask = ''\xff\xff\xff\xff\x00\x00\x00\x00\xff\xff\xff'';
+    interpreter = "${appimage-binfmt}/bin/appimage-binfmt";
+  };
+
+  # Type 1 is the legacy ISO payload; the wrapper handles squashfs only.
+  boot.binfmt.registrations.appimage_type_1 = {
+    recognitionType = "magic";
+    offset = 0;
+    magicOrExtension = ''\x7fELF....AI\x01'';
+    mask = ''\xff\xff\xff\xff\x00\x00\x00\x00\xff\xff\xff'';
+    interpreter = "${pkgs.appimage-run}/bin/appimage-run";
+  };
 
   # Foreign (non-Nix) binaries — see .agents/plans/05-foreign-binaries.
   # nix-ld supplies the /lib64/ld-linux interpreter; `libraries` supplies the
