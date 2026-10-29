@@ -6,6 +6,7 @@
 # macos/ overlay -- whichever one was linked. Must come first: it sets
 # $_LS_COLOR_FLAG and puts homebrew on PATH.
 [ -f "$HOME/.config/shell/os.sh" ] && . "$HOME/.config/shell/os.sh"
+[ -f "$HOME/.config/shell/secrets.sh" ] && . "$HOME/.config/shell/secrets.sh"
 
 [ -d "$HOME/bin" ] && export PATH="$HOME/bin:$PATH"
 [ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"
