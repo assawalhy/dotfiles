@@ -28,6 +28,28 @@ Choose the evidence source before the retrieval mode.
 
 <!-- ZVEC_GREP_END -->
 
+## Global rules live in `~/.agents/AGENTS.md`
+
+Read `~/.agents/AGENTS.md` before your first tool call in a session. It holds the
+toolchain resolution, build and test etiquette, writing style, the comment budget,
+git and planning rules. Nothing else loads it: OpenCode V2 loads only the global
+file and the `AGENTS.md` files between the workspace and home, so this file is the
+only route to those rules.
+
+## Retrieval: `rg` by default, `zvec_grep_search` to find what you cannot name
+
+The generated block above lists the routes but not how often each one pays.
+
+- Start with `rg`. The anchor is usually guessable from the naming, so exact lookup is one call.
+- Escalate to `zvec_grep_search` only when you cannot name the thing: architecture, lifecycle,
+  call chains, "is there precedent for X", a question sentence rather than keywords. One or two
+  per task is the working range.
+- Plan and documentation prose outranks source in its ranking, so the first hits are leads to
+  confirm with `rg` rather than answers.
+
+Past roughly one semantic search in five, you are probably routing queries `rg` would have
+answered.
+
 ## General instructions exists in the global AGENTS.md
 
 @~/.agents/AGENTS.md
@@ -75,6 +97,35 @@ browser (`playwright-cli open <url> --browser chromium --headed`), then tell you
 to continue. Do not abandon the site or quietly substitute another method, such
 as web search, for the same information. Wait for my go-ahead, then resume from
 where the run stopped.
+
+## Job applications
+
+Apply from evidence, never from assumption. Before writing any application,
+pitch, profile, outreach message, or interview answer, check what I actually
+have:
+
+- `~/Documents/resume.pdf` is the canonical CV. Its source is
+  `~/Projects/assawalhy.github.io/resume.tex`.
+- `https://assawalhy.xyz` is the same material served live. Its content lives in
+  `~/Projects/assawalhy.github.io/src/data/` (`experience.js`, `projects.js`,
+  `tech.js`, `seminars.js`) and `src/content/`.
+- `~/MEMORY.md` holds the application history and the Notion database IDs.
+
+Rules:
+
+- If a skill, tool, or experience level is not in those sources, do not claim
+  it. Ask me first.
+- Never upgrade a school project, a tutorial, or a small side project into
+  production or hands-on experience.
+- Keep these corrections straight. My Django is basics and small side projects
+  only, so never list it as a production backend. There is no production LLM,
+  RAG, or GenAI work on record, so do not claim it anywhere.
+- If the resume or the site is stale, say so and fix the source before using it.
+- Track applications in the Notion Job Applications database, and enrich each
+  row with follow-up, preparation, resources, and contacts.
+- Never submit an application, or send a message on my behalf, without showing
+  it to me first.
+- Write in clear C1/C2 English, with no em dashes and no LLM tells.
 
 ## Transcription (audio → text)
 

@@ -8,11 +8,18 @@
 
 If you are in the auto-mode, you are the awesome-agent who make use of the awesome-plan to plan first, refine, get approval, then executes.
 
-# graphify
-- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
-
 <!-- ZVEC_GREP_START -->
+## Delegate implementation to a cheaper model
+
+The goal is to save tokens. The main agent plans, reviews and decides. A cheaper sub-agent implements.
+
+- After a plan is approved, delegate each implementation item to a sub-agent on a cheaper model (Haiku, through the `awesome-worker` agent type or the `model` override). Give it a precise spec: files to touch, the exact change, and the check to run.
+- The sub-agent also runs the checks for its item: the affected tests, lint, format, typecheck and build as the item needs. Only the full `bun run verify`-style pass stays with the main agent, run once at the end.
+- Split parallel sub-agents by disjoint files. The main agent owns the TODO ticks.
+- The sub-agent must not commit, push or tag.
+- Judgment work stays with the main agent: root-cause debugging, design decisions, and anything the spec cannot state mechanically.
+- After each result returns, the main agent validates it: read the diff, check the sub-agent's reported open points, and fix what the spec missed. Then it reviews the whole change before reporting.
+
 ## zvec-grep
 
 Choose the evidence source before the retrieval mode.

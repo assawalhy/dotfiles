@@ -1,14 +1,5 @@
 # Global Agent Instructions
 
-## Long-running command handling
-
-- Treat a tool-reported exit code of `-1` as an indeterminate tool-execution result unless the tool explicitly defines it otherwise. Do not infer that the underlying process succeeded, failed, stopped, or is still running; verify its process state and terminal output first.
-- Before retrying a command that returned `-1`, check whether its original process is still running and inspect any attached IDE terminal or generated report.
-- Do not start a duplicate long-running command until the original process is confirmed to have stopped.
-- Report a command as failed only when it prints an explicit failure, such as `BUILD FAILED` or a test failure, or returns a normal non-zero process exit code.
-- If the final status cannot be confirmed, report it as unknown and state what was checked; do not claim success or failure.
-- For Gradle runs, prefer `--no-daemon --console=plain` when practical to make output and process tracking more reliable.
-
 ## Toolchain resolution (Java, Node, etc.)
 
 Before running a build/test command, check for `mise` config in the repo
@@ -81,11 +72,11 @@ If a task chain would drag coverage in, exclude it explicitly:
 ./gradlew test --tests '*SomeTest' -x jacocoTestReport
 ```
 
-### 3. One heavy Gradle task at a time
+### 3. One heavy task at a time
 
-Do not run `test`, `integrationTest`, and `detekt` concurrently (separate shells, background
-jobs, or `&`). Each forks its own JVM(s), and integration tests additionally start Docker
-containers; running them together exhausts memory and gets processes OOM-killed.
+Do not run `test`, `build`, and `check` concurrently (separate shells, background
+jobs, or `&`). Integration tests may additionally start Docker containers; running
+them together exhausts memory and gets processes OOM-killed.
 
 Run them sequentially, and only the ones the change actually needs:
 
@@ -95,31 +86,30 @@ Run them sequentially, and only the ones the change actually needs:
 
 Prefer finishing and reading one task's output before starting the next.
 
+If `ajq` job queue tool is available use it to queue heavy jobs and they will run sequentially.
+
 ## Writing style
 
-Write plain, literal technical English everywhere you produce text: code
-comments, KDoc, log messages, exception messages, test names, commit messages,
-PR descriptions, and your replies to me.
+Write plain, literal technical English everywhere you produce text: code comments, KDoc, log messages, exception messages, test names, commit messages, PR and issue descriptions, GitHub comments, documentation, and your replies to me.
 
-- No metaphor, simile, analogy, or idiom. Say what the code or system does, not
-  what it resembles. Not "the 11th task parks in getConnection()" but "the 11th
-  task blocks in getConnection() until a connection is free".
-- No narrative or dramatic voice: no "silently", "quietly", "catastrophic",
-  "the trap", "bites", "wins", "pays off", "under the hood", "magic".
-- No anthropomorphising. Code does not "want", "know", "decide", "try", or
-  "care"; a class does not "own" or "adopt" anything.
-- Name the concrete thing: the class, method, property, bean name, exception,
-  config key, or number. Prefer "applicationTaskExecutor is not created" over
-  "the default disappears".
-- State facts and consequences, not emphasis. Drop "critically", "importantly",
-  "note that", "it's worth mentioning", "in fact", "actually".
-- One claim per sentence. Short declaratives over long clause chains.
+Shape the sentence and the layout:
 
-This does not mean terse or incomplete - give the full technical detail, in
-literal words.
+- Never hard-wrap. One paragraph, bullet or sentence per line, and let the renderer wrap it. A single newline is a hard break on GitHub, so manually wrapped prose comes out ragged.
+- One claim per sentence. Short declaratives, not clause chains.
+- No preamble or recap. Do not restate the request, announce what you are about to do, or summarise what you just did. Start with the answer or the action.
+- No bolding ordinary words for emphasis, and no emoji as decoration.
 
-Domain vocabulary: use the project's ubiquitous language rather than generic
-synonyms.
+Choose the words:
+
+- No em-dashes or en-dashes as punctuation, and no plain hyphen used as a substitute. Restructure the sentence, or use a comma, colon, parentheses or a full stop. A hyphen inside a compound word ("well-known") is fine.
+- Name the concrete thing: the class, method, property, bean name, exception, config key, or number. Prefer "applicationTaskExecutor is not created" over "the default disappears".
+- State facts and consequences, not emphasis. Drop "critically", "importantly", "note that", "it's worth mentioning", "in fact", "actually".
+- No AI-slop phrasing. Avoid "not just X, but Y", "it's not X, it's Y", "at its core", "here's the thing", "let's dive in", "in today's fast-paced world", "a testament to", "delve", "leverage", "unleash", "elevate", "seamless", "robust", "pivotal", "crucial", empty rhetorical triads, and padding that adds no information.
+- No metaphor, simile, analogy, or idiom. Say what the code or system does, not what it resembles. Write "the 11th task blocks in getConnection() until a connection is free", not "the 11th task parks in getConnection()".
+- No narrative or dramatic voice: no "silently", "quietly", "catastrophic", "the trap", "bites", "wins", "pays off", "under the hood", "magic".
+- No anthropomorphising. Code does not "want", "know", "decide", "try", or "care". A class does not "own" or "adopt" anything.
+
+This does not mean terse or incomplete. Give the full technical detail, in literal words, and use the project's ubiquitous language rather than generic synonyms.
 
 ## Comments
 
@@ -180,6 +170,55 @@ job search, or Notion workspace; do not load it for coding, infrastructure, or
 dotfiles work. It lives in `$HOME` and is not part of this repo, so it is never
 committed.
 
+## Job applications
+
+Apply from evidence, never from assumption. Before writing any application,
+pitch, profile, outreach message, or interview answer, check what I actually
+have:
+
+- `~/Documents/resume.pdf` is the canonical CV. Its source is
+  `~/Projects/assawalhy.github.io/resume.tex`.
+- `https://assawalhy.xyz` is the same material served live. Its content lives in
+  `~/Projects/assawalhy.github.io/src/data/` (`experience.js`, `projects.js`,
+  `tech.js`, `seminars.js`) and `src/content/`.
+- `~/MEMORY.md` holds the application history and the Notion database IDs.
+
+Rules:
+
+- If a skill, tool, or experience level is not in those sources, do not claim
+  it. Ask me first.
+- Never upgrade a school project, a tutorial, or a small side project into
+  production or hands-on experience.
+- Keep these corrections straight. My Django is basics and small side projects
+  only, so never list it as a production backend. There is no production LLM,
+  RAG, or GenAI work on record, so do not claim it anywhere.
+- If the resume or the site is stale, say so and fix the source before using it.
+- Track applications in the Notion Job Applications database, and enrich each
+  row with follow-up, preparation, resources, and contacts.
+- Never submit an application, or send a message on my behalf, without showing
+  it to me first.
+- Write in clear C1/C2 English, with no em dashes and no LLM tells.
+
+## Composio (external apps)
+
+Composio is installed and connected. Do not ask me to paste data that Composio
+can fetch. Reach for it proactively whenever a task touches a connected external
+app.
+
+- CLI: `composio` at `~/.local/bin/composio` (v0.4.2). Load the `composio-cli`
+  skill for usage and troubleshooting.
+- Connected toolkits today: `gmail` (active), `notion` (active). Check the live
+  list with `composio connections list`.
+- Read email, search the inbox, send or draft mail, and read/write Notion pages
+  and databases through Composio instead of asking me to copy the content in.
+- Typical flow: `composio search "<use case>"` to find a tool slug, then
+  `composio execute <SLUG> -d '{ ... }'`. Use `--dry-run` and `--get-schema` to
+  inspect inputs first. Use `composio proxy <url> --toolkit <slug>` for raw API
+  calls.
+- If a toolkit is not linked, or a connection is `EXPIRED`, run
+  `composio link <toolkit>` and let me complete the OAuth in the browser. Follow
+  the "Login walls and bot checks" rule and wait for my go-ahead to resume.
+
 ## Login walls and bot checks
 
 When a site blocks automation with a login wall, a bot check, a captcha, or a
@@ -195,7 +234,7 @@ Local models are cached in `~/.cache/whisper.cpp/` and downloaded from HuggingFa
 Long recordings: run in the background and keep working; do not poll for completion.
 
 
-## zvec-grep index policy
+## zvec-grep policy
 
 Each harness gets a generated `<!-- ZVEC_GREP_START -->` block from `zg install`
 that used to forbid touching the index without asking. That line is now relaxed
@@ -213,3 +252,33 @@ rules of record:
   hardcoded), so re-apply this policy if it ever reverts. The generator lives in
   `dist/cli/install.js` of the `@zvec/zvec-grep` package and must be re-patched
   after an `npm update -g`.
+
+### Routing: `rg` by default, `zvec_grep_search` to find what you cannot name
+
+The generated block lists the routes but not how often each one pays.
+
+- Start with `rg`. The anchor is usually guessable from the naming, so exact lookup is one call.
+- Escalate to `zvec_grep_search` only when you cannot name the thing: architecture, lifecycle,
+  call chains, "is there precedent for X", a question sentence rather than keywords. One or two
+  per task is the working range.
+- If you can write the pattern as a regex, use `rg`.
+
+Two failure modes, both seen in practice: plan and documentation prose outranks source, so the
+first hits are leads to confirm with `rg` rather than answers. The index is a snapshot that
+must exist before the first search and goes stale as files change.
+
+Why this is the default. zg's own docs say it "works best when evidence spans files or modules
+and the target location is unknown". CoREB (arXiv 2605.04615) found that short keyword queries,
+the shape agent queries mostly take, "collapse every model to near-zero nDCG@10". `Is Grep All
+You Need?` (arXiv 2605.15184) found grep scoring above vector retrieval across the Claude Code,
+Codex and Gemini CLI harnesses, measured on conversation memory rather than code, so directional.
+
+Past roughly one semantic search in five, you are probably routing queries `rg` would have
+answered.
+
+### `zvec_grep_rg` takes argv, not a shell line
+
+Its `command` field is the argv for `rg`: split and quoted, never handed to a shell, so `|`, `>` and `&&` fail with "does not support shell operator". Write the stage you wanted as rg flags instead.
+
+- Drop lines containing `a` or `b` with `rg --pcre2 '^(?!.*(?:a|b)).*pat.*$'`, not `| grep -v 'a\|b'`. `--glob '!…'` filters file paths, not line contents.
+- There is no global line cap. `-m/--max-count` applies per file, so a total cap is not expressible: let the tool truncate, or narrow the path/glob so the result set is small.

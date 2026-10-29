@@ -24,3 +24,5 @@
 *.tmp.mjs
 
 **/.claude/.cc-writes/
+
+**/.claude/settings.local.json
