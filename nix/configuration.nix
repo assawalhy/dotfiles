@@ -651,7 +651,7 @@ in
     nodejs
 
     ## [pip]
-    uv
+    uv # non-interactive fallback; interactive shells get mise's latest
     yt-dlp
     git-fame
     black
@@ -977,4 +977,9 @@ in
   # Resolve hardcoded shebang/interpreter paths (/bin/bash, /usr/bin/python3, …)
   # via PATH for scripts shipped by foreign binaries.
   services.envfs.enable = true;
+
+  # python-build-standalone (uv's CPython, and every uv tool: rv, harbor, …)
+  # compiles OpenSSL with the default cafile /etc/ssl/cert.pem, which NixOS
+  # never creates. Without it ssl.create_default_context() loads zero roots.
+  environment.etc."ssl/cert.pem".source = config.security.pki.caBundle;
 }

@@ -7,6 +7,10 @@ kotlin = "2.4.20"
 # started from GNOME never runs `mise activate`.
 node = "latest"
 bun = "latest"
+# uv floats like node: nixpkgs 26.05 pins 0.11.21, upstream is 0.13.6. nix keeps
+# its copy for the uv-python systemd unit and setup scripts, which never
+# activate mise.
+uv = "latest"
 
 [settings]
 # Worktrees under these roots are the same repos as their main checkouts, but
