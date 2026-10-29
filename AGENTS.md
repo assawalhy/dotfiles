@@ -16,7 +16,7 @@
 bats tests/link-files.bats          # main suite (expected: 99 ok, 0 not ok)
 bats tests/link-known-issues.bats   # known-bug encodings (expected: all fail)
 bats tests/select.bats              # typed multi-select parser (setup-os, agent-skills)
-bats tests/montag.bats              # resolver parser and --language (montag), expected: 16 ok
+bats tests/montag.bats              # resolver, language and container copy (montag), expected: 30 ok
 ```
 
 - **`tests/link-files.bats`** — locks in current behavior: link-, classify-,
@@ -35,8 +35,11 @@ bats tests/montag.bats              # resolver parser and --language (montag), e
   call produces (merged selection, single format, missing headers, no url, empty).
   The language tests cover the video and audio selectors, a region code, the
   `default_resolution` cap, accepted and rejected codes, plus three offline CLI
-  runs for the `--language` conflict errors. Keep every function under test
-  top-level with a bare `}` at column 0 or the awk extractor breaks.
+  runs for the `--language` conflict errors. The container tests cover
+  `container-allows-codec` per container, `can-stream-copy` with `ffprobe`
+  stubbed as a shell function, and `append-even-scale-filter` with and without
+  an existing `-vf`. Keep every function under test top-level with a bare `}` at
+  column 0 or the awk extractor breaks.
 - **`tests/helpers.bash`** — `fixture_new <name> [git]` builds a throwaway
   fixture repo + fake `$HOME` under `$BATS_TEST_TMPDIR` (auto-cleaned); the
   real `$HOME` is never touched. Each fixture copies the real script, so

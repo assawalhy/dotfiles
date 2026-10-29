@@ -234,6 +234,85 @@ build-language-format() { # language media(video|audio)
     fi
 }
 
+# The codecs each policed container accepts with -c copy. Measured on ffmpeg
+# 8.1.2 by remuxing one mkv per codec into each container: mp4 takes vp9 and
+# av1 but not vp8, mov takes neither vp9 nor opus, and the ipod muxer behind
+# m4v only takes h264, mpeg4 and the audio of the mp4 group. Every other
+# container is not policed and returns 0.
+container-allows-codec() { # container codec
+    case "$1" in
+        mp4)
+            case "$2" in
+                h264|hevc|mpeg4|mjpeg|vp9|av1|aac|mp3|ac3|flac|opus|vorbis) return 0 ;;
+                *) return 1 ;;
+            esac ;;
+        mov)
+            case "$2" in
+                h264|hevc|mpeg4|mjpeg|aac|mp3|ac3|vorbis) return 0 ;;
+                *) return 1 ;;
+            esac ;;
+        m4v)
+            case "$2" in
+                h264|mpeg4|aac|mp3|ac3) return 0 ;;
+                *) return 1 ;;
+            esac ;;
+        webm)
+            case "$2" in
+                vp8|vp9|av1|opus|vorbis) return 0 ;;
+                *) return 1 ;;
+            esac ;;
+        *) return 0 ;;
+    esac
+}
+
+# The codec names of every stream in one input, one per line. A failing probe
+# prints nothing, so the caller can keep the copy instead of guessing.
+input-codecs() { # ffprobe args ending in the input
+    ffprobe -v error -show_entries stream=codec_name \
+        -of default=noprint_wrappers=1:nokey=1 "$@" 2>/dev/null || true
+}
+
+# A stream copy only works when the output muxer has a tag for every input
+# codec. Sets copy_blocker to the reason when it refuses, so the re-encode
+# branch can say why it is about to encode instead of copying.
+can-stream-copy() {
+    copy_blocker=''
+
+    local container="$(echo "${output_target##*.}" | tr '[:upper:]' '[:lower:]')"
+    case "$container" in
+        mp4|mov|m4v|webm) : ;;
+        *) return 0 ;;
+    esac
+
+    local probe_args=()
+    if [[ "$input" =~ ^https?:// ]]; then
+        probe_args=(-request_size "$http_request_size")
+        [ ! "$ua" ] || probe_args=(-user_agent "$ua" "${probe_args[@]}")
+    fi
+
+    local inputs=()
+    if [[ "$input" =~ ^https?:// ]]; then
+        inputs=("${input_urls[@]}")
+    else
+        inputs=("$input")
+    fi
+
+    local source codes codec
+    for source in "${inputs[@]}"; do
+        codes="$(input-codecs "${probe_args[@]}" "$source")"
+        [ "$codes" ] || return 0
+        while IFS= read -r codec; do
+            [ "$codec" ] || continue
+            if ! container-allows-codec "$container" "$codec"; then
+                copy_blocker="$codec is not allowed in $container"
+                return 1
+            fi
+        done <<< "$codes"
+    done
+
+    return 0
+}
+
 # The codes the video offers, for the error when the requested one is not there.
 # yt-dlp -F tags every dubbed or subtitled track with its code.
 list-language-codes() { # url
@@ -441,6 +520,19 @@ clear-and-exit() {
     exit "$exit_code"
 }
 
+# libx264 needs an even width and height and a screen recording is often odd
+# in one of them, so the re-encode branch appends this to the -vf it already
+# has. ffmpeg keeps only the last -vf argument, hence the index.
+append-even-scale-filter() {
+    local scale='scale=trunc(iw/2)*2:trunc(ih/2)*2'
+    if [ "$video_filter_arg_index" ]; then
+        cmd[$video_filter_arg_index]="${cmd[$video_filter_arg_index]},$scale"
+    else
+        cmd+=(-vf "$scale")
+        video_filter_arg_index=$((${#cmd[@]} - 1))
+    fi
+}
+
 build-ffmpeg-command() {
     cmd=(ffmpeg)
     convert_cmd=(convert)
@@ -480,8 +572,12 @@ build-ffmpeg-command() {
         video_filters+=("crop=$crop")
     fi
 
+    # a later -vf replaces an earlier one, so the even size scale of the
+    # re-encode branch is appended to this argument once the branch runs
+    video_filter_arg_index=''
     if [ "${#video_filters[@]}" -gt 0 ]; then
         cmd+=(-vf "$(IFS=,; echo "${video_filters[*]}")")
+        video_filter_arg_index=$((${#cmd[@]} - 1))
     fi
     if [ "${#audio_filters[@]}" -gt 0 ]; then
         cmd+=(-af "$(IFS=,; echo "${audio_filters[*]}")")
@@ -539,24 +635,37 @@ build-ffmpeg-command() {
     if [ "${cmd[0]}" = ffmpeg ] && [ ! "$start_point" ] \
         && [ ${#video_filters[@]} -eq 0 ] && [ ${#audio_filters[@]} -eq 0 ] \
         && [ ! "$mute_audio" ] && [ ! "$is_audio_only" ] && [ ! "$is_gif" ] \
-        && [ ! "$is_text" ] && [ ! "$is_thumb" ]; then
+        && [ ! "$is_text" ] && [ ! "$is_thumb" ] && can-stream-copy; then
         echo-debug "📼 ... no filters or cuts, stream copy"
         cmd+=(-c copy)
     elif [ "${cmd[0]}" = ffmpeg ] && [ ! "$is_audio_only" ] \
         && [ ! "$is_gif" ] && [ ! "$is_thumb" ]; then
+        [ ! "$copy_blocker" ] || echo-debug "🔁 ... $copy_blocker, so no stream copy"
         # Re-encoding: faster settings for the container. libvpx-vp9 without
         # -row-mt is single thread bound (0.6x realtime on 12 threads) and
-        # libx264 medium is about 10x slower than veryfast.
+        # libx264 medium is about 10x slower than veryfast. libx264, mpeg4 and
+        # mpeg2video all refuse an odd width or height, which a screen
+        # recording easily has, so every re-encode gets the even size scale.
         case "$output_target" in
             *.webm)
                 echo-debug "🔧 ... encode vp9 with -row-mt 1 -cpu-used 4"
-                cmd+=(-c:v libvpx-vp9 -row-mt 1 -cpu-used 4)
+                cmd+=(-c:v libvpx-vp9 -row-mt 1 -cpu-used 4 -pix_fmt yuv420p)
                 ;;
-            *.mp4|*.mov)
+            *.mp4|*.mov|*.m4v)
                 echo-debug "🔧 ... encode x264 with -preset veryfast -crf 23"
-                cmd+=(-c:v libx264 -preset veryfast -crf 23)
+                cmd+=(-c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p)
+                # the moov atom at the front lets a browser play the file
+                # before the whole download finished
+                cmd+=(-movflags +faststart)
+                ;;
+            *)
+                # mkv, avi and ts have no tuned branch: ffmpeg picks its
+                # default encoder, which also needs an even frame size
+                echo-debug "🔧 ... keep the ffmpeg default encoder for this container"
+                cmd+=(-pix_fmt yuv420p)
                 ;;
         esac
+        append-even-scale-filter
     fi
 
     if [ "$split_period" ] && [ "${cmd[0]}" = ffmpeg ]; then
