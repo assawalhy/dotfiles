@@ -81,6 +81,7 @@ return {
         html = true,
         latex = true,
         markdown = true,
+        prisma = true,
       }
 
       -- Parsers a language needs alongside its own
