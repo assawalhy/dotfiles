@@ -265,10 +265,34 @@ in
               against the new version and bump the guard.
             ''
           else
+            # The terminal-paste patch is the only change this override needs.
+            # nixpkgs' extensionOverrides.nix injects the GIRepository prepends
+            # from the final package set, so the libgda6 override below reaches
+            # the extension on its own: a rewiring attempt here failed its guard
+            # because the injected path was never the pre-overlay one.
             prev.gnomeExtensions.copyous.overrideAttrs (old: {
               patches = (old.patches or []) ++ [ ./copyous-terminal-paste/terminal-paste.patch ];
             });
       };
+
+      # Copyous loads Gda through GIRepository. The generated Gda-6.0.typelib
+      # lists libxml2-2.0 as a prerequisite, but nixpkgs' libxml2 ships no
+      # typelib (out and dev, checked in 26.05 and unstable), so GJS aborts with
+      # "Typelib file for namespace 'libxml2', version '2.0' not found" and the
+      # extension falls back to an in-memory database. Copyous only needs the
+      # SQLite provider, and none of the GIR-exposed functions that take
+      # xmlNodePtr are used, so drop the XML include from the scanner. Drop this
+      # override once libxml2 ships a typelib or libgda stops listing it; the
+      # grep makes a libgda bump fail loudly instead of silently losing the fix.
+      libgda6 = prev.libgda6.overrideAttrs (old: {
+        postPatch = (old.postPatch or "") + ''
+          grep -q "'libxml2-2.0'" libgda/meson.build || {
+            echo "libgda override: libgda/meson.build no longer lists libxml2-2.0" >&2
+            exit 1
+          }
+          sed -i "/'libxml2-2.0'/d" libgda/meson.build
+        '';
+      });
 
       # 1.20.4 advertises AvailableCursorModes=0 to clients while the GNOME
       # backend reports 7, so the frontend rejects every cursor mode before a
@@ -534,6 +558,16 @@ in
     # build inputs, so no system-wide libgda6/gsound wiring is required.
     # Enabled via the org/gnome/shell dconf default below.
     gnomeExtensions.copyous
+    # Patches GNOME Shell to skip updates of user extensions. Without it the EGO
+    # updater installs copyous 2.1.x into ~/.local/share/gnome-shell/extensions/,
+    # which shadows the patched system copy and brings back both the stale
+    # primary-selection paste and "Failed to load Gda". See epic 41.
+    gnomeExtensions.disable-extension-updates
+    # Emoji picker in the top bar. Popup with search, categories and recent
+    # emojis; click or Super+. copies/pastes the emoji. Declares shell-version up
+    # to 50, this box runs 50.4. Enabled via the org/gnome/shell dconf default
+    # below.
+    gnomeExtensions.emoji-copy
 
     ## [gpu]
     # Hybrid GPU diagnostics and CUDA toolchain, see the hardware.nvidia block
@@ -643,6 +677,8 @@ in
             "pip-on-top@rafostar.github.com"
             "monitor@astraext.github.io"
             "copyous@boerdereinar.dev"
+            "disable-extension-updates@swsnr.de"
+            "emoji-copy@felipeftn"
           ];
         };
         # The extension only calls make_above() by default; sticking to all
