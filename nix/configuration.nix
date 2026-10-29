@@ -607,6 +607,11 @@ in
     # This way extensions install into ~/.vscode/extensions.
     vscode.fhs
     stdenv.cc # cc for cargo (rmem); its g++ is also the driver clangd queries
+    # make for native builds that need it beyond cc. Specifically node-gyp: pi
+    # extensions with a native dep (plannotator's node-pty, ...) compile from
+    # source on linux-x64 Node 26 and die with `not found: make` otherwise.
+    # stdenv.cc alone is not enough -- the C compiler is there, make is not.
+    gnumake
 
     ## [fonts]
     noto-fonts

@@ -181,6 +181,20 @@ context7_status() {
 # runtime, hooks, skills, commands). Run it non-interactively because its
 # installer opens a /dev/tty wizard that would block setup-os, keep its output
 # (a failed download must be visible), and verify the binary exists afterwards.
+
+# make_cmd -> a make binary usable from this script, or empty.
+# NixOS has gcc (stdenv.cc) but no make on PATH, so `pi install
+# npm:@plannotator/pi-extension` fails compiling node-pty (`not found: make`).
+# Prefer PATH make; else a store-path make from `nix eval` (no root, no
+# rebuild) as a bridge until gnumake lands in environment.systemPackages. On
+# non-NixOS `command -v make` usually just resolves.
+make_cmd() {
+  command -v make && return 0
+  command -v nix >/dev/null 2>&1 || return 1
+  local store
+  store="$(nix eval --raw nixpkgs#gnumake.outPath 2>/dev/null)" || return 1
+  [ -n "$store" ] && [ -x "$store/bin/make" ] && printf '%s\n' "$store/bin/make"
+}
 plannotator_bin_install() {
   local bin="$HOME/.local/bin/plannotator" log
   [ -x "$bin" ] && return 0
@@ -223,7 +237,20 @@ plannotator_pi_install() {
     printf '  - pi: no package support (no `pi install`), plannotator extension skipped\n'
     return 0
   fi
-  run_harness pi pi pi install npm:@plannotator/pi-extension
+  # node-pty (a plannotator dependency) compiles from source on linux-x64
+  # Node 26; node-gyp needs make. On NixOS gcc is present but make is not on
+  # PATH until gnumake lands in the profile, so resolve it for the run.
+  local makebin mk
+  makebin="$(make_cmd)" || makebin=''
+  if [ -n "$makebin" ]; then
+    printf '  + pi: using make from %s for the native build\n' "$(dirname "$makebin")"
+    mk="$makebin"
+  fi
+  if [ -n "$mk" ]; then
+    run_harness pi pi env PATH="$(dirname "$mk"):$PATH" pi install npm:@plannotator/pi-extension
+  else
+    run_harness pi pi pi install npm:@plannotator/pi-extension
+  fi
 }
 plannotator_pi_status() {
   [ -d "$HOME/.pi/agent/npm/node_modules/@plannotator/pi-extension" ]
