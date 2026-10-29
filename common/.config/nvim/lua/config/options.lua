@@ -33,6 +33,11 @@ vim.o.completeopt = 'menuone,noselect'
 -- NOTE: the terminal must support true color for this setting to render correctly
 vim.o.termguicolors = true
 
+-- WezTerm shapes and reorders Arabic itself. Without this, Neovim emits
+-- presentation forms and WezTerm shapes them a second time, which breaks the
+-- letter joins. termbidi also makes Neovim ignore arabicshape.
+vim.o.termbidi = true
+
 vim.o.scrolloff = 10
 
 vim.o.list = true

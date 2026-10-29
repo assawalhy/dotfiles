@@ -18,7 +18,16 @@ return {
     'huijiro/blink-cmp-supermaven',
   },
   opts = {
-    keymap = { preset = 'default' },
+    -- 'enter' preset binds <CR> to accept, so Enter picks the selected menu
+    -- item instead of inserting a newline. <Tab> is overridden to accept the
+    -- selected item while the menu is open (instead of falling straight
+    -- through to supermaven's accept-suggestion keybind); snippet navigation
+    -- still works via the fallback chain, and with the menu closed <Tab>
+    -- falls through to supermaven's inline suggestion.
+    keymap = {
+      preset = 'enter',
+      ['<Tab>'] = { 'select_and_accept', 'snippet_forward', 'fallback' },
+    },
     appearance = { nerd_font_variant = 'mono' },
     completion = {
       documentation = { auto_show = true, auto_show_delay_ms = 500 },
