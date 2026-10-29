@@ -115,6 +115,65 @@ in
 
   services.libinput.enable = true;
 
+  # Hybrid GPU (HP ZBook Fury 15 G7). The Intel CometLake UHD 620 at
+  # 0000:00:02.0 drives eDP-1 and the GNOME Wayland session. The NVIDIA Quadro
+  # T2000 Mobile (TU117, 0000:01:00.0, 4 GiB) has no connected output and is
+  # used per application.
+  #
+  # The proprietary driver is the only route to CUDA, NVDEC/NVENC, OptiX and
+  # real clocking: nouveau never reclocks the card, so it stays at boot clocks.
+  # `open` selects NVIDIA's open kernel modules, the vendor recommendation for
+  # Turing and cached for kernel 6.18.52 (driver 595.71.05).
+  hardware.nvidia = {
+    open = true;
+    prime = {
+      offload.enable = true;
+      offload.enableOffloadCmd = true; # provides the `nvidia-offload` wrapper
+      intelBusId = "PCI:0:2:0";
+      nvidiaBusId = "PCI:0:1:0";
+    };
+
+    # The external Samsung sits on DP-6 of the T2000 (card0), not on an Intel
+    # output, so the discrete GPU owns a display. Without this the driver gets
+    # no suspend/resume handling: on resume nv_drm logs "Failed to initialize
+    # semaphore for plane fence" and "Failed to apply atomic modeset. Error
+    # code: -11", then repeats "Flip event timeout on head 0", and the monitor
+    # stays black until reboot (unplug and replug does not recover it). This
+    # sets NVreg_PreserveVideoMemoryAllocations=1 and, with the open modules on
+    # driver 595, NVreg_UseKernelSuspendNotifiers=1. Before the change the
+    # driver reported PreserveVideoMemoryAllocations=2 and
+    # UseKernelSuspendNotifiers=0, the built-in defaults, which confirms the
+    # module emitted neither.
+    powerManagement.enable = true;
+  };
+
+  # The nvidia module gates on this list; it is also what builds the driver link
+  # farm that exposes nvidia_icd.json to Vulkan clients (Brave WebGPU).
+  services.xserver.videoDrivers = [ "nvidia" ];
+
+  # GNOME's "Launch Using Discrete Graphics Card" entry needs this D-Bus
+  # service; the nvidia module does not enable it.
+  services.switcherooControl.enable = true;
+
+  # The module ships the service but not the package's udev rules, so
+  # `30-discrete-gpu.rules` never installs and the `switcheroo-discrete-gpu`
+  # tag is missing (switcherooctl reports Discrete: no for both GPUs). GNOME 50
+  # keys its menu entry off HasDualGpu, so that works either way, but the
+  # D-Bus property should be right for other clients.
+  services.udev.packages = [ pkgs.switcheroo-control ];
+
+  # Intel VA-API (iHD) for the display GPU. Without this package libva has no
+  # Intel driver at all (vaInitialize fails for both iHD and i965), and the
+  # only working driver is nvidia-vaapi-driver from
+  # hardware.nvidia.videoAcceleration. Forcing that session wide makes
+  # Chromium decode on the T2000 while its compositor runs on Intel: the frame
+  # never reaches Skia (eglCreateImage failed 0x00003009, ProduceSkiaGanesh
+  # failed to create GL representation), so video playback freezes the tab.
+  # With iHD installed libva picks the driver matching the render node and no
+  # session wide override is needed. Turing decodes H.264, HEVC and VP9 but
+  # not AV1, so Intel QuickSync is the better default for video anyway.
+  hardware.graphics.extraPackages = [ pkgs.intel-media-driver ];
+
   nixpkgs.config.allowUnfree = true;
 
   # ranger's kitty-graphics query sends `S`, which Ghostty 1.3.x rejects with
@@ -242,6 +301,43 @@ in
             ];
           });
     })
+
+    # Brave cannot create a WebGPU adapter on this host: its binary carries no
+    # Vulkan loader on the RUNPATH and no ICD search path, so the GPU process
+    # dies with "Failed to load 'libvulkan.so.1'" and chrome://gpu reports
+    # `vulkan: disabled_off`. `vulkanSupport` adds `Vulkan` to
+    # --enable-features (required: a control run without it left
+    # requestAdapter() null) and prefixes XDG_DATA_DIRS with the driver link
+    # farm, which is how the loader finds intel_icd/nvidia_icd. The loader
+    # itself still has to come from the wrapper, hence the LD_LIBRARY_PATH
+    # append. Drop that append once the channel's brave depends on
+    # vulkan-loader (nixpkgs 26.11 wires it; the pinned unstable rev does not).
+    #
+    # Pinning the loader to the Intel ICD is also required. With every ICD
+    # visible Dawn enumerates the T2000 as well, picks it as the discrete
+    # device, then dies in
+    # "SharedImageManager::ProduceSkia: Trying to produce a Skia representation
+    # from an incompatible backing: CompoundImageBacking" -> "Context was
+    # lost", and the GPU process restarts three times until Chromium gives up.
+    # WebGL2 is then unavailable and requestAdapter() returns null, which is
+    # the "Visual effects require WebGL" dialog in Google Meet. Measured with
+    # the ICD list toggled and nothing else changed: intel only -> WebGL2 on,
+    # adapter gen-9, compute dispatch 41, zero restarts; intel plus nvidia ->
+    # WebGL2 off, adapter null, three restarts. The guard keeps
+    # `nvidia-offload brave` working, since that wrapper sets
+    # __NV_PRIME_RENDER_OFFLOAD and the Optimus layer then pins the T2000
+    # (measured: adapter turing, WebGL2 on, zero restarts).
+    # See .agents/plans/37-brave-webgpu/.
+    (final: prev: {
+      brave = (prev.brave.override { vulkanSupport = true; }).overrideAttrs (old: {
+        preFixup = (old.preFixup or "") + ''
+          gappsWrapperArgs+=(
+            --prefix LD_LIBRARY_PATH : "${prev.vulkan-loader}/lib"
+            --run 'if [ -z "''${__NV_PRIME_RENDER_OFFLOAD:-}" ]; then export VK_LOADER_DRIVERS_SELECT="''${VK_LOADER_DRIVERS_SELECT:-intel*}"; fi'
+          )
+        '';
+      });
+    })
   ];
 
   # Fingerprint reader (HP ZBook Fury 15 G7, Synaptics 06cb:00df) — required
@@ -255,6 +351,9 @@ in
 
   # Docker engine + CLI (packages.list [dev] "docker").
   virtualisation.docker.enable = true;
+
+  # GPU devices inside containers, via nvidia-container-toolkit CDI.
+  hardware.nvidia-container-toolkit.enable = true;
 
   users.users.assawalhy = {
     isNormalUser = true;
@@ -423,6 +522,24 @@ in
     # build inputs, so no system-wide libgda6/gsound wiring is required.
     # Enabled via the org/gnome/shell dconf default below.
     gnomeExtensions.copyous
+
+    ## [gpu]
+    # Hybrid GPU diagnostics and CUDA toolchain, see the hardware.nvidia block
+    # above. vulkaninfo shows both adapters, vainfo proves the NVDEC path, and
+    # cuda_nvcc/cuda_cudart compile and run
+    # .agents/plans/38-hybrid-gpu-offload/cuda-smoke.cu. No
+    # nixpkgs.config.cudaSupport: it rebuilds the CUDA package world.
+    libva-utils
+    vulkan-tools
+    cudaPackages.cuda_nvcc
+    cudaPackages.cuda_cudart
+    # Astra Monitor (monitor@astraext.github.io) enumerates GPUs with `lspci`
+    # and returns an empty list without it, which is the "No GPU found" label
+    # (issue #27, .agents/plans/25-astra-monitor-gpu-detection/). v56 never calls
+    # its hasIntelGpuTop() check, so intel-gpu-tools only pays off once upstream
+    # lands Intel support.
+    pciutils
+    intel-gpu-tools
 
     ## [dev]
     docker

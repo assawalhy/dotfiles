@@ -1,6 +1,7 @@
 # Plan — Astra Monitor "No GPU found" (GPU detection)
 
-**Status: NOT STARTED.** Recorded 2026-10-07, handled later.
+**Status: NOT STARTED.** Recorded 2026-10-07, updated 2026-10-17 (hardware
+correction and the epic 38 dependency), handled later.
 Tracked as issue [#27](https://github.com/assawalhy/dotfiles/issues/27).
 
 ## Goal
@@ -23,34 +24,51 @@ whether any GPU is actually monitorable here.
   `Utils.hasIntelGpuTop()` exists at `utils.js:491` but is never called in v56.
   `RELEASES.md:240`: *"Intel GPUs are not supported yet for a lack of hardware
   to test on."*
-- Hardware (read from `/sys/class/drm`):
-  | card | PCI | vendor | device |
-  |---|---|---|---|
-  | `card1` | `0000:01:00.0` | `0x10de` | NVIDIA Quadro P2000 |
-  | `card2` | `0000:00:02.0` | `0x8086` | Intel UHD 620 — drives `eDP-1` |
-- `nix/configuration.nix` configures **no NVIDIA driver**, so `nvidia-smi` is
-  absent too.
+- Hardware (read from `/sys/class/drm`; the `cardN` numbering swaps between
+  boots, the PCI addresses do not):
+
+  | PCI | vendor | device |
+  |---|---|---|
+  | `0000:01:00.0` | `0x10de` | NVIDIA TU117GLM Quadro T2000 Mobile, 4 GiB (nouveau) |
+  | `0000:00:02.0` | `0x8086` | Intel CometLake UHD 620, drives `eDP-1` |
+
+  Corrected 2026-10-17: the first table here called the NVIDIA card a "Quadro
+  P2000" and used card numbers. `10de:1fb8` is the Turing TU117 Quadro T2000.
+  Issue #27 carries the same wrong name.
+- `nix/configuration.nix` configured **no NVIDIA driver** when this was written,
+  so `nvidia-smi` was absent too. Epic
+  [38](../38-hybrid-gpu-offload/PLAN.md) changes that: it installs the
+  proprietary driver (nvidia-open 595.71.05) for real GPU work, which puts
+  `nvidia-smi` on the system and makes `canMonitorGpu()` return true for this
+  card. The driver is coming for CUDA, NVDEC and real clocking, not for the
+  panel; the monitorable panel is a side effect.
 - `lspciCached` is memoised inside the Shell process, so the extension must be
   reloaded (re-login on Wayland) after the tool appears.
 
-## Decisions (proposed — revisit when this is picked up)
+## Decisions (D1 and D4 firm; D2 superseded by epic 38 on 2026-10-17)
 - **D1** Add `pciutils` (+ `intel-gpu-tools` for a future Astra release) to
   `environment.systemPackages`. Fixes the empty enumeration and the misleading
   label; Intel then reports "not supported" honestly. Rejected: leaving the list
   empty (the label actively misinforms).
-- **D2** Do **not** enable the NVIDIA driver just to feed a stats panel. Unfree
-  driver + reboot on a hybrid laptop, for a panel epic 13 does not use. Revisit
-  only if GPU metrics are genuinely wanted.
-- **D3** Interim UI answer if nothing is monitorable: set *Main GPU → None* to
-  hide the section rather than showing a permanent "No GPU found".
+- **D2** Do **not** enable the NVIDIA driver *for this panel*. Superseded on
+  2026-10-17: epic 38 installs that driver for CUDA, NVDEC and real clocking, so
+  `nvidia-smi` arrives without this epic asking for it. No extra work here
+  beyond selecting the card in the dropdown.
+- **D3** Set *Main GPU → NVIDIA* (the T2000) once epic 38 has rebooted. Intel
+  remains unsupported upstream (`RELEASES.md:240`), so NVIDIA is the only
+  monitorable card on this host. Fallback if the NVIDIA panel misreports: set
+  *Main GPU → None*, which hides the section instead of showing a permanent
+  "No GPU found".
 - **D4** Keep this a local config fix, not an extension patch — the extension
   behaves as documented; the missing piece is a package we simply do not install.
 
 ## Milestones
+0. Prerequisite: epic [38](../38-hybrid-gpu-offload/PLAN.md) deployed and
+   rebooted, so `nvidia-smi` exists.
 1. Add `pciutils` (+ `intel-gpu-tools`) to `nix/configuration.nix`.
 2. `nix/update-nixos.sh` → switch.
 3. Re-login; confirm the GPU section lists both cards and the dropdown is usable.
-4. Choose per D3: Intel (unsupported) / NVIDIA (needs driver, D2) / None.
+4. Set *Main GPU → NVIDIA* (D3).
 5. Verify no new `monitor@astraext.github.io` errors in `journalctl --user`.
 
 ## Risks
