@@ -1,3 +1,21 @@
 [tools]
 java = "temurin-21"
 kotlin = "2.4.20"
+# Floating on purpose. `latest` re-resolves only on install or `mise upgrade`,
+# so a bad upstream release lands on an explicit command, not on shell start.
+# node also stays in nix/configuration.nix as the GUI and LSP fallback: nvim
+# started from GNOME never runs `mise activate`.
+node = "latest"
+bun = "latest"
+
+[settings]
+# Worktrees under these roots are the same repos as their main checkouts, but
+# mise 2026.5.12 does not share trust between worktrees (2026.7.5 does). Trust
+# the roots so a new worktree loads its .mise.toml without a prompt.
+trusted_config_paths = ["~/.herdr/worktrees", "~/orca/workspaces"]
+
+[settings.node]
+# mise 2026.5.12 defaults node.compile to true and then builds node from source,
+# which needs make and takes a long time. Use the upstream prebuilt binary: it is
+# also the foreign ELF that nix-ld serves on NixOS.
+compile = false

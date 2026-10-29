@@ -595,8 +595,11 @@ in
     bats
     maven
     gradle
-    bun
     bruno
+    # mise verifies the signature of every runtime it downloads (node, bun).
+    # Without gpg it warns and skips the check, which is the only integrity gate
+    # those downloads have.
+    gnupg
     gitleaks # secret scanner; CI gate on every branch push (.github/workflows/gitleaks.yml)
     # VS Code, added as a plain package (NOT via programs.vscode): the module
     # always wraps it with vscode-with-extensions and pins --extensions-dir to a
@@ -636,7 +639,11 @@ in
     ## [npm]
     codex
     biome
-    nodejs # toolchain for `npm install -g` (kilo)
+    # Toolchain for `npm install -g` (kilo) and the fallback for GUI-launched
+    # Mason servers (ts_ls, eslint, pyright, intelephense, prismals), which run
+    # through `#!/usr/bin/env node` and never see mise's PATH. Project runtimes
+    # come from mise (common/.config/mise/config.toml).
+    nodejs
 
     ## [pip]
     uv
