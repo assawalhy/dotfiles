@@ -19,4 +19,14 @@ config.font = wezterm.font_with_fallback {
   'Noto Sans Mono',
 }
 
+-- Remove the default Alt+Enter -> ToggleFullScreen binding so AI agents
+-- (and other tools) can use Alt+Enter for themselves.
+config.keys = {
+  {
+    key = 'Enter',
+    mods = 'ALT',
+    action = wezterm.action.DisableDefaultAssignment,
+  },
+}
+
 return config
