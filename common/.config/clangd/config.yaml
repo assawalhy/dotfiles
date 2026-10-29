@@ -1,0 +1,11 @@
+# clangd ships without a toolchain: it searches only its own resource dir,
+# /usr/local/include and /usr/include, so <bits/stdc++.h> and the rest of the
+# libstdc++ headers never resolve, on NixOS and on a stock distro alike.
+#
+# `Compiler` names the driver clangd may query for the real system include
+# paths. A bare name resolves through PATH, which keeps this file portable: the
+# profile g++ on NixOS, the distro g++ elsewhere, Apple clang as /usr/bin/g++
+# on macOS. clangd refuses to query a driver that is not also named in
+# --query-driver, so the nvim config passes that flag (see lsp.lua).
+CompileFlags:
+  Compiler: g++

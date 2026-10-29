@@ -603,7 +603,7 @@ in
     # read-only store path, which makes UI extension installs fail with ENOENT.
     # This way extensions install into ~/.vscode/extensions.
     vscode.fhs
-    stdenv.cc # compiler wrapper: cargo invokes `cc` (rmem)
+    stdenv.cc # cc for cargo (rmem); its g++ is also the driver clangd queries
 
     ## [fonts]
     noto-fonts
@@ -891,6 +891,9 @@ in
       libsecret # secret storage (opencode, claude)
       alsa-lib # libasound.so.2
       libpulseaudio # libpulse.so.0
+
+      # No gcc entry: the nix-ld module already seeds this list with the gcc
+      # libraries, so libstdc++.so.6 is in the nix-ld path already.
 
       # Playwright's Chromium (prebuilt, `~/.cache/ms-playwright`) — the
       # headless shell and the full binary both dlopen these at startup and

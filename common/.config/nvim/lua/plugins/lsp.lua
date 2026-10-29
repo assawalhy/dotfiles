@@ -25,6 +25,17 @@ return {
     'neovim/nvim-lspconfig',
     config = function()
       vim.lsp.config('html', { filetypes = { 'html', 'twig', 'hbs' } })
+      -- clangd is a prebuilt binary with no toolchain of its own: it searches
+      -- only its resource dir, /usr/local/include and /usr/include, so the
+      -- libstdc++ headers never resolve. ~/.config/clangd/config.yaml names the
+      -- driver to query, and clangd only queries drivers allowed here. The list
+      -- covers Debian, Arch, both Homebrew prefixes and the NixOS profile.
+      vim.lsp.config('clangd', {
+        cmd = {
+          'clangd',
+          '--query-driver=/usr/bin/g++,/usr/local/bin/g++,/opt/homebrew/bin/g++,/run/current-system/sw/bin/g++',
+        },
+      })
       local gate = require('config.lsp_gate')
       for _, server in ipairs { 'bashls', 'clangd', 'pyright', 'ts_ls', 'eslint', 'prismals', 'biome', 'intelephense', 'html', 'lua_ls', 'tailwindcss' } do
         gate.gate(server)
