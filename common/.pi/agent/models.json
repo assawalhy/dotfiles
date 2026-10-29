@@ -1,15 +1,15 @@
 {
   "$schema": "https://pi.dev/schemas/models.schema.json",
   "providers": {
-    "runanywhere": {
-      "name": "RunAnywhere",
-      "baseUrl": "https://inference.runanywhere.ai/v1",
+    "sovereigneg": {
+      "name": "SovereignEG",
+      "baseUrl": "https://backend.sovereigneg.com/v1",
       "api": "openai-completions",
-      "apiKey": "!cat $HOME/.secrets/runanywhere-api-key",
+      "apiKey": "!cat $HOME/.secrets/sovereigneg-api-key",
       "models": [
         {
-          "id": "glm-5.3-flash",
-          "name": "GLM 5.3 Flash",
+          "id": "deepseek-v4-flash-0731",
+          "name": "DeepSeek V4 Flash 0731",
           "reasoning": true,
           "thinkingLevelMap": {
             "off": "none",
@@ -17,14 +17,14 @@
             "low": "low",
             "medium": "high",
             "high": "high",
-            "xhigh": "max",
+            "xhigh": "xhigh",
             "max": "max"
           },
-          "input": ["text", "image"],
+          "input": ["text"],
           "cost": {
             "input": 0.1,
-            "output": 0.35,
-            "cacheRead": 0.02,
+            "output": 0.2,
+            "cacheRead": 0.01,
             "cacheWrite": 0
           },
           "contextWindow": 1048576,
@@ -52,13 +52,103 @@
           },
           "input": ["text", "image"],
           "cost": {
-            "input": 0.2,
-            "output": 0.6,
-            "cacheRead": 0.006,
+            "input": 0.1,
+            "output": 0.2,
+            "cacheRead": 0.01,
             "cacheWrite": 0
           },
           "contextWindow": 1048576,
-          "maxTokens": 262144,
+          "maxTokens": 16384,
+          "compat": {
+            "thinkingFormat": "openai",
+            "supportsReasoningEffort": true,
+            "supportsStore": false,
+            "supportsDeveloperRole": false,
+            "maxTokensField": "max_tokens"
+          }
+        },
+        {
+          "id": "deepseek-v4.1-flash-1017",
+          "name": "DeepSeek V4.1 Flash 1017",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "off": "none",
+            "minimal": null,
+            "low": "low",
+            "medium": "high",
+            "high": "high",
+            "xhigh": "xhigh",
+            "max": "max"
+          },
+          "input": ["text", "image"],
+          "cost": {
+            "input": 0.1,
+            "output": 0.2,
+            "cacheRead": 0.01,
+            "cacheWrite": 0
+          },
+          "contextWindow": 1048576,
+          "maxTokens": 16384,
+          "compat": {
+            "thinkingFormat": "openai",
+            "supportsReasoningEffort": true,
+            "supportsStore": false,
+            "supportsDeveloperRole": false,
+            "maxTokensField": "max_tokens"
+          }
+        },
+        {
+          "id": "gpt-6-luna",
+          "name": "GPT-6 Luna",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "off": "none",
+            "minimal": null,
+            "low": "low",
+            "medium": "high",
+            "high": "high",
+            "xhigh": "xhigh",
+            "max": "max"
+          },
+          "input": ["text", "image"],
+          "cost": {
+            "input": 0.1,
+            "output": 0.3,
+            "cacheRead": 0.01,
+            "cacheWrite": 0.1
+          },
+          "contextWindow": 1050000,
+          "maxTokens": 128000,
+          "compat": {
+            "thinkingFormat": "openai",
+            "supportsReasoningEffort": true,
+            "supportsStore": false,
+            "supportsDeveloperRole": false,
+            "maxTokensField": "max_completion_tokens"
+          }
+        },
+        {
+          "id": "glm-5.3-flash",
+          "name": "GLM-5.3 Flash",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "off": "none",
+            "minimal": null,
+            "low": "low",
+            "medium": "high",
+            "high": "high",
+            "xhigh": "xhigh",
+            "max": "max"
+          },
+          "input": ["text", "image"],
+          "cost": {
+            "input": 0.1,
+            "output": 0.2,
+            "cacheRead": 0.01,
+            "cacheWrite": 0
+          },
+          "contextWindow": 1048576,
+          "maxTokens": 16384,
           "compat": {
             "thinkingFormat": "openai",
             "supportsReasoningEffort": true,
