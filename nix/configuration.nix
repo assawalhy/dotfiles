@@ -499,6 +499,7 @@ in
     ffmpegthumbnailer # video first frame; preferred over magick's ffmpeg delegate (in packages.list)
     imagemagick # magick; nvim image previews + git textconv downscale (in packages.list)
     ghostscript_headless # magick cannot read or write PDF without the gs CLI (in packages.list)
+    poppler-utils # pdftotext/pdftoppm; PDF text + raster for agent inspection (in packages.list)
     pandoc
     file # libmagic; ranger's scope.sh mime type and the preview placeholder line (in packages.list)
     gitui
