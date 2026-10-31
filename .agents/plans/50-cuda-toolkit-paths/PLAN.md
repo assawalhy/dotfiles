@@ -72,28 +72,64 @@ In `~/Projects/akt26/4/akt26_gpu_dev`, plain `make` fails with
 - `common/.config/nvim/lua/plugins/lsp.lua`: append the wrapper to the
   `--query-driver` list.
 
+## Phase 2: the binaries would not run
+
+Compiling was only half of it. Two runtime failures surfaced once `make` worked,
+both found by running the binaries rather than trusting the build.
+
+**Driver discovery.** `nvcc` links `cudart` statically by default, and static
+cudart `dlopen`s `libcuda.so.1` by bare name. NixOS has no `/etc/ld.so.cache`,
+so that lookup fails and `cudaGetDevice` returns the misleading *"CUDA driver
+version is insufficient for CUDA runtime version"* (error 35) on a 595.71.05
+driver. `ger` and `gemm` had never shown it only because `libcublas.so.12`
+carries `/run/opengl-driver/lib` in its own RUNPATH. Fixed by prepending
+`-Xlinker -rpath -Xlinker /run/opengl-driver/lib` to `NVCC_PREPEND_FLAGS`, which
+puts the path on the binary itself instead of mutating `LD_LIBRARY_PATH`
+globally.
+
+**Architecture.** With the driver reachable the real error appeared: *"no kernel
+image is available for execution on the device"*. The makefiles targeted
+`sm=80` and the Quadro T2000 is `sm=75`. `compute_80` PTX cannot run on `sm_75`,
+so no flag ordering could have saved it. The five makefiles now default to
+`sm=75`: native SASS here, and `compute_75` PTX still JITs upward on Ampere or
+newer, so one default covers both. The architecture lives in the makefile, not
+in a hidden environment variable.
+
+**clangd, corrected.** clangd does not find the toolkit from `/usr/local/cuda`
+on its own. It locates the SDK from the `nvcc` in PATH, and
+`/run/current-system/sw/bin/nvcc` resolves into the `cuda_nvcc` derivation,
+which ships no `cuda_runtime.h`. The clangd config therefore passes
+`--cuda-path=/usr/local/cuda` in a block scoped to `.*\.(cu|cuh)$`, since the
+flag is an unused argument for plain C++.
+
+**Stale terminals.** `__NIXOS_SET_ENVIRONMENT_DONE` is exported, so shells
+started before a switch never source the new `/etc/set-environment`. Any
+terminal open across the switch keeps the old environment until it runs
+`unset __NIXOS_SET_ENVIRONMENT_DONE && . /etc/set-environment`.
+
 ## Verification
 
 - Fresh shell after `sudo nixos-rebuild switch`, no CUDA variables exported:
   plain `make` succeeds in all five assignment directories.
-- `make sm=75` and run `3-ger/ger` and `4-gemm/gemm`: both print `TEST PASS`.
-- `clangd --check` on `3-ger/ger.cu`, `4-gemm/gemm.cu` and a `bits/stdc++.h`
-  C++ file: 0 errors each.
-- `which nvcc` resolves and `nvcc --version` reports 12.9.
+- `make` and run `3-ger/ger` and `4-gemm/gemm`: both print `TEST PASS`.
+- `cuobjdump -lelf` on a built binary lists `sm_75` only, no `sm_80`.
 
 ## Risks
 
-- clang's `/usr/local/cuda` auto-detection comes from LLVM's default candidate
-  list; if it misses, add `--cuda-path=/usr/local/cuda` to the clangd config,
-  which is still a portable path.
 - Replacing `cuda_nvcc`/`cuda_cudart` changes what
   `/run/current-system/sw/bin/nvcc` points at. Same version, but worth a check.
 - `/usr/local` becomes a non-store path managed by tmpfiles. It is recreated on
   every boot and every switch.
 - `nixos-rebuild switch` is required, and a rollback means reverting one commit.
+- The rpath in `NVCC_PREPEND_FLAGS` applies to every nvcc link on this host.
+  Harmless for binaries that already resolve the driver, and it is what static
+  cudart needs.
+- `sm=75` in the makefiles means a grader on an Ampere GPU runs the
+  `compute_75` PTX through the JIT rather than native `sm_80` SASS. Slower, but
+  it runs. `make sm=80` overrides it per build.
 
 ## Open questions
 
-- Should the five makefiles default to `sm=75` so plain `make` also produces a
-  runnable binary on this laptop? Not done here because the assignments target
-  Ampere and may be graded elsewhere.
+- None. The makefiles now default to `sm=75`; `make sm=80` still works when
+  building for an Ampere host.
+

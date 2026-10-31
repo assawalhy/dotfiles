@@ -468,11 +468,11 @@ in
   # The course makefiles in ~/Projects/akt26/4/akt26_gpu_dev and clangd both
   # assume the FHS CUDA root /usr/local/cuda, which NixOS does not provide.
   # Expose the toolkit there as symlinks: the makefiles take
-  # `-L${CUDADIR}/lib64 -lcublas` from it, and clang finds the CUDA headers on
-  # its own because /usr/local/cuda is one of its default install candidates.
-  # nvcc does not: it canonicalizes its own path and looks for include/ beside
-  # the store binary rather than beside the symlink, so NVCC_PREPEND_FLAGS
-  # supplies that path. See .agents/plans/50-cuda-toolkit-paths.
+  # `-L${CUDADIR}/lib64 -lcublas` from it, and clangd is told the same root
+  # through --cuda-path. nvcc finds neither on its own: it canonicalizes its
+  # own path and looks for include/ beside the store binary rather than beside
+  # the symlink, so NVCC_PREPEND_FLAGS supplies that path. See
+  # .agents/plans/50-cuda-toolkit-paths.
   systemd.tmpfiles.rules = [
     "d /usr/local 0755 root root -"
     "d /usr/local/cuda 0755 root root -"
@@ -484,7 +484,28 @@ in
     "L+ /usr/local/cuda/nvml - - - - ${pkgs.cudaPackages.cudatoolkit}/nvml"
   ];
 
-  environment.sessionVariables.NVCC_PREPEND_FLAGS = "-I/usr/local/cuda/include";
+  # nvcc needs two things the FHS layout would have given it for free:
+  #
+  #   -I/usr/local/cuda/include
+  #     The headers. nvcc resolves its own install root from /proc/self/exe, so
+  #     it looks beside the store binary and never beside the /usr/local/cuda
+  #     symlink. Nothing else in PATH or CUDADIR fixes this.
+  #
+  #   -Xlinker -rpath -Xlinker /run/opengl-driver/lib
+  #     The driver. nvcc links cudart statically by default, and static cudart
+  #     dlopen()s "libcuda.so.1" by bare name. NixOS has no /etc/ld.so.cache, so
+  #     that lookup fails and cudaGetDevice reports the misleading "CUDA driver
+  #     version is insufficient for CUDA runtime version". A RUNPATH on the
+  #     binary makes the dlopen find the driver. The cuBLAS assignments never
+  #     showed the bug only because libcublas.so.12 already carries that path in
+  #     its own RUNPATH.
+  #
+  # The GPU architecture is not here: the course makefiles name it themselves
+  # (sm=75 for the Quadro T2000 in this box).
+  environment.sessionVariables.NVCC_PREPEND_FLAGS = lib.concatStringsSep " " [
+    "-I/usr/local/cuda/include"
+    "-Xlinker -rpath -Xlinker /run/opengl-driver/lib"
+  ];
 
   environment.systemPackages = with pkgs; [
     vim
