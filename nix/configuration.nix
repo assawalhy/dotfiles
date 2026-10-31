@@ -360,9 +360,20 @@ in
     # `nvidia-offload brave` working, since that wrapper sets
     # __NV_PRIME_RENDER_OFFLOAD and the Optimus layer then pins the T2000
     # (measured: adapter turing, WebGL2 on, zero restarts).
+    #
+    # The Vulkan feature is incompatible with --ozone-platform=wayland (Brave
+    # logs it). Under Wayland every <video> frame fails with the same ProduceSkia
+    # error, so scroll-seeked videos disappear. Measured on an isolated profile
+    # with a scroll-seeked video: Wayland plus Vulkan gives 10 to 13 errors per
+    # run, Vulkan off gives 0, x11 plus Vulkan gives 0 with webgpu and webgl2
+    # both available. Brave therefore runs on Xwayland. Drop the flag when
+    # Chromium supports Vulkan on Wayland.
     # See .agents/plans/37-brave-webgpu/.
     (final: prev: {
-      brave = (prev.brave.override { vulkanSupport = true; }).overrideAttrs (old: {
+      brave = (prev.brave.override {
+        vulkanSupport = true;
+        commandLineArgs = "--ozone-platform=x11";
+      }).overrideAttrs (old: {
         preFixup = (old.preFixup or "") + ''
           gappsWrapperArgs+=(
             --prefix LD_LIBRARY_PATH : "${prev.vulkan-loader}/lib"
@@ -453,6 +464,27 @@ in
   # the NTFS journal and is a userspace process that can be killed.
   # Key is udisks2's supported knob (see its mount_options.conf.example).
   services.udisks2.settings."mount_options.conf".defaults.ntfs_drivers = "ntfs";
+
+  # The course makefiles in ~/Projects/akt26/4/akt26_gpu_dev and clangd both
+  # assume the FHS CUDA root /usr/local/cuda, which NixOS does not provide.
+  # Expose the toolkit there as symlinks: the makefiles take
+  # `-L${CUDADIR}/lib64 -lcublas` from it, and clang finds the CUDA headers on
+  # its own because /usr/local/cuda is one of its default install candidates.
+  # nvcc does not: it canonicalizes its own path and looks for include/ beside
+  # the store binary rather than beside the symlink, so NVCC_PREPEND_FLAGS
+  # supplies that path. See .agents/plans/50-cuda-toolkit-paths.
+  systemd.tmpfiles.rules = [
+    "d /usr/local 0755 root root -"
+    "d /usr/local/cuda 0755 root root -"
+    "L+ /usr/local/cuda/bin - - - - ${pkgs.cudaPackages.cudatoolkit}/bin"
+    "L+ /usr/local/cuda/include - - - - ${pkgs.cudaPackages.cudatoolkit}/include"
+    "L+ /usr/local/cuda/lib - - - - ${pkgs.cudaPackages.cudatoolkit}/lib"
+    "L+ /usr/local/cuda/lib64 - - - - ${pkgs.cudaPackages.cudatoolkit}/lib"
+    "L+ /usr/local/cuda/nvvm - - - - ${pkgs.cudaPackages.cudatoolkit}/nvvm"
+    "L+ /usr/local/cuda/nvml - - - - ${pkgs.cudaPackages.cudatoolkit}/nvml"
+  ];
+
+  environment.sessionVariables.NVCC_PREPEND_FLAGS = "-I/usr/local/cuda/include";
 
   environment.systemPackages = with pkgs; [
     vim
@@ -573,13 +605,14 @@ in
     ## [gpu]
     # Hybrid GPU diagnostics and CUDA toolchain, see the hardware.nvidia block
     # above. vulkaninfo shows both adapters, vainfo proves the NVDEC path, and
-    # cuda_nvcc/cuda_cudart compile and run
-    # .agents/plans/38-hybrid-gpu-offload/cuda-smoke.cu. No
-    # nixpkgs.config.cudaSupport: it rebuilds the CUDA package world.
+    # the toolkit compiles and runs
+    # .agents/plans/38-hybrid-gpu-offload/cuda-smoke.cu as well as the course
+    # assignments in ~/Projects/akt26/4/akt26_gpu_dev. It also carries cuBLAS,
+    # which the assignments link. No nixpkgs.config.cudaSupport: it rebuilds the
+    # CUDA package world.
     libva-utils
     vulkan-tools
-    cudaPackages.cuda_nvcc
-    cudaPackages.cuda_cudart
+    cudaPackages.cudatoolkit
     # Astra Monitor (monitor@astraext.github.io) enumerates GPUs with `lspci`
     # and returns an empty list without it, which is the "No GPU found" label
     # (issue #27, .agents/plans/25-astra-monitor-gpu-detection/). v56 never calls
