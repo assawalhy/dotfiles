@@ -29,11 +29,15 @@ return {
       -- only its resource dir, /usr/local/include and /usr/include, so the
       -- libstdc++ headers never resolve. ~/.config/clangd/config.yaml names the
       -- driver to query, and clangd only queries drivers allowed here. The list
-      -- covers Debian, Arch, both Homebrew prefixes and the NixOS profile.
+      -- covers Debian, Arch, both Homebrew prefixes and the NixOS profile; the
+      -- last entry is the gxx-cuda wrapper that answers the CUDA probe g++
+      -- rejects (plans 45 and 50).
+      local gxx_cuda = vim.fn.expand('~/bin/gxx-cuda')
       vim.lsp.config('clangd', {
         cmd = {
           'clangd',
-          '--query-driver=/usr/bin/g++,/usr/local/bin/g++,/opt/homebrew/bin/g++,/run/current-system/sw/bin/g++',
+          '--query-driver=/usr/bin/g++,/usr/local/bin/g++,/opt/homebrew/bin/g++,/run/current-system/sw/bin/g++,'
+            .. gxx_cuda,
         },
       })
       local gate = require('config.lsp_gate')

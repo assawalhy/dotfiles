@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# gxx-cuda -- g++ that can answer clangd's CUDA include probe.
+#
+# clangd resolves the system include paths of a .cu buffer by running the
+# configured driver as `g++ -E -v -x cuda -`. g++ rejects `-x cuda` with
+# "language cuda not recognized", so extraction fails and every libstdc++ header
+# goes missing (<cmath>, <vector>, ...). The headers clangd needs for editing
+# are the host ones anyway, so answer that one probe with `-x c++` and forward
+# everything else untouched. See .agents/plans/50-cuda-toolkit-paths.
+#
+# Wired up in ~/.config/clangd/config.yaml (CompileFlags.Compiler) and the
+# --query-driver list in nvim's lsp.lua.
+
+args=()
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-x" ] && [ "$2" = "cuda" ]; then
+    args+=(-x c++)
+    shift 2
+    continue
+  fi
+  args+=("$1")
+  shift
+done
+
+exec g++ "${args[@]}"

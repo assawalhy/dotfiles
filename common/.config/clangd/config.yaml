@@ -4,8 +4,27 @@
 #
 # `Compiler` names the driver clangd may query for the real system include
 # paths. A bare name resolves through PATH, which keeps this file portable: the
-# profile g++ on NixOS, the distro g++ elsewhere, Apple clang as /usr/bin/g++
-# on macOS. clangd refuses to query a driver that is not also named in
+# profile g++ on NixOS, the distro g++ elsewhere, Apple clang as /usr/bin/g++ on
+# macOS. clangd refuses to query a driver that is not also named in
 # --query-driver, so the nvim config passes that flag (see lsp.lua).
+#
+# The driver is gxx-cuda, not g++: clangd probes a .cu buffer with
+# `g++ -E -v -x cuda -`, which g++ rejects outright, so libstdc++ headers go
+# missing in every CUDA buffer. gxx-cuda answers that one probe with `-x c++`
+# and forwards everything else to g++. See .agents/plans/50-cuda-toolkit-paths.
 CompileFlags:
-  Compiler: g++
+  Compiler: gxx-cuda
+
+# clangd finds the CUDA toolkit by looking for an `nvcc` in PATH and taking its
+# include/lib dirs. On NixOS that `nvcc` is a symlink straight into the
+# cuda_nvcc derivation, which ships only its own private headers and none of
+# cuda_runtime.h, so every CUDA buffer reports `__global__` as an unknown type
+# and cudaMalloc as undeclared. Point clang at the FHS root instead, which
+# NixOS provides (plans 50) and which is where a stock distro keeps it anyway.
+# Scoped to CUDA sources: `--cuda-path` is an unused argument for plain C++.
+---
+If:
+  PathMatch: .*\.(cu|cuh)$
+CompileFlags:
+  Add:
+    - --cuda-path=/usr/local/cuda
