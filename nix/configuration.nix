@@ -654,6 +654,11 @@ in
     # editor or sync tool works with it. Enabled via the org/gnome/shell dconf
     # default below; see epic 51.
     todo-widget
+    # Quick Share for the Android phone. nixpkgs ships upstream's newest release
+    # (0.11.5), and the app drives its own mDNS responder, so Avahi stays off. Its
+    # fixed port and the firewall holes are set in the networking.firewall block
+    # below; see epic 52.
+    rquickshare
 
     ## [gpu]
     # Hybrid GPU diagnostics and CUDA toolchain, see the hardware.nvidia block
@@ -754,6 +759,12 @@ in
 
   # protonvpn does not work while reverse-path filtering is enabled.
   networking.firewall.checkReversePath = false;
+
+  # Quick Share (rquickshare) receives on the fixed port it reads from its own
+  # store, and hears the phone's mDNS answers as multicast on 5353/udp. The app
+  # ships its own responder, so this is not an Avahi hole.
+  networking.firewall.allowedTCPPorts = [ 12345 ];
+  networking.firewall.allowedUDPPorts = [ 5353 ];
 
   # System-wide dconf defaults for the GNOME "user" profile. The user database
   # takes precedence over these defaults, so this is the fallback that makes
