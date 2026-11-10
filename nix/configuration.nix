@@ -36,6 +36,10 @@ let
     text = lib.removePrefix "#!/usr/bin/env bash\n" (builtins.readFile ./appimage-binfmt.sh);
   };
 
+  # GNOME Shell desktop todo widget. Built from the repo's committed
+  # extension.zip; not on extensions.gnome.org, so not in nixpkgs.
+  todo-widget = pkgs.callPackage ./todo-widget.nix { };
+
   # lazygit from a pinned nixpkgs-unstable revision. The nixos-26.05 channel
   # pins 0.61.1, but common/.config/lazygit/config.yml uses `git.diffRenderers`,
   # which needs >= 0.64 (the old `git.paging` was removed then). Only this one
@@ -123,6 +127,10 @@ in
   };
 
   services.libinput.enable = true;
+
+  # Slack comes from Flathub (epic 49 D2). Slack's own Linux updater is an apt
+  # repo plus /etc/cron.daily/slack, so a user-space copy would never update.
+  services.flatpak.enable = true;
 
   # Hybrid GPU (HP ZBook Fury 15 G7). The Intel CometLake UHD 620 at
   # 0000:00:02.0 drives eDP-1 and the GNOME Wayland session. The NVIDIA Quadro
@@ -273,6 +281,25 @@ in
             prev.gnomeExtensions.copyous.overrideAttrs (old: {
               patches = (old.patches or []) ++ [ ./copyous-terminal-paste/terminal-paste.patch ];
             });
+
+        # Brave runs on Xwayland (see the brave overlay), and its "Picture in
+        # picture" window is then an X11 window. make_above() on it from the
+        # window-added handler makes mutter emit demands-attention before the
+        # window has an app: windowAttentionHandler throws "app is null", mutter
+        # logs "Window had stack position already" and gnome-shell aborts, which
+        # ends the session. Chromium sets always-on-top itself on X11, so the
+        # extension only needs to handle Wayland clients (Firefox). The grep
+        # makes an extension bump fail loudly instead of silently dropping this.
+        pip-on-top = prev.gnomeExtensions.pip-on-top.overrideAttrs (old: {
+          postInstall = (old.postInstall or "") + ''
+            f=$out/share/gnome-shell/extensions/pip-on-top@rafostar.github.com/extension.js
+            grep -q '^    if (!window.title)$' "$f" || {
+              echo "pip-on-top override: _checkTitle no longer starts with the title guard" >&2
+              exit 1
+            }
+            sed -i 's/^    if (!window.title)$/    if (!window.title || window.get_client_type() === Meta.WindowClientType.X11)/' "$f"
+          '';
+        });
       };
 
       # Copyous loads Gda through GIRepository. The generated Gda-6.0.typelib
@@ -622,6 +649,11 @@ in
     # to 50, this box runs 50.4. Enabled via the org/gnome/shell dconf default
     # below.
     gnomeExtensions.emoji-copy
+    # Interactive todo list card on the wallpaper, backed by a plain text file
+    # (~/todo.txt by default, self-created). Reads and writes it live, so any
+    # editor or sync tool works with it. Enabled via the org/gnome/shell dconf
+    # default below; see epic 51.
+    todo-widget
 
     ## [gpu]
     # Hybrid GPU diagnostics and CUDA toolchain, see the hardware.nvidia block
@@ -746,6 +778,7 @@ in
             "copyous@boerdereinar.dev"
             "disable-extension-updates@swsnr.de"
             "emoji-copy@felipeftn"
+            "todoWidget@Hamza-Djellal.github.com"
           ];
         };
         # The extension only calls make_above() by default; sticking to all
@@ -1016,6 +1049,14 @@ in
     ];
   };
 
+  # herdr-app is a self-updating GPUI binary in ~/.local/share/herdr-app that
+  # dlopens libwayland-client and libvulkan. nix-ld carries neither (wayland is
+  # excluded on purpose, epic 04 D5). Its launcher in setup/steps/63-herdr.sh
+  # appends this to NIX_LD_LIBRARY_PATH, so the store paths follow the rebuild
+  # without putting the binary in the store (epic 49 D1).
+  environment.etc."herdr-app/nix-ld-extra".text =
+    ":${pkgs.wayland}/lib:${pkgs.vulkan-loader}/lib";
+
   # First-login unit that provisions uv's default Python links (python,
   # python3 in ~/.local/bin); NixOS equivalent of setup/steps/91-uv-python.sh.
   systemd.user.services.uv-python = {
@@ -1025,6 +1066,24 @@ in
       Type = "oneshot";
       ConditionPathExists = "!%h/.local/bin/python";
       ExecStart = "${pkgs.uv}/bin/uv python install 3 --default";
+    };
+  };
+
+  # Flatpak ships flatpak-system-helper only, no updater. This refreshes the
+  # user install so Slack updates without a rebuild (epic 49 D2).
+  systemd.user.services.flatpak-update = {
+    description = "Update user Flatpak apps";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.flatpak}/bin/flatpak update --user --noninteractive -y";
+    };
+  };
+
+  systemd.user.timers.flatpak-update = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
     };
   };
 
