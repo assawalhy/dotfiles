@@ -54,6 +54,25 @@ let
     # obsidian (unlike lazygit) is unfree, so allow it here too.
     config.allowUnfree = true;
   };
+
+  # Domains that go through the WARP SOCKS proxy. Used by the sing-box DNS and
+  # route rules.
+  usqueUid = 970;
+
+  protonDomains = [
+    "proton.me"
+    "protonvpn.com"
+    "protonvpn.ch"
+    "protonmail.com"
+    "protonmail.ch"
+    "pm.me"
+    "proton.black"
+    "proton.ch"
+    "protonstatus.com"
+    "protoncdn.com"
+    "proton.vpn"
+    "protonapps.com"
+  ];
 in
 {
   imports =
@@ -756,6 +775,80 @@ in
   ];
 
   services.openssh.enable = true;
+
+  # WARP over MASQUE (QUIC on UDP 443) as a local SOCKS5 proxy. Plain WireGuard
+  # to WARP is dropped on this network. The WARP config.json holds a private
+  # key and is copied to /var/lib/usque by hand, never into the repo. The user
+  # has a fixed uid so the sing-box tun can exclude its QUIC traffic to
+  # Cloudflare; otherwise that session is captured by the tun and stalls.
+  users.users.usque = {
+    isSystemUser = true;
+    group = "usque";
+    uid = usqueUid;
+  };
+  users.groups.usque.gid = usqueUid;
+
+  systemd.services.usque = {
+    description = "usque WARP MASQUE SOCKS5 proxy";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    unitConfig.ConditionPathExists = "/var/lib/usque/config.json";
+    serviceConfig = {
+      ExecStart = "${pkgs.usque}/bin/usque socks -c /var/lib/usque/config.json -b 127.0.0.1 -p 1080 --always-reconnect";
+      User = "usque";
+      Group = "usque";
+      StateDirectory = "usque";
+      StateDirectoryMode = "0700";
+      Restart = "always";
+      RestartSec = 5;
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+    };
+  };
+
+  # Tun inbound: only Proton domains use the usque proxy, everything else is
+  # direct. Private and Tailscale ranges stay direct.
+  services.sing-box.enable = true;
+  services.sing-box.settings = {
+    log.level = "warn";
+    dns = {
+      servers = [ { type = "local"; tag = "local"; } ];
+      final = "local";
+    };
+    inbounds = [
+      {
+        type = "tun";
+        tag = "tun-in";
+        address = [ "198.18.0.1/30" ];
+        auto_route = true;
+        strict_route = false;
+        stack = "gvisor";
+        exclude_uid = [ usqueUid ];
+      }
+    ];
+    outbounds = [
+      { type = "direct"; tag = "direct"; }
+      { type = "socks"; tag = "proton"; server = "127.0.0.1"; server_port = 1080; version = "5"; }
+    ];
+    route = {
+      auto_detect_interface = true;
+      default_domain_resolver = "local";
+      final = "direct";
+      rules = [
+        { action = "sniff"; }
+        { ip_is_private = true; action = "route"; outbound = "direct"; }
+        { ip_cidr = [ "100.64.0.0/10" ]; action = "route"; outbound = "direct"; }
+        { domain_suffix = protonDomains; action = "route"; outbound = "proton"; }
+      ];
+    };
+  };
+  systemd.services.sing-box = {
+    after = [ "usque.service" ];
+    wants = [ "usque.service" ];
+  };
 
   # protonvpn does not work while reverse-path filtering is enabled.
   networking.firewall.checkReversePath = false;

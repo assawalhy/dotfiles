@@ -24,3 +24,9 @@ __pycache__/
 # drops artifacts into that repo. Root-anchored so a nested path of the same
 # name is not matched.
 /.playwright-cli/
+
+# WARP credentials (usque, wgcf)
+wgcf-account.toml
+wgcf-profile.conf
+wgproton.conf
+usque-config.json
