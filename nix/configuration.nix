@@ -591,6 +591,7 @@ in
 
     ## [extra]
     gh
+    glab # GitLab CLI (in packages.list)
     delta # git-delta
     jp
     jq

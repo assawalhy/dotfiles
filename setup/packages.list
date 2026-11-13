@@ -49,6 +49,7 @@ luarocks check:luarocks p4
 
 [extra]
 gh                  pacman:github-cli check:gh p1
+glab                 check:glab p2
 git-delta           apt:-  dnf:-  check:delta        p2  # not packaged on Debian; see [cargo]
 jp check:jp p2
 ffmpeg check:ffmpeg p2
