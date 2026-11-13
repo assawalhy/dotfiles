@@ -183,6 +183,52 @@ in
     powerManagement.enable = true;
   };
 
+  # Power-off hang in the NVIDIA open driver (595.71.05). After systemd-shutdown
+  # printed "Powering off", the kernel's device_shutdown() called
+  # nv_pci_shutdown(), which logged "[nvidia-drm] Removing device" and never
+  # returned (no "Unloading driver" line). Upstream tracks this teardown path
+  # in NVIDIA/open-gpu-kernel-modules#1486, #1222 and #1027 and on the NVIDIA
+  # forum; there is no fixed driver yet. The workaround reported to work for
+  # plain reboot/poweroff is to unload the modules late in shutdown. Then
+  # nv_pci_shutdown() never runs at all.
+  #
+  # The unit runs after every normal unit has stopped (GDM, the user sessions,
+  # Docker), so nothing still holds /dev/nvidia*. Output goes to the console via
+  # kmsg because journald is already gone at that point. A module that will not
+  # unload is reported with its refcount and holders, not treated as a failure.
+  # TimeoutStartSec bounds a hung rmmod so the shutdown still proceeds.
+  # See .agents/plans/53-wayland-webgpu/.
+  systemd.services.nvidia-unload-at-shutdown = {
+    description = "Unload NVIDIA kernel modules before power-off/reboot";
+    unitConfig.DefaultDependencies = false;
+    wantedBy = [ "poweroff.target" "reboot.target" "halt.target" "kexec.target" ];
+    after = [ "shutdown.target" "umount.target" ];
+    before = [
+      "final.target"
+      "systemd-poweroff.service"
+      "systemd-reboot.service"
+      "systemd-halt.service"
+      "systemd-kexec.service"
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "20s";
+      StandardOutput = "kmsg";
+      StandardError = "kmsg";
+      ExecStart = "${pkgs.writeShellScript "nvidia-unload-at-shutdown" ''
+        for m in nvidia_peermem nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
+          [ -d "/sys/module/$m" ] || continue
+          if ${pkgs.kmod}/bin/rmmod "$m"; then
+            echo "nvidia-unload: unloaded $m"
+          else
+            echo "nvidia-unload: could not unload $m (refcnt $(cat /sys/module/$m/refcnt 2>/dev/null), holders: $(ls /sys/module/$m/holders 2>/dev/null | tr '\n' ' '))"
+          fi
+        done
+        exit 0
+      ''}";
+    };
+  };
+
   # The nvidia module gates on this list; it is also what builds the driver link
   # farm that exposes nvidia_icd.json to Vulkan clients (Brave WebGPU).
   services.xserver.videoDrivers = [ "nvidia" ];
