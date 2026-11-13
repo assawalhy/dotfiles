@@ -196,6 +196,11 @@ nix/update-nixos.sh build        # sync + build only (switch|boot|test|dry-build
 nix/update-nixos.sh -n           # preview the sync, write nothing
 ```
 
+Astra Monitor (the top-bar stats extension) is built from upstream source by
+`nix/astra-monitor/package.nix`, with local fixes in `nix/astra-monitor/patches/`.
+Develop it with `nix/astra-monitor/dev.sh` (`init`, `nested`, `check`, `export`,
+`bench`); see `.agents/plans/53-astra-monitor-local/`.
+
 `hardware-configuration.nix` is machine-specific and stays in `/etc/nixos`; the
 script never overwrites or deletes it (or its own timestamped backups). `rsync`
 is declared in `nix/configuration.nix`; if absent the script falls back to `cp -a`.
