@@ -1192,6 +1192,36 @@ in
     };
   };
 
+  # herdr-core restores kept terminals as fresh shells after a reboot but never
+  # re-runs the program in them (epic 56). hc-snapshot records which pane held
+  # which agent; hc-resume starts the core at boot and types each agent's own
+  # resume command back into its recovered pane.
+  systemd.user.services.hc-resume = {
+    description = "Restore herdr-core agent panes after a reboot";
+    wantedBy = [ "default.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.bash}/bin/bash %h/.local/bin/hc-resume resume";
+    };
+  };
+
+  systemd.user.services.hc-snapshot = {
+    description = "Record herdr-core agent panes for the next boot";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.bash}/bin/bash %h/.local/bin/hc-resume snapshot";
+    };
+  };
+
+  systemd.user.timers.hc-snapshot = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2min";
+      OnUnitActiveSec = "20s";
+      AccuracySec = "5s";
+    };
+  };
+
   # Resolve hardcoded shebang/interpreter paths (/bin/bash, /usr/bin/python3, …)
   # via PATH for scripts shipped by foreign binaries.
   services.envfs.enable = true;
