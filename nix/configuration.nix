@@ -128,6 +128,25 @@ in
 
   services.libinput.enable = true;
 
+  # Shutdown hang (~90s): systemd-shutdown waited on .gnome-shell-wrapped and
+  # ding.js, which were still alive after the final SIGKILL. Three changes:
+  #
+  # Kill the session scope at logout instead of abandoning it, so GNOME Shell
+  # and its helpers are stopped with the session rather than left for the
+  # final kill pass. Side effect: tmux/screen or nohup jobs started from a
+  # graphical session no longer survive logout unless run via
+  # `systemd-run --user --scope` (or with lingering enabled).
+  services.logind.settings.Login.KillUserProcesses = true;
+
+  # Cap how long any unit may take to stop (default 90s) for the system and
+  # user managers. 26.05 removed systemd.extraConfig in favour of
+  # systemd.settings.Manager, but the user manager still only has extraConfig
+  # (rendered into /etc/systemd/user.conf under [Manager]).
+  systemd.settings.Manager.DefaultTimeoutStopSec = "10s";
+  systemd.user.extraConfig = ''
+    DefaultTimeoutStopSec=10s
+  '';
+
   # Slack comes from Flathub (epic 49 D2). Slack's own Linux updater is an apt
   # repo plus /etc/cron.daily/slack, so a user-space copy would never update.
   services.flatpak.enable = true;
@@ -620,9 +639,9 @@ in
     ghostty
     wezterm
 
-    # GNOME 42+ has no desktop icons; this extension restores them (enabled via
-    # the org/gnome/shell dconf default below).
-    gnomeExtensions.desktop-icons-ng-ding
+    # No Desktop Icons NG (ding@rastersoft.com): it runs ding.js as a separate
+    # GJS process beside gnome-shell, and at shutdown that process outlived
+    # SIGKILL with gnome-shell, so systemd-shutdown waited ~90s on both.
     # Keeps browser PiP windows above and on all visible workspaces, working
     # around the missing always-on-top/sticky hints on Wayland. Detection is
     # purely by window title — upstream targets Firefox + Clapper ("may work
@@ -783,7 +802,6 @@ in
           # rebuild, run once:
           #   dconf reset /org/gnome/shell/enabled-extensions
           enabled-extensions = [
-            "ding@rastersoft.com"
             "pip-on-top@rafostar.github.com"
             "monitor@astraext.github.io"
             "copyous@boerdereinar.dev"
