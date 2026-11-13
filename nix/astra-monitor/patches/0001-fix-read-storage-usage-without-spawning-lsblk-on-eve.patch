@@ -1,0 +1,163 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: dotfiles <dotfiles@localhost>
+Date: Fri, 13 Nov 2026 08:13:16 +0000
+Subject: [PATCH] fix: read storage usage without spawning lsblk on every tick
+
+Without GTop (NixOS ships Astra Monitor without the libgtop typelib on the
+search path) the storage header ran two lsblk processes every storage-update
+interval: listDisksAsync() for the device list and lsblk FSUSE% for the
+figures. Share the device list for 30 s, read the usage with Gio's async
+statfs() on the device's mountpoint, and keep lsblk only as the fallback for
+a device without one.
+
+Also keep `_` in the device path handed to lsblk, so LUKS mappings such
+as /dev/mapper/nvme0n1p3_crypt resolve (#237).
+---
+ src/storage/storageMonitor.ts | 58 +++++++++++++++++++++++++++++++++--
+ src/utils/utils.ts            | 29 ++++++++++++++++++
+ 2 files changed, 84 insertions(+), 3 deletions(-)
+
+diff --git a/src/storage/storageMonitor.ts b/src/storage/storageMonitor.ts
+index 078dc11..0f5ba6d 100644
+--- a/src/storage/storageMonitor.ts
++++ b/src/storage/storageMonitor.ts
+@@ -19,6 +19,7 @@
+  */
+ 
+ import GLib from 'gi://GLib';
++import Gio from 'gi://Gio';
+ 
+ import Config from '../config.js';
+ import Utils, { DiskInfo } from '../utils/utils.js';
+@@ -300,7 +301,7 @@ export default class StorageMonitor extends Monitor {
+ 
+     async checkMainDiskAsync(disks?: Map<string, DiskInfo>): Promise<string | null> {
+         let storageMain = Config.get_string('storage-main');
+-        const diskList = disks ?? (await Utils.listDisksAsync());
++        const diskList = disks ?? (await Utils.listDisksCachedAsync());
+         if(!storageMain || storageMain === '[default]' || !diskList.has(storageMain)) {
+             const defaultId = Utils.findDefaultDisk(diskList);
+             if(defaultId !== null) {
+@@ -565,7 +566,7 @@ export default class StorageMonitor extends Monitor {
+ 
+     async updateStorageUsageProc(): Promise<boolean> {
+         let mainDisk = Config.get_string('storage-main');
+-        const disks = await Utils.listDisksAsync(this.updateStorageUsageTask);
++        const disks = await Utils.listDisksCachedAsync();
+ 
+         try {
+             if(!mainDisk || mainDisk === '[default]')
+@@ -579,7 +580,17 @@ export default class StorageMonitor extends Monitor {
+ 
+             if(!disk || !disk.path) return false;
+ 
+-            const path = disk.path.replace(/[^a-zA-Z0-9/-]/g, '');
++            // statfs() on a mountpoint answers without spawning a process: lsblk
++            // stays the fallback for a device that has no usable mountpoint
++            const fsUsage = await StorageMonitor.queryFilesystemUsageAsync(disk.mountpoints);
++            if(fsUsage) {
++                this.pushUsageHistory('storageUsage', fsUsage);
++                return true;
++            }
++
++            // `_` is legal in device names: Debian/Ubuntu name LUKS mappings
++            // `<dev>_crypt`, and stripping it points lsblk at a missing device (#237)
++            const path = disk.path.replace(/[^a-zA-Z0-9/_-]/g, '');
+             const lsblkPath = await Utils.getLsblkPathAsync();
+             if(lsblkPath === false) return false;
+             const result = await Utils.runAsyncCommand(
+@@ -609,6 +620,47 @@ export default class StorageMonitor extends Monitor {
+         return false;
+     }
+ 
++    /**
++     * Same figures as the GTop path (used = blocks - bfree), read through Gio's
++     * async statfs(): no subprocess and no JSON to parse
++     */
++    static async queryFilesystemUsageAsync(
++        mountpoints: (string | null)[] | undefined
++    ): Promise<{ size: number; used: number; free: number; usePercentage: number } | null> {
++        if(!mountpoints) return null;
++        for(const mountpoint of mountpoints) {
++            if(!mountpoint || mountpoint === '[SWAP]') continue;
++            try {
++                const info = await new Promise<Gio.FileInfo>((resolve, reject) => {
++                    Gio.File.new_for_path(mountpoint).query_filesystem_info_async(
++                        'filesystem::size,filesystem::used',
++                        GLib.PRIORITY_LOW,
++                        null,
++                        (file, result) => {
++                            try {
++                                resolve(file!.query_filesystem_info_finish(result));
++                            } catch(e) {
++                                reject(e);
++                            }
++                        }
++                    );
++                });
++                const size = Number(info.get_attribute_uint64('filesystem::size'));
++                const used = Number(info.get_attribute_uint64('filesystem::used'));
++                if(!size) continue;
++                return {
++                    size,
++                    used,
++                    free: size - used,
++                    usePercentage: Math.round((used / size) * 100),
++                };
++            } catch(_) {
++                /* try the next mountpoint */
++            }
++        }
++        return null;
++    }
++
+     async updateStorageUsageGTop(): Promise<boolean> {
+         const GTop = Utils.GTop;
+         if(!GTop) return false;
+diff --git a/src/utils/utils.ts b/src/utils/utils.ts
+index 160e3b4..8bebb87 100644
+--- a/src/utils/utils.ts
++++ b/src/utils/utils.ts
+@@ -257,6 +257,7 @@ export default class Utils {
+         Utils.nethogsCaps = undefined;
+         Utils.cachedLmSensorSources = undefined;
+         Utils.sensorSourcesPromise = undefined;
++        Utils.disksListCache = undefined;
+     }
+ 
+     private static resetHwmonCache() {
+@@ -1997,6 +1998,34 @@ export default class Utils {
+         });
+     }
+ 
++    private static disksListCache?: {
++        time: number;
++        promise: Promise<Map<string, DiskInfo>>;
++    };
++
++    /**
++     * listDisksAsync() spawns lsblk: the storage monitor needs the list on every
++     * tick, but block devices and mountpoints rarely change. Share one result for
++     * maxAgeMs (and between concurrent callers); an empty list is never kept.
++     */
++    static listDisksCachedAsync(maxAgeMs: number = 30000): Promise<Map<string, DiskInfo>> {
++        const now = GLib.get_monotonic_time() / 1000;
++        const cache = Utils.disksListCache;
++        if(cache && now - cache.time < maxAgeMs) return cache.promise;
++
++        const promise = Utils.listDisksAsync();
++        Utils.disksListCache = { time: now, promise };
++        promise
++            .then(disks => {
++                if(disks.size === 0 && Utils.disksListCache?.promise === promise)
++                    Utils.disksListCache = undefined;
++            })
++            .catch(() => {
++                if(Utils.disksListCache?.promise === promise) Utils.disksListCache = undefined;
++            });
++        return promise;
++    }
++
+     static async listDisksAsync(
+         task?: CancellableTaskManager<boolean>
+     ): Promise<Map<string, DiskInfo>> {

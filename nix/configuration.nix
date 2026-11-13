@@ -40,6 +40,11 @@ let
   # extension.zip; not on extensions.gnome.org, so not in nixpkgs.
   todo-widget = pkgs.callPackage ./todo-widget.nix { };
 
+  # Astra Monitor built from upstream source plus ./astra-monitor/patches, in
+  # place of nixpkgs' gnomeExtensions.astra-monitor (release 39, no GTop on
+  # NixOS). Developed with nix/astra-monitor/dev.sh; see epic 53.
+  astra-monitor = pkgs.callPackage ./astra-monitor/package.nix { };
+
   # lazygit from a pinned nixpkgs-unstable revision. The nixos-26.05 channel
   # pins 0.61.1, but common/.config/lazygit/config.yml uses `git.diffRenderers`,
   # which needs >= 0.64 (the old `git.paging` was removed then). Only this one
@@ -630,10 +635,12 @@ in
     gnomeExtensions.pip-on-top
     # Top-bar system stats (RAM % + CPU package temperature), the GNOME
     # counterpart of macOS Stats. Sensors read /sys/class/hwmon directly
-    # (coretemp here), so no lm_sensors/libgtop is needed. Presets live in the
-    # org/gnome/shell/extensions/astra-monitor dconf defaults below; enabling
-    # follows the org/gnome/shell enabled-extensions entry there.
-    gnomeExtensions.astra-monitor
+    # (coretemp here), so no lm_sensors is needed; libgtop is wired in by the
+    # package itself. Built from source, see the astra-monitor binding above.
+    # Presets live in the org/gnome/shell/extensions/astra-monitor dconf
+    # defaults below; enabling follows the org/gnome/shell enabled-extensions
+    # entry there.
+    astra-monitor
     # Clipboard history / manager (replaces CopyQ). nixpkgs patches this one
     # (extensionOverrides.nix, PR #469919) to load Gda + GSound from its own
     # build inputs, so no system-wide libgda6/gsound wiring is required.
@@ -673,9 +680,9 @@ in
     cudaPackages.cudatoolkit
     # Astra Monitor (monitor@astraext.github.io) enumerates GPUs with `lspci`
     # and returns an empty list without it, which is the "No GPU found" label
-    # (issue #27, .agents/plans/25-astra-monitor-gpu-detection/). v56 never calls
-    # its hasIntelGpuTop() check, so intel-gpu-tools only pays off once upstream
-    # lands Intel support.
+    # (issue #27, .agents/plans/25-astra-monitor-gpu-detection/). Release 43
+    # monitors the i915 UHD 620 out of the box; intel_gpu_top adds per-engine
+    # activity and top processes once it has cap_perfmon (epic 53).
     pciutils
     intel-gpu-tools
 
