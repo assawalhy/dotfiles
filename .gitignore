@@ -25,6 +25,12 @@ __pycache__/
 # name is not matched.
 /.playwright-cli/
 
+.awesome-agent/
+
+# irsim keeps its local port state here. Not root-anchored: it appears in
+# whatever directory the sim runs from.
+.irsim/
+
 # WARP credentials (usque, wgcf)
 wgcf-account.toml
 wgcf-profile.conf
