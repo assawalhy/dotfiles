@@ -1,7 +1,9 @@
-# Plan — NVIDIA power-off hang, Brave WebGPU on native Wayland, GPU audit
+# Plan: NVIDIA power-off and reboot hangs
 
-**Status: IN PROGRESS.** Drafted 2026-11-13. Builds on epics
-[37](../37-brave-webgpu/PLAN.md) and [38](../38-hybrid-gpu-offload/PLAN.md).
+**Status: IN PROGRESS.** Drafted 2026-11-13. Builds on epics [37](../37-brave-webgpu/PLAN.md) and [38](../38-hybrid-gpu-offload/PLAN.md).
+
+This plan fixes the shutdown hangs: the 90 s userspace wait and the kernel hang at `[nvidia-drm] Removing device`. Section 2 (Brave WebGPU on native Wayland) was tried and REJECTED, and section 3 is the GPU audit.
+
 Progress is in [TODO.md](TODO.md).
 
 ## 1. Power-off hangs at `[nvidia-drm] ... Removing device`
@@ -56,7 +58,12 @@ None has an NVIDIA fix.
   call. Output goes to kmsg, so the result is on the console. A module that
   will not unload is reported with its refcount and holders. A
   `TimeoutStartSec=20s` limit stops a hung `rmmod` from blocking shutdown
-  forever.
+  forever. Before the `rmmod` loop the script unbinds the fbcon vtconsole
+  (`/sys/class/vtconsole/vtcon*/bind`, matched by the name `frame buffer
+  device`). `nvidia-drm` runs with `fbdev=1`, so fbcon can hold `nvidia_drm`,
+  and `rmmod nvidia_drm` then fails "in use", which also makes `nvidia_modeset`
+  and `nvidia` fail. The dummy console stays bound, so the kernel keeps a
+  console.
   This is the workaround that #1027 and the forum both confirm for
   non-hibernation shutdowns. #1222 has one contrary report on a desktop
   Blackwell card, so success here is not guaranteed.
@@ -67,9 +74,13 @@ None has an NVIDIA fix.
   `Removing device` and `Unloading driver`, which is exactly where this host
   stops. It is a suspect, but the one upstream test of `fbdev=0` did not help.
   It is fallback F2 below, not part of this change.
-- **D4** The earlier `KillUserProcesses` and `DefaultTimeoutStopSec=10s`
-  change (same PR) still applies. It fixed the 90 s userspace wait. This hang
-  happens later, in the kernel, which is why it shows up as a separate symptom.
+- **D4** The earlier `DefaultTimeoutStopSec=10s` change (same PR) still
+  applies. It fixed the 90 s userspace wait, together with removing Desktop
+  Icons NG. `KillUserProcesses` was dropped from that change: systemd stops
+  every session scope at shutdown anyway, so the option only changes logout,
+  and it would kill herdr-core and other jobs started from the desktop at
+  logout. This hang happens later, in the kernel, which is why it shows up as a
+  separate symptom.
 
 ### Fallback ladder, if D1 is not enough
 
@@ -85,7 +96,11 @@ None has an NVIDIA fix.
   `PreserveVideoMemoryAllocations=1`, because the epic 38 resume fix depends
   on it. Then re-test suspend with the external monitor.
 
-## 2. Brave WebGPU on native Wayland
+## 2. Brave WebGPU on native Wayland (REJECTED)
+
+**REJECTED.** Brave stays on Xwayland with `vulkanSupport` from epic 37, and the overlay in `nix/configuration.nix` is unchanged from master. The reasoning below is kept as the original record, and the outcome paragraph supersedes it.
+
+**Outcome (2026-11-13).** Measured on this host with Brave 1.95.104 (Chromium 153), channel nixos-26.05.10402, using `probe-brave-webgpu.mjs` in this folder. On native Wayland, WebGPU only gets the SwiftShader software adapter, `featureStatus` reports `vulkan: disabled_off`, and the probe prints FAIL. Adding `--ignore-gpu-blocklist`, `--enable-features=SkiaGraphite` or `--enable-features=Vulkan` on Wayland changed nothing. The Vulkan loader on Wayland did find the Intel ICD (`VK_LOADER_DEBUG` listed `[0] Intel(R) UHD Graphics (CML GT2)`), so the cause is that Chromium does not enable Vulkan there, not ICD discovery. The installed master Brave (Xwayland plus `vulkanSupport`) gets the Intel gen-9 hardware adapter, compute dispatch 41, and 0 `ProduceSkia`, context-lost or GPU-process errors, and the probe prints PASS. Decision: keep master's Brave, per epic 37. Decisions D5 to D9 and fallbacks W1 and W2 below are not applied.
 
 ### Why it was on Xwayland
 
@@ -157,9 +172,9 @@ pinch/swipe gestures, no fractional scaling and no Wayland IME.
 | PRIME offload, bus IDs | correct (epic 38) | none |
 | Suspend (`PreserveVideoMemoryAllocations`, kernel notifiers) | in place for the DP-6 resume bug | keep; F3 changes the notifier part |
 | `fbdev=1` | module default for 545+; on the hang path | F2 if D1 fails |
-| Brave on Xwayland | lost gestures, fractional scaling, IME | D5 to D8 |
-| Brave `LD_LIBRARY_PATH` append | redundant since the channel's Brave links the loader | removed |
-| Epic 37 D1 note that `vulkanSupport` prefixes `XDG_DATA_DIRS` | no longer true in this channel | superseded here |
+| Brave on Xwayland | lost gestures, fractional scaling, IME | none: native Wayland rejected (section 2 outcome), Brave stays on Xwayland |
+| Brave `LD_LIBRARY_PATH` append | redundant only if the channel's Brave links the loader | kept: master's overlay is unchanged |
+| Epic 37 D1 note that `vulkanSupport` prefixes `XDG_DATA_DIRS` | still applies: `vulkanSupport` stays on | none |
 | Epic 38 risk note "no `hardware.nvidia.powerManagement`" | wrong for 26.05 (the option exists and is set) | noted here |
 | Intel VA-API (`intel-media-driver`), no session `LIBVA_DRIVER_NAME` | correct (epic 38 D5) | none |
 | `nvidia-offload` does not filter Vulkan on 595 | known; switcheroo uses `VK_LOADER_DRIVERS_SELECT` | none |

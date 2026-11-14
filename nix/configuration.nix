@@ -129,14 +129,9 @@ in
   services.libinput.enable = true;
 
   # Shutdown hang (~90s): systemd-shutdown waited on .gnome-shell-wrapped and
-  # ding.js, which were still alive after the final SIGKILL. Three changes:
-  #
-  # Kill the session scope at logout instead of abandoning it, so GNOME Shell
-  # and its helpers are stopped with the session rather than left for the
-  # final kill pass. Side effect: tmux/screen or nohup jobs started from a
-  # graphical session no longer survive logout unless run via
-  # `systemd-run --user --scope` (or with lingering enabled).
-  services.logind.settings.Login.KillUserProcesses = true;
+  # ding.js (Desktop Icons NG), which were still alive after the final SIGKILL.
+  # The fix is the 10s stop timeout below plus removing Desktop Icons NG
+  # (further down in this file).
 
   # Cap how long any unit may take to stop (default 90s) for the system and
   # user managers. 26.05 removed systemd.extraConfig in favour of
@@ -197,7 +192,11 @@ in
   # kmsg because journald is already gone at that point. A module that will not
   # unload is reported with its refcount and holders, not treated as a failure.
   # TimeoutStartSec bounds a hung rmmod so the shutdown still proceeds.
-  # See .agents/plans/53-wayland-webgpu/.
+  # nvidia-drm runs with fbdev=1, so the framebuffer console (fbcon) can hold
+  # nvidia_drm and make rmmod fail with "in use", which also blocks
+  # nvidia_modeset and nvidia. The script first unbinds the fbcon vtconsole;
+  # the dummy console stays bound, so the kernel keeps a console.
+  # See .agents/plans/57-nvidia-poweroff/.
   systemd.services.nvidia-unload-at-shutdown = {
     description = "Unload NVIDIA kernel modules before power-off/reboot";
     unitConfig.DefaultDependencies = false;
@@ -216,6 +215,10 @@ in
       StandardOutput = "kmsg";
       StandardError = "kmsg";
       ExecStart = "${pkgs.writeShellScript "nvidia-unload-at-shutdown" ''
+        for vt in /sys/class/vtconsole/vtcon*; do
+          [ -f "$vt/bind" ] || continue
+          grep -q 'frame buffer' "$vt/name" 2>/dev/null && echo 0 > "$vt/bind" 2>/dev/null
+        done
         for m in nvidia_peermem nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
           [ -d "/sys/module/$m" ] || continue
           if ${pkgs.kmod}/bin/rmmod "$m"; then
@@ -427,43 +430,48 @@ in
           });
     })
 
-    # Brave: native Wayland with WebGPU. See .agents/plans/53-wayland-webgpu/.
+    # Brave cannot create a WebGPU adapter on this host: its binary carries no
+    # Vulkan loader on the RUNPATH and no ICD search path, so the GPU process
+    # dies with "Failed to load 'libvulkan.so.1'" and chrome://gpu reports
+    # `vulkan: disabled_off`. `vulkanSupport` adds `Vulkan` to
+    # --enable-features (required: a control run without it left
+    # requestAdapter() null) and prefixes XDG_DATA_DIRS with the driver link
+    # farm, which is how the loader finds intel_icd/nvidia_icd. The loader
+    # itself still has to come from the wrapper, hence the LD_LIBRARY_PATH
+    # append. Drop that append once the channel's brave depends on
+    # vulkan-loader (nixpkgs 26.11 wires it; the pinned unstable rev does not).
     #
-    # Chrome's Linux WebGPU design (Chrome 144+) runs Dawn on Vulkan while the
-    # rest of the browser composites on OpenGL. The `Vulkan` feature that
-    # `vulkanSupport` adds is a different thing: it moves Skia compositing to
-    # Vulkan, which the Wayland ozone backend rejects. That is why this overlay
-    # used to force Brave onto Xwayland (losing touchpad pinch/swipe gestures,
-    # fractional scaling and Wayland IME). So `vulkanSupport` stays off.
+    # Pinning the loader to the Intel ICD is also required. With every ICD
+    # visible Dawn enumerates the T2000 as well, picks it as the discrete
+    # device, then dies in
+    # "SharedImageManager::ProduceSkia: Trying to produce a Skia representation
+    # from an incompatible backing: CompoundImageBacking" -> "Context was
+    # lost", and the GPU process restarts three times until Chromium gives up.
+    # WebGL2 is then unavailable and requestAdapter() returns null, which is
+    # the "Visual effects require WebGL" dialog in Google Meet. Measured with
+    # the ICD list toggled and nothing else changed: intel only -> WebGL2 on,
+    # adapter gen-9, compute dispatch 41, zero restarts; intel plus nvidia ->
+    # WebGL2 off, adapter null, three restarts. The guard keeps
+    # `nvidia-offload brave` working, since that wrapper sets
+    # __NV_PRIME_RENDER_OFFLOAD and the Optimus layer then pins the T2000
+    # (measured: adapter turing, WebGL2 on, zero restarts).
     #
-    # Chrome enables WebGPU on Linux only for Intel Gen12+ and NVIDIA on Wayland.
-    # The UHD 620 here is Gen9.5 and is blocklisted, so `--enable-unsafe-webgpu`
-    # lifts the blocklist. The flag also exposes WebGPU on a GPU Google has not
-    # validated, so a broken page can crash the GPU process (not the browser).
-    #
-    # The 26.05 package now links nixpkgs' vulkan-loader, whose SYSCONFDIR is
-    # /run/opengl-driver/share, so the old LD_LIBRARY_PATH append is gone.
-    #
-    # Pin Dawn to the Intel ICD. With both ICDs visible Dawn picks the T2000,
-    # and its output then crosses GPUs to the Intel compositor; that took both
-    # WebGL2 and WebGPU down in epic 37 (three GPU-process restarts). The
-    # guard keeps `nvidia-offload brave` working, since that wrapper sets
-    # __NV_PRIME_RENDER_OFFLOAD. Verify with the epic's probe-brave-webgpu.mjs.
+    # The Vulkan feature is incompatible with --ozone-platform=wayland (Brave
+    # logs it). Under Wayland every <video> frame fails with the same ProduceSkia
+    # error, so scroll-seeked videos disappear. Measured on an isolated profile
+    # with a scroll-seeked video: Wayland plus Vulkan gives 10 to 13 errors per
+    # run, Vulkan off gives 0, x11 plus Vulkan gives 0 with webgpu and webgl2
+    # both available. Brave therefore runs on Xwayland. Drop the flag when
+    # Chromium supports Vulkan on Wayland.
+    # See .agents/plans/37-brave-webgpu/.
     (final: prev: {
       brave = (prev.brave.override {
-        # --enable-wayland-ime: GNOME's input methods (Arabic layout switching,
-        # emoji) under native Wayland. The package only adds it when
-        # NIXOS_OZONE_WL is set, which this host does not set session wide.
-        # Do not add a second --enable-features here: Chromium keeps only the
-        # last copy of a switch, which would drop the package's VA-API features.
-        commandLineArgs = lib.concatStringsSep " " [
-          "--ozone-platform-hint=auto"
-          "--enable-wayland-ime=true"
-          "--enable-unsafe-webgpu"
-        ];
+        vulkanSupport = true;
+        commandLineArgs = "--ozone-platform=x11";
       }).overrideAttrs (old: {
         preFixup = (old.preFixup or "") + ''
           gappsWrapperArgs+=(
+            --prefix LD_LIBRARY_PATH : "${prev.vulkan-loader}/lib"
             --run 'if [ -z "''${__NV_PRIME_RENDER_OFFLOAD:-}" ]; then export VK_LOADER_DRIVERS_SELECT="''${VK_LOADER_DRIVERS_SELECT:-intel*}"; fi'
           )
         '';
