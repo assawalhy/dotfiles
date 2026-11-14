@@ -195,23 +195,40 @@ make_cmd() {
   store="$(nix eval --raw nixpkgs#gnumake.outPath 2>/dev/null)" || return 1
   [ -n "$store" ] && [ -x "$store/bin/make" ] && printf '%s\n' "$store/bin/make"
 }
-plannotator_bin_install() {
-  local bin="$HOME/.local/bin/plannotator" log
-  [ -x "$bin" ] && return 0
-  command -v plannotator >/dev/null 2>&1 && return 0
+plannotator_core_status() {
+  local bin="$HOME/.local/bin/plannotator"
+  { [ -x "$bin" ] || command -v plannotator >/dev/null 2>&1; } || return 1
+  harness_present codex && ! plannotator_codex_status && return 1
+  harness_present gemini && ! plannotator_gemini_status && return 1
+  harness_present kiro && ! plannotator_kiro_status && return 1
+  return 0
+}
+plannotator_core_install() {
+  local bin="$HOME/.local/bin/plannotator" log rc=0 leg
+  plannotator_core_status && return 0
   command -v curl >/dev/null 2>&1 || { printf '  - plannotator: curl missing, cannot install\n' >&2; return 1; }
   log="$(mktemp "${TMPDIR:-/tmp}/plannotator.XXXXXX")" || log=/dev/null
   printf '  + plannotator: official installer (binary + sem sidecar + runtimes + agent hooks, ~150 MB; this takes a few minutes)\n'
   curl -fsSL https://plannotator.ai/install.sh | bash -s -- --non-interactive >"$log" 2>&1 || true
   if [ -x "$bin" ] || command -v plannotator >/dev/null 2>&1; then
-    printf '  + plannotator: binary installed\n'
+    printf '  + plannotator: core installed\n'
+  else
+    printf '  - plannotator: binary not found after the official installer failed\n' >&2
+    [ "$log" != /dev/null ] && tail -n 15 "$log" >&2
     rm -f "$log"
-    return 0
+    return 1
   fi
-  printf '  - plannotator: binary not found after the official installer failed\n' >&2
-  [ "$log" != /dev/null ] && tail -n 15 "$log" >&2
   rm -f "$log"
-  return 1
+  # Report the installer-owned legs it did not repair, so `install` cannot
+  # finish green on a state `status` calls missing.
+  for leg in codex gemini kiro; do
+    harness_present "$leg" || continue
+    if ! "plannotator_${leg}_status"; then
+      printf '  - %s: integration still missing after the official installer\n' "$leg" >&2
+      rc=1
+    fi
+  done
+  return "$rc"
 }
 
 plannotator_opencode_install() {
@@ -229,6 +246,31 @@ plannotator_claude_install() {
 }
 plannotator_claude_status() {
   grep -q '"plannotator@plannotator"' "$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null
+}
+
+# Codex gets no plugin: the official installer wires plan review as a Stop hook
+# in hooks.json. Check the hook, not just "codex is installed", so a Codex
+# upgrade that rewrites hooks shows up as missing instead of a false green.
+# plannotator_core_status() gates the official installer on this and the other
+# installer-owned legs, so `install` re-runs it to repair a partial install.
+plannotator_codex_status() {
+  local cfg="$HOME/.codex/hooks.json"
+  [ -f "$cfg" ] && grep -Eq '"command": *"[^"]*plannotator"' "$cfg"
+}
+
+# Gemini CLI: no plugin either. The official installer writes the
+# exit_plan_mode hook into ~/.gemini/settings.json and allows it through
+# ~/.gemini/policies/plannotator.toml; both are required for it to fire.
+plannotator_gemini_status() {
+  [ -f "$HOME/.gemini/settings.json" ] &&
+    [ -f "$HOME/.gemini/policies/plannotator.toml" ] &&
+    grep -q 'plannotator' "$HOME/.gemini/settings.json"
+}
+
+# Kiro CLI: skills plus a custom agent, no hook.
+plannotator_kiro_status() {
+  [ -f "$HOME/.kiro/agents/plannotator.json" ] &&
+    [ -f "$HOME/.kiro/skills/plannotator-review/SKILL.md" ]
 }
 
 plannotator_pi_install() {
@@ -258,12 +300,16 @@ plannotator_pi_status() {
 
 plannotator_install() {
   local rc=0
-  plannotator_bin_install || rc=1
+  plannotator_core_install || rc=1
   plannotator_opencode_install
   plannotator_claude_install
   plannotator_pi_install
-  # codex, kiro and gemini integrations are installed by the official
-  # installer above.
+  # Codex, Gemini and Kiro legs belong to the official installer; its status
+  # check runs inside plannotator_core_install, so a missing leg re-runs it
+  # here rather than reporting success on a partial install. Kilo is
+  # unsupported upstream (plannotator lists Claude Code, Codex, Copilot CLI,
+  # Gemini CLI, OpenCode, Kiro, Droid, Amp, Pi), so it has no install leg;
+  # status reports it as skipped, not missing.
   return "$rc"
 }
 plannotator_status() {
@@ -280,6 +326,15 @@ plannotator_status() {
   if harness_present claude; then
     if plannotator_claude_status; then status_leg claude ok plugin; else ok=0; status_leg claude missing plugin; fi
   fi
+  if harness_present codex; then
+    if plannotator_codex_status; then status_leg codex ok hook; else ok=0; status_leg codex missing hook; fi
+  fi
+  if harness_present gemini; then
+    if plannotator_gemini_status; then status_leg gemini ok settings; else ok=0; status_leg gemini missing settings; fi
+  fi
+  if harness_present kiro; then
+    if plannotator_kiro_status; then status_leg kiro ok skills; else ok=0; status_leg kiro missing skills; fi
+  fi
   if harness_present pi; then
     # A pi without a package runtime is not a missing plannotator: the
     # extension is uninstallable there, so gating on it would make the status
@@ -293,6 +348,9 @@ plannotator_status() {
       status_leg pi missing npm
     fi
   fi
+  # Kilo has no plannotator integration upstream. Say so instead of staying
+  # silent: a skipped leg is explicitly "not applicable", not "missing".
+  harness_present kilo && status_leg kilo skipped 'unsupported upstream'
   [ "$ok" -eq 1 ] && printf '%s\n' "$HOME/.agents/tools/plannotator"
   return 0
 }
