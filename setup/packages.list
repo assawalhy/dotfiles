@@ -62,6 +62,7 @@ gitui               apt:-  dnf:-  check:gitui        p2  # not in Debian/Ubuntu 
 lazygit             apt:-  check:lazygit          p2  # not in Debian/Ubuntu repos
 texlive             cask:basictex  pacman:texlive-core  apt:texlive  dnf:texlive check:kpsewhich p4
 ntfs3g              apt:ntfs-3g  pacman:ntfs-3g  dnf:ntfs-3g  zypper:ntfs-3g  brew:-  check:mkntfs p2  # mkntfs/ntfsfix/ntfs-3g; udisks2 FUSE driver
+tailscale           cask:tailscale pacman:tailscale apt:- p3  # tailnet path for the Herdr phone app; NixOS uses services.tailscale
 
 [gui]
 mpv !macos check:mpv p3

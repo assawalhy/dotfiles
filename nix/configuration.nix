@@ -777,6 +777,14 @@ in
 
   services.openssh.enable = true;
 
+  # Tailscale SSH authenticates tailnet connections, so sshd keeps passwords off.
+  services.openssh.settings = {
+    PasswordAuthentication = false;
+    KbdInteractiveAuthentication = false;
+  };
+
+  services.tailscale.enable = true;
+
   # WARP over MASQUE (QUIC on UDP 443) as a local SOCKS5 proxy. Plain WireGuard
   # to WARP is dropped on this network. The WARP config.json holds a private
   # key and is copied to /var/lib/usque by hand, never into the repo. The user
