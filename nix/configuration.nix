@@ -624,13 +624,10 @@ in
     # No in-app updater on Linux; bump with nix/claude-desktop/update.sh.
     (callPackage ./claude-desktop { })
     typora
-    # Deferred (2026-09-24): its source build full-clones the MEGAsync repo and
-    # GitHub cancels the long HTTP/2 stream mid-pack ("curl 92 HTTP/2 stream 7
-    # reset by server"), blocking the entire switch. Everything else it needs is
-    # built. Re-add once the fetch completes — e.g. force git http.version =
-    # HTTP/1.1 for sandboxed builders (nix.settings.extra-sandbox-paths + a
-    # /homeless-shelter/.gitconfig) — then rebuild.
-    # megasync
+    # MEGAsync: nixpkgs builds it from a full clone of the MEGA repo, which fails
+    # mid-pack on this network, and being unfree it has no cache entry. Packaged
+    # from MEGA's own .deb instead; bump with nix/megasync/update.sh.
+    (callPackage ./megasync { })
     zathura
     zathuraPkgs.zathura_pdf_mupdf
     kdePackages.okular
@@ -659,6 +656,9 @@ in
     # build inputs, so no system-wide libgda6/gsound wiring is required.
     # Enabled via the org/gnome/shell dconf default below.
     gnomeExtensions.copyous
+    # Tray host (StatusNotifierItem). MEGAsync is a tray app and GNOME Shell has
+    # no tray of its own. Enabled via the org/gnome/shell dconf default below.
+    gnomeExtensions.appindicator
     # Patches GNOME Shell to skip updates of user extensions. Without it the EGO
     # updater installs copyous 2.1.x into ~/.local/share/gnome-shell/extensions/,
     # which shadows the patched system copy and brings back both the stale
@@ -881,6 +881,7 @@ in
             "pip-on-top@rafostar.github.com"
             "monitor@astraext.github.io"
             "copyous@boerdereinar.dev"
+            "appindicatorsupport@rgcjonas.gmail.com"
             "disable-extension-updates@swsnr.de"
             "emoji-copy@felipeftn"
             "todoWidget@Hamza-Djellal.github.com"
