@@ -24,3 +24,19 @@ Drafted 2026-11-13. See [PLAN.md](PLAN.md).
       `nvidia-unload: unloaded …` lines and power off. If it prints
       `could not unload`, record the holders. If it still hangs, go to F1 to F3
 - [x] ~~tick the last unchecked items in epic 37's TODO once the probe passes~~ NOT APPLICABLE: epic 37's overlay is the one in use, its remaining items are tracked there
+- [x] second hang (2026-11-14): the unload service hung before printing
+      anything, because the GPU was already wedged by a failed hybrid sleep
+      (UPower critical-battery default). Disallow hibernate, hybrid sleep and
+      suspend-then-hibernate, set UPower's critical action to PowerOff, and
+      announce each unload step before running it (D10, D11). Checked by
+      evaluation: `sleep.conf` has the three `Allow*=no` lines, `UPower.conf`
+      has `CriticalPowerAction=PowerOff`, and the script passes `bash -n`
+- [ ] on the machine, after deploying: `systemctl hibernate` and
+      `systemctl hybrid-sleep` must be refused ("Sleep verb ... not
+      supported" / not allowed), and `systemctl suspend` must still work
+- [ ] power-off and reboot after a normal day with suspends. The console
+      must show `nvidia-unload: rmmod …` lines then `unloaded …`. If it hangs,
+      photograph the last `nvidia-unload:` line. If `nvidia-smi` already
+      fails before shutting down, the driver is wedged and the hang is
+      expected: hold the power button, then find what wedged it
+      (`journalctl -b -k | grep -E "NVRM|Xid"`)

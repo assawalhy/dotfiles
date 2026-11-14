@@ -82,6 +82,43 @@ None has an NVIDIA fix.
   logout. This hang happens later, in the kernel, which is why it shows up as a
   separate symptom.
 
+### Second hang: the unload service itself hangs (2026-11-14)
+
+The console photo, at uptime 51347 s, shows a clean userspace shutdown up to
+`Reached target System Shutdown`. The last line is
+`Starting Unload NVIDIA kernel modules before power-off/reboot...`, and not
+one `nvidia-unload:` line follows. So the script hung on its first step,
+either the fbcon unbind or the first `rmmod`, before printing anything.
+
+The trigger came earlier the same boot. At 05:52 logind logged
+`The system will hybrid sleep now!`. UPower's 26.05 default
+`CriticalPowerAction` is `HybridSleep`, and the battery hit critical after
+the overnight S3 suspend, which had itself resumed fine. The hibernate
+freeze then failed in the driver with `NV_ERR_NO_MEMORY`. Resume logged a
+`nv_restore_user_channels` warning, and afterwards `nvidia-smi` reported
+`Unknown Error`, so the T2000 was wedged. Once the driver is in that state,
+any teardown hangs, whether `rmmod` or `nv_pci_shutdown()`. D1 cannot fix
+that. Its only remaining job is a shutdown with a healthy driver.
+
+Hibernation is not provisioned on this host either: no `resume=` device or
+swapfile `resume_offset` is configured, zram cannot hold an image, and the
+16 GiB swapfile is smaller than typical use (20.5 GB RAM plus 9 GB swapped
+at the time).
+
+- **D10** `systemd.sleep.settings.Sleep` sets `AllowHibernation`,
+  `AllowHybridSleep` and `AllowSuspendThenHibernate` to `no`, and
+  `services.upower.criticalPowerAction = "PowerOff"`. Then no path (UPower,
+  GNOME or a manual command) can put the GPU through a hibernate freeze.
+  Plain suspend stays. Re-enabling hibernation is its own epic: a resume
+  device, the offset, enough disk swap, and a verified hibernate cycle.
+- **D11** The unload script now prints each step before running it, so a
+  hang shows on the console exactly where it stopped.
+- `NVreg_TemporaryFilePath=/var/tmp` (asked for from another session) was
+  not added. NVIDIA's 595.71.05 README says the backing file defaults to
+  `/tmp`, and `/tmp` is on the ext4 root here (`boot.tmp.useTmpfs` is
+  false), the same filesystem as `/var/tmp`. Revisit only if
+  `findmnt -T /tmp` shows tmpfs on the host.
+
 ### Fallback ladder, if D1 is not enough
 
 - **F1** Check whether the hang needs a prior suspend: boot, do not suspend,

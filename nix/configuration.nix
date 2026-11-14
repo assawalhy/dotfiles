@@ -215,12 +215,18 @@ in
       StandardOutput = "kmsg";
       StandardError = "kmsg";
       ExecStart = "${pkgs.writeShellScript "nvidia-unload-at-shutdown" ''
+        # Each step is announced before it runs, so a hang shows on the
+        # console exactly where it stopped (journald is gone by now).
         for vt in /sys/class/vtconsole/vtcon*; do
           [ -f "$vt/bind" ] || continue
-          grep -q 'frame buffer' "$vt/name" 2>/dev/null && echo 0 > "$vt/bind" 2>/dev/null
+          if grep -q 'frame buffer' "$vt/name" 2>/dev/null; then
+            echo "nvidia-unload: unbinding $(basename "$vt") ($(cat "$vt/name"))"
+            echo 0 > "$vt/bind" 2>/dev/null
+          fi
         done
         for m in nvidia_peermem nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
           [ -d "/sys/module/$m" ] || continue
+          echo "nvidia-unload: rmmod $m"
           if ${pkgs.kmod}/bin/rmmod "$m"; then
             echo "nvidia-unload: unloaded $m"
           else
@@ -231,6 +237,30 @@ in
       ''}";
     };
   };
+
+  # No hibernate, hybrid sleep or suspend-then-hibernate on this host.
+  #
+  # 2026-11-14 05:52 the laptop entered hybrid sleep on its own: UPower's
+  # default CriticalPowerAction is HybridSleep, and the battery hit critical
+  # after the overnight S3 suspend (which itself resumed fine). The hibernate
+  # step failed in the NVIDIA driver (`NV_ERR_NO_MEMORY` at freeze, then
+  # `nv_restore_user_channels` warning on resume), the T2000 was left wedged
+  # (`nvidia-smi`: Unknown Error, GPU stuck in D0 heating the shared cooler),
+  # and the next power-off hung inside nvidia-unload-at-shutdown on its first
+  # step: a wedged driver hangs on any teardown.
+  #
+  # Hibernation is also not set up here: no resume device or swapfile
+  # resume_offset is configured, zram cannot hold an image, and the 16 GiB
+  # swapfile is smaller than typical memory use. So refuse these sleep states
+  # outright, and make a critical battery power off cleanly instead. Revisit
+  # (resume device, offset, swap size) before turning hibernation back on.
+  # See .agents/plans/57-nvidia-poweroff/.
+  systemd.sleep.settings.Sleep = {
+    AllowHibernation = "no";
+    AllowHybridSleep = "no";
+    AllowSuspendThenHibernate = "no";
+  };
+  services.upower.criticalPowerAction = "PowerOff";
 
   # The nvidia module gates on this list; it is also what builds the driver link
   # farm that exposes nvidia_icd.json to Vulkan clients (Brave WebGPU).
