@@ -128,6 +128,20 @@ in
 
   services.libinput.enable = true;
 
+  # Shutdown hang (~90s): systemd-shutdown waited on .gnome-shell-wrapped and
+  # ding.js (Desktop Icons NG), which were still alive after the final SIGKILL.
+  # The fix is the 10s stop timeout below plus removing Desktop Icons NG
+  # (further down in this file).
+
+  # Cap how long any unit may take to stop (default 90s) for the system and
+  # user managers. 26.05 removed systemd.extraConfig in favour of
+  # systemd.settings.Manager, but the user manager still only has extraConfig
+  # (rendered into /etc/systemd/user.conf under [Manager]).
+  systemd.settings.Manager.DefaultTimeoutStopSec = "10s";
+  systemd.user.extraConfig = ''
+    DefaultTimeoutStopSec=10s
+  '';
+
   # Slack comes from Flathub (epic 49 D2). Slack's own Linux updater is an apt
   # repo plus /etc/cron.daily/slack, so a user-space copy would never update.
   services.flatpak.enable = true;
@@ -163,6 +177,90 @@ in
     # module emitted neither.
     powerManagement.enable = true;
   };
+
+  # Power-off hang in the NVIDIA open driver (595.71.05). After systemd-shutdown
+  # printed "Powering off", the kernel's device_shutdown() called
+  # nv_pci_shutdown(), which logged "[nvidia-drm] Removing device" and never
+  # returned (no "Unloading driver" line). Upstream tracks this teardown path
+  # in NVIDIA/open-gpu-kernel-modules#1486, #1222 and #1027 and on the NVIDIA
+  # forum; there is no fixed driver yet. The workaround reported to work for
+  # plain reboot/poweroff is to unload the modules late in shutdown. Then
+  # nv_pci_shutdown() never runs at all.
+  #
+  # The unit runs after every normal unit has stopped (GDM, the user sessions,
+  # Docker), so nothing still holds /dev/nvidia*. Output goes to the console via
+  # kmsg because journald is already gone at that point. A module that will not
+  # unload is reported with its refcount and holders, not treated as a failure.
+  # TimeoutStartSec bounds a hung rmmod so the shutdown still proceeds.
+  # nvidia-drm runs with fbdev=1, so the framebuffer console (fbcon) can hold
+  # nvidia_drm and make rmmod fail with "in use", which also blocks
+  # nvidia_modeset and nvidia. The script first unbinds the fbcon vtconsole;
+  # the dummy console stays bound, so the kernel keeps a console.
+  # See .agents/plans/57-nvidia-poweroff/.
+  systemd.services.nvidia-unload-at-shutdown = {
+    description = "Unload NVIDIA kernel modules before power-off/reboot";
+    unitConfig.DefaultDependencies = false;
+    wantedBy = [ "poweroff.target" "reboot.target" "halt.target" "kexec.target" ];
+    after = [ "shutdown.target" "umount.target" ];
+    before = [
+      "final.target"
+      "systemd-poweroff.service"
+      "systemd-reboot.service"
+      "systemd-halt.service"
+      "systemd-kexec.service"
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "20s";
+      StandardOutput = "kmsg";
+      StandardError = "kmsg";
+      ExecStart = "${pkgs.writeShellScript "nvidia-unload-at-shutdown" ''
+        # Each step is announced before it runs, so a hang shows on the
+        # console exactly where it stopped (journald is gone by now).
+        for vt in /sys/class/vtconsole/vtcon*; do
+          [ -f "$vt/bind" ] || continue
+          if grep -q 'frame buffer' "$vt/name" 2>/dev/null; then
+            echo "nvidia-unload: unbinding $(basename "$vt") ($(cat "$vt/name"))"
+            echo 0 > "$vt/bind" 2>/dev/null
+          fi
+        done
+        for m in nvidia_peermem nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
+          [ -d "/sys/module/$m" ] || continue
+          echo "nvidia-unload: rmmod $m"
+          if ${pkgs.kmod}/bin/rmmod "$m"; then
+            echo "nvidia-unload: unloaded $m"
+          else
+            echo "nvidia-unload: could not unload $m (refcnt $(cat /sys/module/$m/refcnt 2>/dev/null), holders: $(ls /sys/module/$m/holders 2>/dev/null | tr '\n' ' '))"
+          fi
+        done
+        exit 0
+      ''}";
+    };
+  };
+
+  # No hibernate, hybrid sleep or suspend-then-hibernate on this host.
+  #
+  # 2026-11-14 05:52 the laptop entered hybrid sleep on its own: UPower's
+  # default CriticalPowerAction is HybridSleep, and the battery hit critical
+  # after the overnight S3 suspend (which itself resumed fine). The hibernate
+  # step failed in the NVIDIA driver (`NV_ERR_NO_MEMORY` at freeze, then
+  # `nv_restore_user_channels` warning on resume), the T2000 was left wedged
+  # (`nvidia-smi`: Unknown Error, GPU stuck in D0 heating the shared cooler),
+  # and the next power-off hung inside nvidia-unload-at-shutdown on its first
+  # step: a wedged driver hangs on any teardown.
+  #
+  # Hibernation is also not set up here: no resume device or swapfile
+  # resume_offset is configured, zram cannot hold an image, and the 16 GiB
+  # swapfile is smaller than typical memory use. So refuse these sleep states
+  # outright, and make a critical battery power off cleanly instead. Revisit
+  # (resume device, offset, swap size) before turning hibernation back on.
+  # See .agents/plans/57-nvidia-poweroff/.
+  systemd.sleep.settings.Sleep = {
+    AllowHibernation = "no";
+    AllowHybridSleep = "no";
+    AllowSuspendThenHibernate = "no";
+  };
+  services.upower.criticalPowerAction = "PowerOff";
 
   # The nvidia module gates on this list; it is also what builds the driver link
   # farm that exposes nvidia_icd.json to Vulkan clients (Brave WebGPU).
@@ -620,9 +718,9 @@ in
     ghostty
     wezterm
 
-    # GNOME 42+ has no desktop icons; this extension restores them (enabled via
-    # the org/gnome/shell dconf default below).
-    gnomeExtensions.desktop-icons-ng-ding
+    # No Desktop Icons NG (ding@rastersoft.com): it runs ding.js as a separate
+    # GJS process beside gnome-shell, and at shutdown that process outlived
+    # SIGKILL with gnome-shell, so systemd-shutdown waited ~90s on both.
     # Keeps browser PiP windows above and on all visible workspaces, working
     # around the missing always-on-top/sticky hints on Wayland. Detection is
     # purely by window title — upstream targets Firefox + Clapper ("may work
@@ -783,7 +881,6 @@ in
           # rebuild, run once:
           #   dconf reset /org/gnome/shell/enabled-extensions
           enabled-extensions = [
-            "ding@rastersoft.com"
             "pip-on-top@rafostar.github.com"
             "monitor@astraext.github.io"
             "copyous@boerdereinar.dev"
