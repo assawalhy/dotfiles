@@ -54,6 +54,25 @@ let
     # obsidian (unlike lazygit) is unfree, so allow it here too.
     config.allowUnfree = true;
   };
+
+  # Domains that go through the WARP SOCKS proxy. Used by the sing-box DNS and
+  # route rules.
+  usqueUid = 970;
+
+  protonDomains = [
+    "proton.me"
+    "protonvpn.com"
+    "protonvpn.ch"
+    "protonmail.com"
+    "protonmail.ch"
+    "pm.me"
+    "proton.black"
+    "proton.ch"
+    "protonstatus.com"
+    "protoncdn.com"
+    "proton.vpn"
+    "protonapps.com"
+  ];
 in
 {
   imports =
@@ -712,6 +731,7 @@ in
 
     ## [extra]
     gh
+    glab # GitLab CLI (in packages.list)
     delta # git-delta
     jp
     jq
@@ -744,13 +764,10 @@ in
     # No in-app updater on Linux; bump with nix/claude-desktop/update.sh.
     (callPackage ./claude-desktop { })
     typora
-    # Deferred (2026-09-24): its source build full-clones the MEGAsync repo and
-    # GitHub cancels the long HTTP/2 stream mid-pack ("curl 92 HTTP/2 stream 7
-    # reset by server"), blocking the entire switch. Everything else it needs is
-    # built. Re-add once the fetch completes — e.g. force git http.version =
-    # HTTP/1.1 for sandboxed builders (nix.settings.extra-sandbox-paths + a
-    # /homeless-shelter/.gitconfig) — then rebuild.
-    # megasync
+    # MEGAsync: nixpkgs builds it from a full clone of the MEGA repo, which fails
+    # mid-pack on this network, and being unfree it has no cache entry. Packaged
+    # from MEGA's own .deb instead; bump with nix/megasync/update.sh.
+    (callPackage ./megasync { })
     zathura
     zathuraPkgs.zathura_pdf_mupdf
     kdePackages.okular
@@ -779,6 +796,9 @@ in
     # build inputs, so no system-wide libgda6/gsound wiring is required.
     # Enabled via the org/gnome/shell dconf default below.
     gnomeExtensions.copyous
+    # Tray host (StatusNotifierItem). MEGAsync is a tray app and GNOME Shell has
+    # no tray of its own. Enabled via the org/gnome/shell dconf default below.
+    gnomeExtensions.appindicator
     # Patches GNOME Shell to skip updates of user extensions. Without it the EGO
     # updater installs copyous 2.1.x into ~/.local/share/gnome-shell/extensions/,
     # which shadows the patched system copy and brings back both the stale
@@ -897,6 +917,88 @@ in
 
   services.openssh.enable = true;
 
+  # Tailscale SSH authenticates tailnet connections, so sshd keeps passwords off.
+  services.openssh.settings = {
+    PasswordAuthentication = false;
+    KbdInteractiveAuthentication = false;
+  };
+
+  services.tailscale.enable = true;
+
+  # WARP over MASQUE (QUIC on UDP 443) as a local SOCKS5 proxy. Plain WireGuard
+  # to WARP is dropped on this network. The WARP config.json holds a private
+  # key and is copied to /var/lib/usque by hand, never into the repo. The user
+  # has a fixed uid so the sing-box tun can exclude its QUIC traffic to
+  # Cloudflare; otherwise that session is captured by the tun and stalls.
+  users.users.usque = {
+    isSystemUser = true;
+    group = "usque";
+    uid = usqueUid;
+  };
+  users.groups.usque.gid = usqueUid;
+
+  systemd.services.usque = {
+    description = "usque WARP MASQUE SOCKS5 proxy";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    unitConfig.ConditionPathExists = "/var/lib/usque/config.json";
+    serviceConfig = {
+      ExecStart = "${pkgs.usque}/bin/usque socks -c /var/lib/usque/config.json -b 127.0.0.1 -p 1080 --always-reconnect";
+      User = "usque";
+      Group = "usque";
+      StateDirectory = "usque";
+      StateDirectoryMode = "0700";
+      Restart = "always";
+      RestartSec = 5;
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+    };
+  };
+
+  # Tun inbound: only Proton domains use the usque proxy, everything else is
+  # direct. Private and Tailscale ranges stay direct.
+  services.sing-box.enable = true;
+  services.sing-box.settings = {
+    log.level = "warn";
+    dns = {
+      servers = [ { type = "local"; tag = "local"; } ];
+      final = "local";
+    };
+    inbounds = [
+      {
+        type = "tun";
+        tag = "tun-in";
+        address = [ "198.18.0.1/30" ];
+        auto_route = true;
+        strict_route = false;
+        stack = "gvisor";
+        exclude_uid = [ usqueUid ];
+      }
+    ];
+    outbounds = [
+      { type = "direct"; tag = "direct"; }
+      { type = "socks"; tag = "proton"; server = "127.0.0.1"; server_port = 1080; version = "5"; }
+    ];
+    route = {
+      auto_detect_interface = true;
+      default_domain_resolver = "local";
+      final = "direct";
+      rules = [
+        { action = "sniff"; }
+        { ip_is_private = true; action = "route"; outbound = "direct"; }
+        { ip_cidr = [ "100.64.0.0/10" ]; action = "route"; outbound = "direct"; }
+        { domain_suffix = protonDomains; action = "route"; outbound = "proton"; }
+      ];
+    };
+  };
+  systemd.services.sing-box = {
+    after = [ "usque.service" ];
+    wants = [ "usque.service" ];
+  };
+
   # protonvpn does not work while reverse-path filtering is enabled.
   networking.firewall.checkReversePath = false;
 
@@ -926,6 +1028,7 @@ in
             "pip-on-top@rafostar.github.com"
             "monitor@astraext.github.io"
             "copyous@boerdereinar.dev"
+            "appindicatorsupport@rgcjonas.gmail.com"
             "disable-extension-updates@swsnr.de"
             "emoji-copy@felipeftn"
             "todoWidget@Hamza-Djellal.github.com"
@@ -1234,6 +1337,36 @@ in
     timerConfig = {
       OnCalendar = "daily";
       Persistent = true;
+    };
+  };
+
+  # herdr-core restores kept terminals as fresh shells after a reboot but never
+  # re-runs the program in them (epic 56). hc-snapshot records which pane held
+  # which agent; hc-resume starts the core at boot and types each agent's own
+  # resume command back into its recovered pane.
+  systemd.user.services.hc-resume = {
+    description = "Restore herdr-core agent panes after a reboot";
+    wantedBy = [ "default.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.bash}/bin/bash %h/.local/bin/hc-resume resume";
+    };
+  };
+
+  systemd.user.services.hc-snapshot = {
+    description = "Record herdr-core agent panes for the next boot";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.bash}/bin/bash %h/.local/bin/hc-resume snapshot";
+    };
+  };
+
+  systemd.user.timers.hc-snapshot = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2min";
+      OnUnitActiveSec = "20s";
+      AccuracySec = "5s";
     };
   };
 

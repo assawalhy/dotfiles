@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+#
+# hc-resume -- bring herdr-core agent panes back after a reboot.
+#
+# herdr-core restores kept terminals as fresh shells in their saved cwd; it
+# never re-runs what was inside them. This records which pane held which agent
+# (snapshot, run on a timer) and types the agent's own resume command back into
+# the recovered shell (resume, run once at boot).
+#
+#   hc-resume snapshot                      record live panes -> state.json
+#   hc-resume resume [--dry-run] [--only T]  restart agents in recovered panes
+#
+# State: ~/.local/state/hc-resume/state.json and hc-resume.log
+# Label a pane hc.resume=no to skip it, or hc.resume=<command> to override.
+
+set -euo pipefail
+
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:/run/current-system/sw/bin:/usr/bin:/bin:$PATH"
+
+HC="${HC:-$HOME/.local/bin/hc}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/hc-resume"
+STATE_FILE="$STATE_DIR/state.json"
+LOG_FILE="$STATE_DIR/hc-resume.log"
+
+log() {
+  mkdir -p "$STATE_DIR"
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$LOG_FILE"
+}
+
+# is_shell_name <name>
+# True when the pane is sitting at a shell, i.e. recovery replaced the program.
+is_shell_name() {
+  case "${1##*/}" in
+    zsh|bash|sh|dash|ksh|fish|nu|elvish|xonsh) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# resume_command <name> [argv...]
+# Print the command that restarts the agent on its last conversation, keeping
+# the flags it was launched with and dropping any existing continue/resume flag.
+# Returns 1 for programs this script does not resume.
+resume_command() {
+  local name="$1" flag out skip=0 arg
+  shift
+  case "$name" in
+    claude|opencode) flag=--continue ;;
+    codex) printf '%s resume --last\n' "$name"; return 0 ;;
+    *) return 1 ;;
+  esac
+  out="$name"
+  for arg in "$@"; do
+    if [ "$skip" = 1 ]; then
+      skip=0
+      continue
+    fi
+    case "$arg" in
+      -c|--continue) continue ;;
+      -r|--resume|-s|--session) skip=1; continue ;;
+      --resume=*|--session=*) continue ;;
+    esac
+    out="$out $arg"
+  done
+  printf '%s %s\n' "$out" "$flag"
+}
+
+# Pane status as state<TAB>foreground<TAB>cwd; fails when the pane is unknown.
+pane_status() {
+  local json
+  json=$("$HC" get "$1" --json 2>/dev/null) || return 1
+  printf '%s' "$json" | jq -r '[.state // "", .foreground.name // "", .cwd // ""] | @tsv'
+}
+
+# wait_for_shell <addr> <cwd> [tries]
+# 0 = live at a shell in <cwd>; 2 = live running another program (so it was
+# never recovered, leave it alone); 1 = still not there when the tries ran out.
+wait_for_shell() {
+  local addr="$1" want="$2" tries="${3:-20}" i=0 busy=0 line st fg cwd
+  while [ "$i" -lt "$tries" ]; do
+    if line=$(pane_status "$addr"); then
+      IFS=$'\t' read -r st fg cwd <<<"$line"
+      if [ "$st" = live ] && [ -n "$fg" ] && ! is_shell_name "$fg"; then
+        busy=$((busy + 1))
+        if [ "$busy" -ge 2 ]; then
+          return 2
+        fi
+      elif [ "$st" = live ] && [ "$cwd" = "$want" ]; then
+        return 0
+      fi
+    fi
+    sleep 2
+    i=$((i + 1))
+  done
+  return 1
+}
+
+cmd_snapshot() {
+  # Never start a core from the timer: an absent core means nothing to record.
+  pgrep -x herdr-core >/dev/null 2>&1 || return 0
+
+  mkdir -p "$STATE_DIR"
+  local panes addrs addr json name cwd where cmd override tmp
+  local -a argv
+  panes=$("$HC" ls 2>/dev/null) || return 0
+  addrs=$(printf '%s' "$panes" | jq -r '.terminals[].address' 2>/dev/null) || return 0
+  tmp=$(mktemp "$STATE_DIR/.panes.XXXXXX")
+  : >"$tmp"
+
+  for addr in $addrs; do
+    json=$("$HC" get "$addr" --json 2>/dev/null) || continue
+    name=$(printf '%s' "$json" | jq -r '.foreground.name // ""')
+    cwd=$(printf '%s' "$json" | jq -r '.cwd // ""')
+    where=$(printf '%s' "$json" | jq -r '.labels["where"] // ""')
+    cmd=""
+    if [ -n "$name" ] && [ -n "$cwd" ]; then
+      mapfile -t argv < <(printf '%s' "$json" | jq -r '(.foreground.argv // [])[]')
+      if [ "${#argv[@]}" -gt 0 ]; then
+        cmd=$(resume_command "$name" "${argv[@]:1}") || cmd=""
+      else
+        cmd=$(resume_command "$name") || cmd=""
+      fi
+    fi
+    override=$(printf '%s' "$json" | jq -r '.labels["hc.resume"] // ""')
+    case "$override" in
+      no) cmd="" ;;
+      '') : ;;
+      *) cmd="$override" ;;
+    esac
+    jq -n --arg key "$addr" --arg cwd "$cwd" --arg name "$name" --arg cmd "$cmd" \
+      --arg where "$where" \
+      '{key: $key, value: {cwd: $cwd, name: $name, cmd: $cmd, where: $where}}' >>"$tmp"
+  done
+
+  jq -s --argjson ts "$(date +%s)" \
+    '{ts: $ts, panes: (map({(.key): .value}) | add // {})}' "$tmp" >"$STATE_FILE.tmp"
+  mv "$STATE_FILE.tmp" "$STATE_FILE"
+  rm -f "$tmp"
+}
+
+cmd_resume() {
+  local dry=0 only='' addr cmd cwd name key seen='' rc=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry=1 ;;
+      --only) shift; only="${1:-}" ;;
+      *) log "resume: unknown argument: $1"; return 2 ;;
+    esac
+    shift
+  done
+
+  [ -f "$STATE_FILE" ] || { log "resume: no snapshot at $STATE_FILE"; return 0; }
+
+  # Copy the snapshot: the timer rewrites state.json right after boot, and this
+  # run must keep reading the pre-reboot view.
+  RESUME_COPY=$(mktemp "$STATE_DIR/.resume.XXXXXX")
+  cp "$STATE_FILE" "$RESUME_COPY"
+  trap 'rm -f "$RESUME_COPY"' EXIT
+
+  if [ "$dry" = 0 ]; then
+    # Idempotent; also the trigger that makes the core recover its terminals.
+    "$HC" server start >/dev/null 2>&1 || log "resume: server start failed"
+  fi
+
+  local addrs
+  addrs=$(jq -r '.panes | keys[]' "$RESUME_COPY")
+  for addr in $addrs; do
+    if [ -n "$only" ] && [ "$addr" != "$only" ]; then
+      continue
+    fi
+    cmd=$(jq -r --arg a "$addr" '.panes[$a].cmd // ""' "$RESUME_COPY")
+    [ -n "$cmd" ] || continue
+    cwd=$(jq -r --arg a "$addr" '.panes[$a].cwd // ""' "$RESUME_COPY")
+    name=$(jq -r --arg a "$addr" '.panes[$a].name // ""' "$RESUME_COPY")
+    key="$name|$cwd"
+    if printf '%s\n' "$seen" | grep -Fxq -- "$key"; then
+      log "skip $addr ($name in $cwd): already resumed the other pane"
+      continue
+    fi
+    seen="$seen
+$key"
+    if [ "$dry" = 1 ]; then
+      printf '%s\t%s\t%s\n' "$addr" "$cwd" "$cmd"
+      continue
+    fi
+    rc=0
+    wait_for_shell "$addr" "$cwd" || rc=$?
+    case "$rc" in
+      0) : ;;
+      2) log "skip $addr ($name): already running a program"; continue ;;
+      *) log "skip $addr ($name): not back at a shell in $cwd"; continue ;;
+    esac
+    if "$HC" send "$addr" "$cmd" >/dev/null 2>&1; then
+      log "resumed $addr ($name in $cwd): $cmd"
+    else
+      log "send failed $addr ($name)"
+    fi
+    sleep 1
+  done
+}
+
+case "${1:-}" in
+  snapshot) shift; cmd_snapshot "$@" ;;
+  resume) shift; cmd_resume "$@" ;;
+  -h|--help|help|'') sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) printf 'hc-resume: unknown command: %s\n' "$1" >&2; exit 2 ;;
+esac

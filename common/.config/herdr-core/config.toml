@@ -1,0 +1,6 @@
+# herdr-core settings, linked from the dotfiles repo.
+#
+# Show the last screen of a program that was lost (reboot, crash) above the
+# fresh shell that recovery starts in its place, so a pane comes back with the
+# context it had. hc-resume separately restarts the agent itself.
+restore_screen = true

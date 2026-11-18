@@ -52,10 +52,10 @@ Evidence trail and full write-up: `PLAN.md`.
 
 ## Remaining steps to try later
 
-- [ ] K. BIOS: turn *"reset fingerprint on boot"* back **off**, review the
+- [x] K. BIOS (2026-11-13: already off, still 104): turn *"reset fingerprint on boot"* back **off**, review the
       other Security → fingerprint / pre-boot-auth options, reboot, retry.
       Free and reversible — do this first.
-- [ ] J. Firmware downgrade test: `fwupdmgr downgrade 29ab814e…` to release
+- [x] J. Firmware downgrade test (2026-11-13: installed 10.01.3273255, still 104; HP SoftPaq sp134427 has no firmware blob): `fwupdmgr downgrade 29ab814e…` to release
       `7166` (`10.01.3273255`, changelog *"Support Linux system"*), then retry
       enroll. **Awaiting user go.** Writes sensor firmware; `3654703` is not
       retrievable from LVFS afterwards (only via HP/Windows tooling, which is
@@ -63,7 +63,7 @@ Evidence trail and full write-up: `PLAN.md`.
 - [ ] L. Cross-check under a live Windows: if Windows still enrolls, the
       fw/blob pairing is fine and Linux is behind; if Windows now fails too,
       the Windows-written fw/blob is itself inconsistent.
-- [ ] M. Upstream libfprint report with the trace + version comparison, asking
+- [x] M. Upstream libfprint report (filed 2026-11-13: https://gitlab.freedesktop.org/libfprint/libfprint/-/work_items/931) with the trace + version comparison, asking
       whether fw `10.01.3654703` + cfg `0025` on a `0xDF` unit is known-bad.
 - [ ] N. HP service — only if L also fails.
 

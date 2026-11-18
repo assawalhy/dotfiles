@@ -53,7 +53,7 @@ pi-package|tmustier-pi-extensions|pi-extensions: extensions & skills by tmustier
 # Multi-harness tools: install field is handled by setup/agent-tools.sh, which
 # targets every harness present on the machine.
 agent-tool|context7|Up-to-date library docs via MCP (opencode/codex/cursor/claude/pi)|setup/agent-tools.sh install context7
-agent-tool|plannotator|Plan & code review: opencode/claude plugins, pi extension, codex/kiro/gemini hooks|setup/agent-tools.sh install plannotator
+agent-tool|plannotator|Plan & code review: opencode/claude plugins, pi extension, codex/kiro/gemini hooks (kilo unsupported)|setup/agent-tools.sh install plannotator
 agent-tool|typescript-lsp|Claude Code LSP speedups (claude-only upstream)|setup/agent-tools.sh install typescript-lsp
 agent-tool|zvec-grep|Local semantic workspace search: zg CLI + MCP in every harness (npm @zvec/zvec-grep)|setup/agent-tools.sh install zvec-grep
 agent-tool|playwright-cli|Browser automation CLI for coding agents: the playwright-cli binary (npm @playwright/cli) that backs the playwright skill|setup/agent-tools.sh install playwright-cli

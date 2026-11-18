@@ -1,0 +1,43 @@
+(fprintd:98603): fprintd-DEBUG: 10:42:13.126: Authorization granted to :1.464 to call method 'EnrollStart' for device 'Synaptics Sensors'!
+(fprintd:98603): fprintd-DEBUG: 10:42:13.126: file_storage_print_data_load(): loaded '/var/lib/fprint/USER/synaptics/3e56a51ae366/7' Unknown error -2
+(fprintd:98603): fprintd-DEBUG: 10:42:13.126: start enrollment device 0 finger 7
+(fprintd:98603): libfprint-synaptics-DEBUG: 10:42:13.126: clear all prints in database
+(fprintd:98603): libfprint-synaptics-DEBUG: 10:42:13.126: sequence number is 5
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.126: [synaptics] SYNAPTICS_CMD_NUM_STATES entering state 0
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.126: [synaptics] SYNAPTICS_CMD_NUM_STATES entering state 1
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.126: Device reported deletion completion
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.126: [synaptics] SYNAPTICS_CMD_NUM_STATES completed successfully
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.126: Completing action FPI_DEVICE_ACTION_CLEAR_STORAGE in idle!
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.126: Not updating temperature model, device can run continuously!
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.126: Not updating temperature model, device can run continuously!
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.126: Device reported identify result
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.126: Device reported identify completion
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.127: Completing action FPI_DEVICE_ACTION_IDENTIFY in idle!
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.127: Not updating temperature model, device can run continuously!
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.127: Not updating temperature model, device can run continuously!
+(fprintd:98603): libfprint-synaptics-DEBUG: 10:42:13.127: 3614746024: ../libfprint/drivers/synaptics/synaptics.c:1024
+(fprintd:98603): libfprint-synaptics-DEBUG: 10:42:13.127: user_id: FP1-20261113-7-D46ADD75-USER, finger: 1
+(fprintd:98603): libfprint-synaptics-DEBUG: 10:42:13.127: sequence number is 6
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.127: [synaptics] SYNAPTICS_CMD_NUM_STATES entering state 0
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.127: [synaptics] SYNAPTICS_CMD_NUM_STATES entering state 1
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.127: Device reported finger status change: FP_FINGER_STATUS_NEEDED
+(fprintd:98603): fprintd-DEBUG: 10:42:13.127: Finger present 0
+(fprintd:98603): fprintd-DEBUG: 10:42:13.127: Finger needed 1
+(fprintd:98603): libfprint-synaptics-DEBUG: 10:42:13.127: Place Finger on the Sensor!
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.127: [synaptics] SYNAPTICS_CMD_NUM_STATES entering state 2
+(fprintd:98603): libfprint-synaptics-DEBUG: 10:42:13.130: interrupt transfer done
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.130: [synaptics] SYNAPTICS_CMD_NUM_STATES entering state 3
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.130: [synaptics] SYNAPTICS_CMD_NUM_STATES entering state 4
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.130: [synaptics] SYNAPTICS_CMD_NUM_STATES entering state 0
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.130: [synaptics] SYNAPTICS_CMD_NUM_STATES entering state 1
+(fprintd:98603): libfprint-synaptics-DEBUG: 10:42:13.130: Enrollment has failed!: 104
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.130: Device reported enroll completion
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.130: Device reported finger status change: FP_FINGER_STATUS_NONE
+(fprintd:98603): fprintd-DEBUG: 10:42:13.130: Finger present 0
+(fprintd:98603): fprintd-DEBUG: 10:42:13.130: Finger needed 0
+(fprintd:98603): libfprint-SSM-DEBUG: 10:42:13.130: [synaptics] SYNAPTICS_CMD_NUM_STATES completed successfully
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.130: Completing action FPI_DEVICE_ACTION_ENROLL in idle!
+(fprintd:98603): libfprint-device-DEBUG: 10:42:13.130: Not updating temperature model, device can run continuously!
+(fprintd:98603): fprintd-DEBUG: 10:42:13.130: enroll_cb: result enroll-unknown-error
+
+(fprintd:98603): fprintd-WARNING **: 10:42:13.130: Device reported an error during enroll: Enrollment failed (104)

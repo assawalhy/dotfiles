@@ -30,6 +30,12 @@ print-help () {
 ├──┼─────────────┼───────────────────────────────────────────────────┄┄┄┄┄┄┄┄┄
 │  │ --width     │ Width of the output (aspect ratio is preserved)
 │  │ --fps       │ Frames persecond
+│  │ --compress  │ Compression level 1-5, higher is smaller and lower quality
+│  │             │   1 crf 25, 720p max, 128k stereo (not noticeable)
+│  │             │   2 crf 27, 720p max,  96k stereo
+│  │             │   3 crf 30, 480p max,  64k mono
+│  │             │   4 crf 32, 360p max,  48k mono
+│  │             │   5 crf 35, 240p max,  32k mono
 ├──┼─────────────┼───────────────────────────────────────────────────┄┄┄┄┄┄┄┄┄
 │-l│ --language  │ Audio language of the track to download, e.g. ar, en-US, pt-BR
 │  │ --ytdl      │ yt-dlp additional args
@@ -97,6 +103,7 @@ collect-arg-and-validate() {
             --crop) crop="$1"; shift ;;
             --width) width="$1"; shift ;;
             --fps) fps="$1"; shift ;;
+            --compress) compress="$1"; shift ;;
             --thumb)
                 is_thumb=1
                 [ $# = 0 ] || [[ "$1" = -* ]] && continue;
@@ -139,6 +146,18 @@ collect-arg-and-validate() {
     if [ "$loop" ] && [ ! "$is_gif" ]; then
         echo-debug error\(giffing\): can\'t use --loop without --gif
         exit 2
+    fi
+
+    # ---- compress ----
+    if [ "$compress" ]; then
+        if [[ ! "$compress" =~ ^[1-5]$ ]]; then
+            echo-debug error\(compress\): level must be a number from 1 to 5
+            exit 2
+        fi
+        if [ "$is_audio_only" ] || [ "$is_gif" ] || [ "$is_text" ]; then
+            echo-debug error\(compress\): --compress works on video output only
+            exit 2
+        fi
     fi
 
     # ---- text ----
@@ -210,6 +229,19 @@ print-and-run-cmd() {
     echo-debug "$quoted"
     # eval runs the assembled string, so pipes and && chains work in it
     eval "$quoted"
+}
+
+# Sets compress_crf, compress_height and compress_audio_kbps for a level.
+# Levels 1 and 2 keep a quality that is hard to tell from the source on a phone.
+compress_mono=''
+set-compress-level() { # level
+    case "$1" in
+        1) compress_crf=25; compress_height=720; compress_audio_kbps=128; compress_mono='' ;;
+        2) compress_crf=27; compress_height=720; compress_audio_kbps=96;  compress_mono='' ;;
+        3) compress_crf=30; compress_height=480; compress_audio_kbps=64;  compress_mono=1 ;;
+        4) compress_crf=32; compress_height=360; compress_audio_kbps=48;  compress_mono=1 ;;
+        5) compress_crf=35; compress_height=240; compress_audio_kbps=32;  compress_mono=1 ;;
+    esac
 }
 
 # The height the format selectors cap at: the default sort and --language read
@@ -441,7 +473,14 @@ prepare-input-and-output() {
                 fi
                 clear-and-exit 1
             }
-            [ "$output" ] || output="${resolved_title/\//_}"
+            if [ ! "$output" ]; then
+                output="${resolved_title/\//_}"
+                # a downloaded clip is meant to be shared: WhatsApp and most
+                # phones refuse webm, so the default container is mp4 (h264 + aac)
+                if [ ! "$is_audio_only" ] && [ ! "$is_text" ] && [ ! "$is_gif" ] && [ ! "$is_thumb" ]; then
+                    output="${output%.*}.mp4"
+                fi
+            fi
         fi
     elif [ "$language" ]; then
         echo-debug error\(language\): --language needs a URL input
@@ -467,7 +506,7 @@ get-input-args() {
     if [[ "$input" =~ ^https?:// ]] && { [ ! "$is_thumb" ] || [ "$thumb" ]; }; then
         # ffmpeg must present the User-Agent yt-dlp used, and it reads far
         # slower without -request_size: 67 KB/s became 619 KB/s on YouTube.
-        local http_args=(-request_size "$http_request_size")
+        local http_args=(-reconnect 1 -reconnect_streamed 1 -reconnect_on_network_error 1 -reconnect_delay_max 5 -request_size "$http_request_size")
         [ "$ua" ] && http_args=(-user_agent "$ua" "${http_args[@]}")
 
         local url
@@ -502,6 +541,21 @@ get-final-cmd() {
     fi
 }
 
+# Post-process: if output is AV1, re-encode to H.264 for compatibility
+post-process-av1() { # output_file
+    local file="$1"
+    [ -f "$file" ] || return 0
+    [ "${file##*.}" = "mp4" ] || [ "${file##*.}" = "mov" ] || [ "${file##*.}" = "m4v" ] || return 0
+
+    local vcodec
+    vcodec="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null | head -1)"
+    [ "$vcodec" = "av1" ] || return 0
+
+    echo-debug "🔁 ... detected AV1, re-encoding to H.264 for compatibility"
+    local tmp="${file%.*}-h264.mp4"
+    ffmpeg -y -loglevel error -i "$file" -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p -c:a copy -movflags +faststart "$tmp" && mv "$tmp" "$file"
+}
+
 get-user-acceptance() {
     [ "$is_yes" ] && return
     echo-info
@@ -525,6 +579,8 @@ clear-and-exit() {
 # has. ffmpeg keeps only the last -vf argument, hence the index.
 append-even-scale-filter() {
     local scale='scale=trunc(iw/2)*2:trunc(ih/2)*2'
+    # -2 keeps the width even, min() never upscales a smaller source
+    [ ! "$compress" ] || scale="scale=-2:'min(ih,$compress_height)'"
     if [ "$video_filter_arg_index" ]; then
         cmd[$video_filter_arg_index]="${cmd[$video_filter_arg_index]},$scale"
     else
@@ -635,11 +691,22 @@ build-ffmpeg-command() {
     if [ "${cmd[0]}" = ffmpeg ] && [ ! "$start_point" ] \
         && [ ${#video_filters[@]} -eq 0 ] && [ ${#audio_filters[@]} -eq 0 ] \
         && [ ! "$mute_audio" ] && [ ! "$is_audio_only" ] && [ ! "$is_gif" ] \
-        && [ ! "$is_text" ] && [ ! "$is_thumb" ] && can-stream-copy; then
+        && [ ! "$is_text" ] && [ ! "$is_thumb" ] && [ ! "$compress" ] && can-stream-copy; then
         echo-debug "📼 ... no filters or cuts, stream copy"
         cmd+=(-c copy)
     elif [ "${cmd[0]}" = ffmpeg ] && [ ! "$is_audio_only" ] \
         && [ ! "$is_gif" ] && [ ! "$is_thumb" ]; then
+        x264_preset=veryfast
+        x264_crf=23
+        audio_encode_args=()
+        if [ "$compress" ]; then
+            set-compress-level "$compress"
+            echo-debug "🗜️  ... compress level $compress: crf $compress_crf, max ${compress_height}p, audio ${compress_audio_kbps}k"
+            x264_preset=slow
+            x264_crf="$compress_crf"
+            audio_encode_args=(-b:a "${compress_audio_kbps}k")
+            [ ! "$compress_mono" ] || audio_encode_args+=(-ac 1)
+        fi
         [ ! "$copy_blocker" ] || echo-debug "🔁 ... $copy_blocker, so no stream copy"
         # Re-encoding: faster settings for the container. libvpx-vp9 without
         # -row-mt is single thread bound (0.6x realtime on 12 threads) and
@@ -650,10 +717,12 @@ build-ffmpeg-command() {
             *.webm)
                 echo-debug "🔧 ... encode vp9 with -row-mt 1 -cpu-used 4"
                 cmd+=(-c:v libvpx-vp9 -row-mt 1 -cpu-used 4 -pix_fmt yuv420p)
+                [ ! "$compress" ] || cmd+=(-crf "$compress_crf" -b:v 0 "${audio_encode_args[@]}")
                 ;;
             *.mp4|*.mov|*.m4v)
                 echo-debug "🔧 ... encode x264 with -preset veryfast -crf 23"
-                cmd+=(-c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p)
+                cmd+=(-c:v libx264 -preset "$x264_preset" -crf "$x264_crf" -pix_fmt yuv420p)
+                [ ${#audio_encode_args[@]} -eq 0 ] || cmd+=(-c:a aac "${audio_encode_args[@]}")
                 # the moov atom at the front lets a browser play the file
                 # before the whole download finished
                 cmd+=(-movflags +faststart)
@@ -707,6 +776,7 @@ build-ffmpeg-command() {
         cd "$dir"
     else
         eval "$final_cmd"
+        post-process-av1 "$output_target"
     fi
 }
 

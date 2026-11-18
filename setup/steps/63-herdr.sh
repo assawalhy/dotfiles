@@ -1,11 +1,44 @@
 #!/usr/bin/env bash
-# desc: herdr (terminal workspace manager for AI agents) + its plugins
+# desc: herdr (terminal workspace manager for AI agents) + the Herdr app + its plugins
 # os: any
-# check: command -v herdr >/dev/null && herdr plugin list 2>/dev/null | grep -q 'herdr.auto-title' && herdr plugin list 2>/dev/null | grep -q 'assawalhy.stay-awake' && herdr plugin list 2>/dev/null | grep -q 'numbered.ports'
+# check: command -v herdr >/dev/null && herdr plugin list 2>/dev/null | grep -q 'herdr.auto-title' && herdr plugin list 2>/dev/null | grep -q 'assawalhy.stay-awake' && herdr plugin list 2>/dev/null | grep -q 'numbered.ports' && [ -x "$HOME/.local/bin/herdr-app" ] && [ ! -L "$HOME/.local/bin/herdr-app" ]
 # prio: p2
 set -euo pipefail
 
 command -v herdr >/dev/null || curl -fsSL https://herdr.dev/install.sh | sh
+
+# The Herdr app, not the CLI. It updates itself in place, so it stays in
+# ~/.local/share/herdr-app and never enters the store (epic 49).
+install_app() { curl -fsSL https://releases.herdr.dev/app/install.sh | sh; }
+
+if [ "$(uname -s)" = Darwin ]; then
+  [ -d "$HOME/Applications/Herdr.app" ] || install_app
+else
+  [ -x "$HOME/.local/share/herdr-app/herdr-app" ] || install_app
+
+  # nix-ld has neither libwayland-client (epic 04 D5) nor libvulkan, which the
+  # GPUI app dlopens, so the installer's symlink is replaced by a wrapper that
+  # adds the paths Nix writes to /etc/herdr-app/nix-ld-extra. Herdr's updater
+  # only swaps the binary, so the wrapper survives updates (epic 49 D1).
+  mkdir -p "$HOME/.local/bin"
+  cat > "$HOME/.local/bin/herdr-app.new" <<'SH'
+#!/bin/sh
+# Written by setup/steps/63-herdr.sh. Herdr's installer normally makes this
+# path a symlink to ~/.local/share/herdr-app/herdr-app; this wrapper adds the
+# Wayland client and Vulkan loader that nix-ld leaves out, then execs that same
+# binary. Re-running releases.herdr.dev/app/install.sh resets this file.
+set -eu
+extra=
+if [ -r /etc/herdr-app/nix-ld-extra ]; then
+  extra=$(cat /etc/herdr-app/nix-ld-extra)
+fi
+NIX_LD_LIBRARY_PATH="${NIX_LD_LIBRARY_PATH:-/run/current-system/sw/share/nix-ld/lib}$extra"
+export NIX_LD_LIBRARY_PATH
+exec "$HOME/.local/share/herdr-app/herdr-app" "$@"
+SH
+  chmod +x "$HOME/.local/bin/herdr-app.new"
+  mv "$HOME/.local/bin/herdr-app.new" "$HOME/.local/bin/herdr-app"
+fi
 
 installed() { herdr plugin list 2>/dev/null | grep -q "$1"; }
 

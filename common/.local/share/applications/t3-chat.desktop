@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=T3 Chat
+Comment=AI chat with the top models
+Exec=brave --app=https://t3.chat --class=T3Chat
+Icon=t3-chat
+StartupWMClass=T3Chat
+Terminal=false
+Categories=Network;Chat;
