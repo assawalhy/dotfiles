@@ -138,6 +138,12 @@ in
   # systemd.settings.Manager, but the user manager still only has extraConfig
   # (rendered into /etc/systemd/user.conf under [Manager]).
   systemd.settings.Manager.DefaultTimeoutStopSec = "10s";
+  # systemd-shutdown arms the hardware watchdog (iTCO_wdt) with this timeout
+  # before the final reboot()/poweroff(). On 2026-11-14 09:31 the power-off hung
+  # in nv_pci_shutdown() for 15 minutes (default 10min). With 2min a hang in
+  # device_shutdown() becomes a hardware reset after 2 minutes. A hung power-off
+  # therefore comes back up as a reboot.
+  systemd.settings.Manager.RebootWatchdogSec = "2min";
   systemd.user.extraConfig = ''
     DefaultTimeoutStopSec=10s
   '';
@@ -159,7 +165,7 @@ in
     open = true;
     prime = {
       offload.enable = true;
-      offload.enableOffloadCmd = true; # provides the `nvidia-offload` wrapper
+      offload.enableOffloadCmd = false; # replaced by the nvidia-offload wrapper below, which also clears the Intel Vulkan pin
       intelBusId = "PCI:0:2:0";
       nvidiaBusId = "PCI:0:1:0";
     };
@@ -176,7 +182,24 @@ in
     # UseKernelSuspendNotifiers=0, the built-in defaults, which confirms the
     # module emitted neither.
     powerManagement.enable = true;
+
+    # RTD3 (NVreg_DynamicPowerManagement=0x02), meant to power the T2000 off
+    # (D3cold) when idle in offload mode. On this host the driver reports
+    # "Runtime D3 status: Not supported" in /proc/driver/nvidia/gpus/*/power,
+    # so the GPU stays in D0 (P8, about 1.5 W) and runtime_suspended_time stays
+    # 0 (measured 2026-11-18). Kept because it costs nothing and takes effect
+    # if a BIOS or driver update enables RTD3. See .agents/plans/57-nvidia-poweroff/.
+    powerManagement.finegrained = true;
   };
+
+  # NVreg_PreserveVideoMemoryAllocations=1 saves VRAM to an unnamed file at
+  # suspend. The driver's default directory is /tmp; /tmp and /var/tmp are
+  # both on the ext4 root here, so this only keeps the file on disk if /tmp
+  # ever becomes tmpfs. It does not explain the NV_ERR_NO_MEMORY lines logged
+  # at the 2026-11-13/14 suspends.
+  boot.extraModprobeConfig = ''
+    options nvidia NVreg_TemporaryFilePath=/var/tmp
+  '';
 
   # Power-off hang in the NVIDIA open driver (595.71.05). After systemd-shutdown
   # printed "Powering off", the kernel's device_shutdown() called
@@ -632,9 +655,28 @@ in
     "-Xlinker -rpath -Xlinker /run/opengl-driver/lib"
   ];
 
+  # The Vulkan loader loads every ICD, so on 2026-11-14 herdr-app (GPUI on
+  # Vulkan) and gnome-software held /dev/nvidia0 with no external monitor
+  # connected. This pins Vulkan to the Intel ICD for the session;
+  # nvidia-offload clears it. EGL is not pinned session-wide: gnome-shell reads
+  # the same environment and mutter needs the NVIDIA EGL driver for the monitor
+  # on DP-6.
+  environment.sessionVariables.VK_LOADER_DRIVERS_SELECT = "intel*";
+
   environment.systemPackages = with pkgs; [
     vim
     wget
+
+    # Same exports as the NixOS-generated nvidia-offload, plus clearing the
+    # session Vulkan pin.
+    (pkgs.writeShellScriptBin "nvidia-offload" ''
+      export __NV_PRIME_RENDER_OFFLOAD=1
+      export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
+      export __GLX_VENDOR_LIBRARY_NAME=nvidia
+      export __VK_LAYER_NV_optimus=NVIDIA_only
+      unset VK_LOADER_DRIVERS_SELECT
+      exec "$@"
+    '')
 
     ## [terminal]
     git

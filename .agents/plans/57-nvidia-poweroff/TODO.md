@@ -7,7 +7,7 @@ Drafted 2026-11-13. See [PLAN.md](PLAN.md).
       ordered after `shutdown.target umount.target` and before `final.target`
       and the four `systemd-*` services, it is wanted by poweroff, reboot, halt
       and kexec, and `bash -n` passes on the script
-- [ ] unbind the fbcon vtconsole at the start of the unload script, so fbcon
+- [x] unbind the fbcon vtconsole at the start of the unload script, so fbcon
       does not hold `nvidia_drm` (`fbdev=1`) and make `rmmod` fail "in use"
 - [x] drop `KillUserProcesses` from the shutdown-hang change: systemd stops
       every session scope at shutdown anyway, and the option would kill
@@ -40,3 +40,20 @@ Drafted 2026-11-13. See [PLAN.md](PLAN.md).
       fails before shutting down, the driver is wedged and the hang is
       expected: hold the power button, then find what wedged it
       (`journalctl -b -k | grep -E "NVRM|Xid"`)
+- [x] diagnose heating and the failed hybrid sleep (section 4)
+- [x] D17 `hardware.nvidia.powerManagement.finegrained = true`
+- [x] D18 `NVreg_TemporaryFilePath=/var/tmp`
+- [x] deploy D14, D15, D17, D18 from the main checkout and reboot (2026-11-14 11:34)
+- [x] ~~after reboot, with no external monitor: `runtime_status` is `suspended`~~ FAILED: the driver reports `Runtime D3 status: Not supported`; `runtime_suspended_time` is 0 after 3 days 21 hours (section 6)
+- [ ] with the monitor on DP-6: the monitor works
+- [ ] suspend and resume twice: no NV_ERR_NO_MEMORY in `journalctl -k`, `nvidia-smi` works after resume
+- [x] ~~`systemctl hibernate`, resume, test D12~~ NOT APPLICABLE: D19 superseded by D10, hibernate is refused
+- [x] battery/charger detection: no charger was connected at 09:08, so AC `online=0` and discharging at 24 % were correct (user, 2026-11-14)
+- [ ] measure the battery drop across one suspend on battery (note % before and after, and the hours)
+- [x] D14 session Vulkan pin and own nvidia-offload
+- [x] D15 RebootWatchdogSec=2min
+- [x] list /dev/nvidia0 holders with no external monitor: gnome-shell and Xwayland only (section 6)
+- [x] D16 closed by D21: with RTD3 unsupported the holders do not change the power state
+- [x] `nvidia-offload vulkaninfo --summary` reports the T2000 first (2026-11-18)
+- [x] power off from a boot with a healthy GPU: 2026-11-14 11:33 reboot logged `unloaded` for all four loaded modules, shutdown took about 5 s
+- [ ] find why RTD3 is not supported: BIOS graphics mode, HP BIOS update, `dmesg | grep NVRM` as root

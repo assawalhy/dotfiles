@@ -1,4 +1,4 @@
-# Plan: NVIDIA power-off and reboot hangs
+# Plan: NVIDIA power-off, reboot, hibernate and idle power
 
 **Status: IN PROGRESS.** Drafted 2026-11-13. Builds on epics [37](../37-brave-webgpu/PLAN.md) and [38](../38-hybrid-gpu-offload/PLAN.md).
 
@@ -113,11 +113,11 @@ at the time).
   device, the offset, enough disk swap, and a verified hibernate cycle.
 - **D11** The unload script now prints each step before running it, so a
   hang shows on the console exactly where it stopped.
-- `NVreg_TemporaryFilePath=/var/tmp` (asked for from another session) was
-  not added. NVIDIA's 595.71.05 README says the backing file defaults to
-  `/tmp`, and `/tmp` is on the ext4 root here (`boot.tmp.useTmpfs` is
-  false), the same filesystem as `/var/tmp`. Revisit only if
-  `findmnt -T /tmp` shows tmpfs on the host.
+- `NVreg_TemporaryFilePath=/var/tmp` was added later as D18 (section 4),
+  with the scope this paragraph found: NVIDIA's 595.71.05 README says the
+  backing file defaults to `/tmp`, and `/tmp` and `/var/tmp` are both on the
+  ext4 root here (`findmnt -T`, 2026-11-18), so the setting only pins the
+  location in case `/tmp` becomes tmpfs.
 
 ### Fallback ladder, if D1 is not enough
 
@@ -216,3 +216,86 @@ pinch/swipe gestures, no fractional scaling and no Wayland IME.
 | Intel VA-API (`intel-media-driver`), no session `LIBVA_DRIVER_NAME` | correct (epic 38 D5) | none |
 | `nvidia-offload` does not filter Vulkan on 595 | known; switcheroo uses `VK_LOADER_DRIVERS_SELECT` | none |
 | T2000 always powered | required: it drives the external display | none |
+
+## 4. Heating, suspend and hibernate (2026-11-14)
+
+Timeline:
+
+```
+21:15  suspend (S3), on battery
+05:29  wake from suspend
+05:52  UPower: battery critical, CriticalPowerAction=HybridSleep
+05:54  NVIDIA PM notifier: WARNING in nv_restore_user_channels and nv_set_system_power_state
+05:54  nvidia-modeset: "Failed detecting connected display devices"
+07:04  NVRM: GSP rpcSendMessage failed with status 0x11
+09:08  T2000 in D0, nvidia-smi: "No devices were found"
+```
+
+Evidence:
+
+- NV_ERR_NO_MEMORY from `_memdescAllocInternal` at the 16:51, 21:15 and 05:52 suspends.
+- `/proc/driver/nvidia/params` shows `TemporaryFilePath` as `""` and `DynamicPowerManagement` as 3.
+- `power/control` is `on` and `runtime_suspended_time` is 0, so the dGPU never runtime-suspends.
+- `x86_pkg_temp` was 69 C.
+- Memory: 19 GiB used of 31, and 6.8 GiB in zram.
+- At the 05:52 hybrid sleep, systemd wrote the image to the swapfile: `resume=259:3`, `resume_offset` 76062720, a 16 GiB `/var/swapfile`, image 6 GiB compressed. Nothing configures this statically: on 2026-11-18 `/proc/cmdline` has no `resume=` and `/sys/power/resume` is `0:0`.
+
+Decisions:
+
+- **D17** `hardware.nvidia.powerManagement.finegrained = true`. Intent: RTD3, so the T2000 powers off (D3cold) when idle in offload mode. Section 6 measured that the driver reports RTD3 as not supported on this host, so the setting has no effect yet. Measured before the change: `power/control=on`, `runtime_suspended_time=0`, so the dGPU stayed powered all the time. While the external monitor on DP-6 (wired to the T2000) is connected the GPU stays on. Rejected: leave it off and accept constant dGPU draw.
+- **D18** `NVreg_TemporaryFilePath=/var/tmp` through `boot.extraModprobeConfig`. `/proc/driver/nvidia/params` showed `TemporaryFilePath` as `""`, and every suspend logged NV_ERR_NO_MEMORY. The README default for an empty value is `/tmp`, which is on the same ext4 root as `/var/tmp`, so this does not explain the NV_ERR_NO_MEMORY lines. It keeps the backing file on disk if `/tmp` ever becomes tmpfs.
+- **D19** ~~Keep UPower `CriticalPowerAction=HybridSleep` and test hibernate.~~ SUPERSEDED by D10: hibernate, hybrid sleep and suspend-then-hibernate are refused and a critical battery powers off. The hybrid sleep at 05:52 is what wedged the GPU.
+- **D20** Deploy by applying this branch's `nix/` diff onto the main checkout. The main checkout has uncommitted `nix/` changes (megasync and others) that a deploy from this worktree would drop.
+
+Risks:
+
+- A process holding `/dev/nvidia*` (the Docker CDI generator, a CUDA process) keeps the GPU in D0.
+- The 595 hibernate bug (#1486) is avoided by D10, not fixed.
+
+Open:
+
+- At 09:08 the battery reported AC `online=0` and discharging at 24 %. The user confirmed no charger was connected, so the readings were correct. `energy-rate` 0 W and `BAT0/current_now` ENODEV mean this battery does not report current draw.
+- The S3 suspend from 21:15 to 05:29 on battery ended at the UPower critical level. Measure the drain per hour after the deploy; D17 was meant to put the T2000 in D3cold before suspend, but section 6 shows it stays in D0.
+
+## 5. Power-off from a wedged GPU and RTD3 holders (2026-11-14)
+
+The 09:31 power-off:
+
+- The unload unit output: unloaded `nvidia_uvm`; `rmmod nvidia_drm` reported "in use", refcnt 1, no holders; `nvidia_modeset` is held by `nvidia_drm`; `nvidia` has refcnt 32, held by `nvidia_modeset`.
+- gnome-shell PID 5373 "remains running after unit stopped" at 09:29 and 09:31. The next boot was at 09:46.
+- Conclusion: since 05:54 the GPU was unresponsive. gnome-shell was blocked in the driver and survived SIGKILL with `/dev/dri/card0` open, so no module could unload and `nv_pci_shutdown()` hung.
+- This is a consequence of the failed hybrid sleep, not a test of D1 on a healthy GPU.
+
+After the reboot at 09:46:
+
+- `nvidia-smi`: P8, 53 C. `DynamicPowerManagement` 2, `TemporaryFilePath` "/var/tmp", `power/control` auto, `runtime_status` active.
+- Holders with no external monitor: gnome-shell (`/dev/dri/card0`, `/dev/nvidia0`), herdr-app (`/dev/nvidia0`), gnome-software (`/dev/nvidia0`), Xwayland (`/dev/dri/card0`).
+- `x86_pkg_temp` was 73 C.
+
+Decisions:
+
+- **D14** Session `VK_LOADER_DRIVERS_SELECT=intel*` plus an own `nvidia-offload` that unsets it. Rejected: a session-wide EGL Mesa pin, because mutter needs the NVIDIA EGL driver for DP-6.
+- **D15** `systemd.settings.Manager.RebootWatchdogSec = "2min"`. Cost: a hung power-off returns as a reboot.
+- **D16** After D14, measure the remaining holders. If gnome-shell alone keeps the GPU active, research a mutter-side option before changing anything. gnome-software is handled after that measurement.
+
+## 6. Results after the deploy (2026-11-14 reboot, measured 2026-11-18)
+
+Shutdown, reboot at 11:33 on 2026-11-14 with a healthy GPU:
+
+- From `Stopping Session 3` at 11:33:49 to `Journal stopped` at 11:33:54: about 5 s.
+- `nvidia-unload-at-shutdown` logged `unloaded` for `nvidia_uvm`, `nvidia_drm`, `nvidia_modeset` and `nvidia` (`nvidia_peermem` is not loaded), then the reboot went through. This is D1 working on a healthy driver.
+
+GPU state after 3 days 21 hours of uptime, no external monitor:
+
+- `/proc/driver/nvidia/gpus/0000:01:00.0/power`: `Runtime D3 status: Not supported`, `Video Memory: Active`.
+- `DynamicPowerManagement` 2, `power/control` auto, `runtime_status` active, `runtime_usage` 1, `runtime_suspended_time` 0.
+- The HDMI audio function `01:00.1` is `suspended`, so kernel runtime PM works on the device; the NVIDIA driver rejects RTD3 for the platform.
+- `nvidia-smi`: P8, 1.46 W, 0 %, 9 MiB, no compute processes.
+- Holders: gnome-shell (`/dev/nvidia0`, `renderD129`) and Xwayland (`card0`) only. D14 removed herdr-app and gnome-software.
+
+Functional checks (epic 38 `verify.sh`): CUDA smoke OK on the T2000, NVDEC and iHD VA-API decode H.264 and HEVC, `nvidia-offload vulkaninfo --summary` lists the T2000 first, session Vulkan lists only Intel, switcheroo tags the T2000 discrete.
+
+Decisions:
+
+- **D21** Keep D17. It costs nothing while RTD3 is unsupported and takes effect if a firmware or driver update enables it. D16 is closed: with RTD3 unsupported, the remaining holders do not change the power state.
+- Open: why the driver reports RTD3 as not supported. Candidates are the BIOS graphics mode (Hybrid Graphics) and the HP firmware's ACPI support; `dmesg | grep NVRM` as root may state the reason.
